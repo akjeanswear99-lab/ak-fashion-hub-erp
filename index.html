@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AK FASHION HUB - ERP & POS System</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#8B1538">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #8B1538;
+      --primary-dark: #6B0E2A;
+      --primary-light: #C41E5C;
+      --accent: #D4AF37;
+      --accent-light: #E8D5A0;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --neutral-50: #F9FAFB;
+      --neutral-100: #F3F4F6;
+      --neutral-200: #E5E7EB;
+      --neutral-300: #D1D5DB;
+      --neutral-500: #6B7280;
+      --neutral-700: #374151;
+      --neutral-900: #111827;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+    html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--neutral-900); }
+    body { background: var(--neutral-50); }
+    
+    /* LOGIN */
+    .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); }
+    .login-card { background: white; padding: 40px; border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 100%; max-width: 420px; }
+    .login-header { text-align: center; margin-bottom: 30px; }
+    .login-logo { font-size: 48px; margin-bottom: 10px; }
+    .login-title { font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 5px; }
+    .login-subtitle { font-size: 12px; color: var(--neutral-500); letter-spacing: 1.5px; text-transform: uppercase; }
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--neutral-700); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-input { width: 100%; padding: 11px 14px; border: 1px solid var(--neutral-300); border-radius: 6px; font-size: 14px; transition: border-color 0.2s; }
+    .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1); }
+    .form-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+    .btn { padding: 12px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: var(--neutral-200); color: var(--neutral-900); }
+    .btn-secondary:hover { background: var(--neutral-300); }
+    .btn-small { padding: 8px 12px; font-size: 12px; }
+    .btn-icon { border-radius: 50%; width: 40px; height: 40px; justify-content: center; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-warning { background: var(--warning); color: white; }
+
+    /* APP SHELL */
+    .app-shell { display: none; height: 100vh; overflow: hidden; }
+    .app-shell.active { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: auto 1fr; }
+    .sidebar { grid-column: 1; grid-row: 1 / 3; background: var(--primary-dark); color: white; padding: 20px 12px; overflow-y: auto; box-shadow: var(--shadow); }
+    .sidebar-header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-logo { font-size: 20px; font-weight: 700; }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; }
+    .nav-item { padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); }
+    .nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
+    .nav-item.active { background: var(--accent); color: var(--neutral-900); font-weight: 600; }
+    .topbar { grid-column: 2; grid-row: 1; background: white; border-bottom: 1px solid var(--neutral-200); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
+    .topbar-title { font-size: 18px; font-weight: 700; color: var(--primary); }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .user-menu { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 12px; border-radius: 6px; background: var(--neutral-100); font-size: 13px; font-weight: 600; }
+    .content { grid-column: 2; grid-row: 2; overflow-y: auto; padding: 24px; }
+    
+    /* SCREENS */
+    .screen { display: none; }
+    .screen.active { display: block; }
+    
+    /* CARDS & LAYOUT */
+    .card { background: white; border: 1px solid var(--neutral-200); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--neutral-100); }
+    .card-title { font-size: 16px; font-weight: 700; color: var(--neutral-900); }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .stat-card { background: white; border: 1px solid var(--neutral-200); border-radius: var(--radius); padding: 16px; }
+    .stat-label { font-size: 12px; color: var(--neutral-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+    
+    /* TABLE */
+    .table-wrapper { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--neutral-200); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { background: var(--neutral-100); }
+    th { padding: 12px; text-align: left; font-weight: 700; color: var(--neutral-700); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 12px; border-bottom: 1px solid var(--neutral-200); }
+    tr:hover { background: var(--neutral-50); }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .badge-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+    .badge-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+    .badge-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+    
+    /* MODAL */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: white; border-radius: var(--radius); box-shadow: var(--shadow-lg); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal-header { padding: 20px; border-bottom: 1px solid var(--neutral-200); display: flex; justify-content: space-between; align-items: center; }
+    .modal-title { font-size: 16px; font-weight: 700; }
+    .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--neutral-500); }
+    .modal-body { padding: 20px; }
+    .modal-footer { padding: 16px 20px; border-top: 1px solid var(--neutral-200); display: flex; gap: 10px; justify-content: flex-end; }
+    
+    /* BARCODE & QR */
+    .barcode-container { text-align: center; margin: 16px 0; }
+    .barcode-svg { height: 50px; }
+    .qr-code { display: inline-block; padding: 8px; border: 1px solid var(--neutral-200); border-radius: 4px; }
+    
+    /* PRINT */
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: absolute; top: 0; left: 0; width: 100%; }
+    }
+    .no-print { print-width: none; }
+    
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .app-shell.active { grid-template-columns: 1fr; }
+      .sidebar { position: fixed; left: -240px; top: 0; height: 100vh; z-index: 999; transition: left 0.3s; }
+      .sidebar.open { left: 0; }
+      .topbar { grid-column: 1; }
+      .content { grid-column: 1; }
+      .grid, .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-container" id="loginContainer">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-logo">👗</div>
+      <h1 class="login-title">AK FASHION HUB</h1>
+      <p class="login-subtitle">ERP &amp; POS System</p>
+    </div>
+    <form onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Mobile Number</label>
+        <input type="text" class="form-input" id="loginMobile" placeholder="10-digit mobile" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+      <div id="loginError" class="form-error" style="margin-top: 12px;"></div>
+      <div style="font-size: 11px; color: var(--neutral-500); margin-top: 16px; padding: 12px; background: var(--neutral-100); border-radius: 4px;">
+        <strong>Demo Login:</strong><br>
+        Admin: 9999900001 / admin@123<br>
+        Staff: 9999900002 / staff@123<br>
+        PIN: 1234
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div class="app-shell" id="appShell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-logo">👗 AK HUB</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div data-screen="dashboard" class="nav-item active">📊 Dashboard</div>
+      <div data-screen="billing" class="nav-item">🧾 Billing / POS</div>
+      <div data-screen="products" class="nav-item">👕 Products</div>
+      <div data-screen="inventory" class="nav-item">📦 Inventory</div>
+      <div data-screen="customers" class="nav-item">👤 Customers</div>
+      <div data-screen="suppliers" class="nav-item">🚚 Suppliers</div>
+      <div data-screen="expenses" class="nav-item">💰 Expenses</div>
+      <div data-screen="reports" class="nav-item">📈 Reports</div>
+      <div data-screen="staff" class="nav-item">👥 Staff</div>
+      <div data-screen="settings" class="nav-item">⚙️ Settings</div>
+    </nav>
+  </aside>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <h2 class="topbar-title" id="screenTitle">Dashboard</h2>
+    </div>
+    <div class="topbar-right">
+      <div class="user-menu" id="userMenu">
+        <span>👤 <span id="userName">User</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <!-- DASHBOARD -->
+    <div class="screen active" id="dashboardScreen">
+      <div class="grid grid-2">
+        <div class="stat-card">
+          <div class="stat-label">Today's Sales</div>
+          <div class="stat-value" id="todaysSales">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Today's Profit</div>
+          <div class="stat-value" id="todaysProfit">₹0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Inventory</div>
+          <div class="stat-value" id="totalInventory">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Low Stock Items</div>
+          <div class="stat-value" id="lowStockCount" style="color: var(--warning);">0</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Recent Bills</h3>
+        </div>
+        <div class="table-wrapper">
+          <table id="recentBillsTable"><thead><tr><th>Bill#</th><th>Customer</th><th>Amount</th><th>Mode</th><th>Date</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLING / POS -->
+    <div class="screen" id="billingScreen">
+      <div style="display: grid; grid-template-columns: 1fr 350px; gap: 20px;">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Point of Sale</h3>
+          </div>
+          <div class="form-group">
+            <input type="text" class="form-input" id="billingScan" placeholder="🔍 Scan barcode / UID" autofocus>
+          </div>
+          <div id="billItems" style="min-height: 200px; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; background: var(--neutral-50); font-size: 12px; color: var(--neutral-500);">Empty cart</div>
+        </div>
+        <div class="card" style="position: sticky; top: 20px;">
+          <div class="card-header">
+            <h3 class="card-title">Bill Summary</h3>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Customer Mobile</label>
+            <input type="text" class="form-input" id="billCustomerMobile" placeholder="10-digit">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Customer Name</label>
+            <input type="text" class="form-input" id="billCustomerName" placeholder="Name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Discount %</label>
+            <input type="number" class="form-input" id="billDiscountPct" value="0" min="0" max="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Payment Mode</label>
+            <select class="form-input" id="billPaymentMode">
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Card">Card</option>
+            </select>
+          </div>
+          <div style="background: var(--neutral-100); padding: 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span>Subtotal:</span>
+              <span id="billSubtotal">₹0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span>Discount:</span>
+              <span id="billDiscount">-₹0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; color: var(--primary);">
+              <span>Total:</span>
+              <span id="billTotal">₹0</span>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width: 100%;" onclick="completeBill()">✓ Complete Sale</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div class="screen" id="productsScreen">
+      <div class="card-header">
+        <h3 class="card-title">Products</h3>
+        <button class="btn btn-primary btn-small" onclick="openAddProductModal()">+ Add Product</button>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <input type="text" class="form-input" id="productSearch" placeholder="Search products...">
+      </div>
+      <div class="table-wrapper">
+        <table id="productsTable"><thead><tr><th>UID</th><th>Name</th><th>Brand</th><th>Stock</th><th>CP</th><th>SP</th><th>MRP</th><th>Status</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="screen" id="inventoryScreen">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inventory Management</h3>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <input type="text" class="form-input" id="inventoryScan" placeholder="Scan barcode for stock check">
+        </div>
+        <div class="table-wrapper">
+          <table id="inventoryTable"><thead><tr><th>UID</th><th>Product</th><th>Color/Size</th><th>Stock</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOMERS -->
+    <div class="screen" id="customersScreen">
+      <div class="card-header">
+        <h3 class="card-title">Customers</h3>
+        <button class="btn btn-primary btn-small" onclick="openAddCustomerModal()">+ Add Customer</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="customersTable"><thead><tr><th>Name</th><th>Mobile</th><th>Total Spend</th><th>Loyalty Points</th><th>Due Balance</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- SUPPLIERS -->
+    <div class="screen" id="suppliersScreen">
+      <div class="card-header">
+        <h3 class="card-title">Suppliers</h3>
+        <button class="btn btn-primary btn-small" onclick="openAddSupplierModal()">+ Add Supplier</button>
+      </div>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom: 12px;">Suppliers List</h3>
+          <div class="table-wrapper">
+            <table id="suppliersTable"><thead><tr><th>Name</th><th>Mobile</th><th>City</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom: 12px;">Add Purchase</h3>
+          <div class="form-group">
+            <label class="form-label">Supplier</label>
+            <select class="form-input" id="purchaseSupplier"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Product UID</label>
+            <input type="text" class="form-input" id="purchaseProductUID">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Quantity</label>
+            <input type="number" class="form-input" id="purchaseQty" value="10">
+          </div>
+          <button class="btn btn-primary" style="width: 100%;">Add Purchase</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXPENSES -->
+    <div class="screen" id="expensesScreen">
+      <div class="card-header">
+        <h3 class="card-title">Expense Management</h3>
+        <button class="btn btn-primary btn-small" onclick="openAddExpenseModal()">+ Add Expense</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="expensesTable"><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Staff</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="screen" id="reportsScreen">
+      <div class="grid">
+        <div class="card">
+          <h3 class="card-title">Sales Summary</h3>
+          <div style="font-size: 24px; font-weight: 700; color: var(--primary); margin: 16px 0;">₹<span id="totalSales">0</span></div>
+          <div style="font-size: 12px; color: var(--neutral-500);">Total bills: <span id="totalBills">0</span></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Inventory Value</h3>
+          <div style="font-size: 24px; font-weight: 700; color: var(--success); margin: 16px 0;">₹<span id="inventoryValue">0</span></div>
+          <div style="font-size: 12px; color: var(--neutral-500);">Total units: <span id="totalUnits">0</span></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Staff Performance</h3>
+          <div class="table-wrapper">
+            <table id="staffPerformanceTable"><thead><tr><th>Staff</th><th>Bills</th><th>Revenue</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STAFF -->
+    <div class="screen" id="staffScreen">
+      <div class="card-header">
+        <h3 class="card-title">Staff Management</h3>
+        <button class="btn btn-primary btn-small" onclick="openAddStaffModal()">+ Add Staff</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="staffTable"><thead><tr><th>Name</th><th>Mobile</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen" id="settingsScreen">
+      <div class="grid">
+        <div class="card">
+          <h3 class="card-title">Backup &amp; Restore</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Download or restore your complete store data</p>
+          <button class="btn btn-primary btn-small" onclick="downloadBackup()">⬇ Download Backup</button>
+          <input type="file" id="restoreFile" accept=".json" style="display: none;">
+          <button class="btn btn-secondary btn-small" onclick="document.getElementById('restoreFile').click()">⬆ Restore Backup</button>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Session</h3>
+          <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modalTitle">Modal</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<!-- PRINT AREA -->
+<div id="printArea" class="no-print"></div>
+
+<script>
+// ============================================================================
+// CONFIG & STATE
+// ============================================================================
+const CONFIG = {
+  API_URL: "https://script.google.com/macros/s/AKfycbyeSQ-utH6nbnL-9tXjnbYbmvjlEPbgPTbKMxzRIKhvDioZlB_tJYqoz-fR3QEdLEM/exec"};
+
+let APP_STATE = {
+  currentUser: null,
+  cart: [],
+  data: {
+    products: [],
+    customers: [],
+    bills: [],
+    suppliers: [],
+    staff: [],
+    expenses: [],
+  }
+};
+
+// ============================================================================
+// API FUNCTIONS
+// ============================================================================
+async function apiCall(action, data = {}) {
+  if (!CONFIG.API_URL) {
+    console.warn('API_URL not configured. Using demo mode.');
+    return { success: false, error: 'API not configured' };
+  }
+
+  try {
+    const response = await fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, data })
+    });
+    return await response.json();
+  } catch (err) {
+    console.error('API Error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function syncData() {
+  const response = await apiCall('getAll');
+  if (response.data) {
+    APP_STATE.data = response.data;
+    refreshAllScreens();
+  }
+}
+
+// ============================================================================
+// AUTH
+// ============================================================================
+async function handleLogin(e) {
+  e.preventDefault();
+  const mobile = document.getElementById('loginMobile').value;
+  const password = document.getElementById('loginPassword').value;
+  const errorEl = document.getElementById('loginError');
+
+  const response = await apiCall('login', { mobile, password });
+
+  if (response.success && response.data.user) {
+    APP_STATE.currentUser = response.data.user;
+    localStorage.setItem('currentUser', JSON.stringify(APP_STATE.currentUser));
+    localStorage.setItem('loginTime', Date.now().toString());
+    
+    document.getElementById('loginContainer').style.display = 'none';
+    document.getElementById('appShell').classList.add('active');
+    document.getElementById('userName').textContent = APP_STATE.currentUser.name;
+    
+    await syncData();
+    navigateToScreen('dashboard');
+  } else {
+    errorEl.textContent = response.error || 'Login failed';
+  }
+}
+
+function logout() {
+  localStorage.removeItem('currentUser');
+  APP_STATE.currentUser = null;
+  document.getElementById('appShell').classList.remove('active');
+  document.getElementById('loginContainer').style.display = 'flex';
+  document.getElementById('loginMobile').value = '';
+  document.getElementById('loginPassword').value = '';
+}
+
+function checkSession() {
+  const user = localStorage.getItem('currentUser');
+  const loginTime = localStorage.getItem('loginTime');
+  const SESSION_TIMEOUT = 20 * 60 * 1000; // 20 minutes
+
+  if (!user) {
+    document.getElementById('appShell').classList.remove('active');
+    document.getElementById('loginContainer').style.display = 'flex';
+    return;
+  }
+
+  if (loginTime && Date.now() - Number(loginTime) > SESSION_TIMEOUT) {
+    logout();
+    alert('Session expired. Please log in again.');
+    return;
+  }
+
+  APP_STATE.currentUser = JSON.parse(user);
+  document.getElementById('loginContainer').style.display = 'none';
+  document.getElementById('appShell').classList.add('active');
+  document.getElementById('userName').textContent = APP_STATE.currentUser.name;
+  navigateToScreen('dashboard');
+}
+
+// ============================================================================
+// NAVIGATION
+// ============================================================================
+function navigateToScreen(screenName) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screenName + 'Screen').classList.add('active');
+  
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.screen === screenName);
+  });
+
+  const titles = {
+    dashboard: '📊 Dashboard',
+    billing: '🧾 Billing / POS',
+    products: '👕 Products',
+    inventory: '📦 Inventory',
+    customers: '👤 Customers',
+    suppliers: '🚚 Suppliers',
+    expenses: '💰 Expenses',
+    reports: '📈 Reports',
+    staff: '👥 Staff Management',
+    settings: '⚙️ Settings'
+  };
+  document.getElementById('screenTitle').textContent = titles[screenName] || screenName;
+
+  // Refresh screen data
+  if (screenName === 'dashboard') refreshDashboard();
+  if (screenName === 'products') refreshProducts();
+  if (screenName === 'inventory') refreshInventory();
+  if (screenName === 'customers') refreshCustomers();
+  if (screenName === 'suppliers') refreshSuppliers();
+  if (screenName === 'expenses') refreshExpenses();
+  if (screenName === 'reports') refreshReports();
+  if (screenName === 'staff') refreshStaff();
+}
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    navigateToScreen(item.dataset.screen);
+  });
+});
+
+// ============================================================================
+// DASHBOARD
+// ============================================================================
+function refreshDashboard() {
+  const bills = APP_STATE.data.bills || [];
+  const today = new Date().toISOString().split('T')[0];
+  const todaysBills = bills.filter(b => b.CreatedDate && b.CreatedDate.includes(today));
+  
+  const todaysSales = todaysBills.reduce((sum, b) => sum + (Number(b.TotalAmount) || 0), 0);
+  const todaysProfit = todaysSales * 0.3; // Rough estimate
+
+  const variants = [];
+  (APP_STATE.data.products || []).forEach(p => {
+    (p.variants || []).forEach(v => variants.push(v));
+  });
+
+  const totalInventory = variants.reduce((sum, v) => sum + (Number(v.Stock) || 0), 0);
+  const lowStock = variants.filter(v => v.Stock > 0 && v.Stock <= 5).length;
+
+  document.getElementById('todaysSales').textContent = '₹' + todaysSales.toLocaleString('en-IN');
+  document.getElementById('todaysProfit').textContent = '₹' + Math.round(todaysProfit).toLocaleString('en-IN');
+  document.getElementById('totalInventory').textContent = totalInventory;
+  document.getElementById('lowStockCount').textContent = lowStock;
+
+  const recentBillsTable = document.getElementById('recentBillsTable').querySelector('tbody');
+  recentBillsTable.innerHTML = bills.slice(0, 5).map(b => `
+    <tr>
+      <td>${b.BillNumber || '—'}</td>
+      <td>${b.CustomerName || 'Walk-in'}</td>
+      <td>₹${Number(b.TotalAmount || 0).toLocaleString('en-IN')}</td>
+      <td>${b.PaymentMode || '—'}</td>
+      <td>${new Date(b.CreatedDate).toLocaleDateString()}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="text-align: center; color: #999;">No bills yet</td></tr>';
+}
+
+// ============================================================================
+// BILLING / POS
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  const billingScan = document.getElementById('billingScan');
+  if (billingScan) {
+    billingScan.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        addToCart(e.target.value);
+        e.target.value = '';
+      }
+    });
+  }
+
+  document.getElementById('billDiscountPct').addEventListener('input', updateBillTotals);
+});
+
+function addToCart(uid) {
+  const product = APP_STATE.data.products.find(p => p.UID === uid);
+  if (!product) {
+    alert('Product not found: ' + uid);
+    return;
+  }
+
+  const variant = product.variants && product.variants[0];
+  if (!variant) {
+    alert('No variants for this product');
+    return;
+  }
+
+  const existingItem = APP_STATE.cart.find(item => item.variantID === variant.VariantID);
+  if (existingItem) {
+    existingItem.quantity++;
+  } else {
+    APP_STATE.cart.push({
+      productID: product.ProductID,
+      variantID: variant.VariantID,
+      uid: product.UID,
+      name: product.Name,
+      color: variant.Color,
+      size: variant.Size,
+      quantity: 1,
+      salePrice: Number(product.SalePrice) || 0
+    });
+  }
+
+  renderCart();
+  updateBillTotals();
+}
+
+function renderCart() {
+  const cartEl = document.getElementById('billItems');
+  if (APP_STATE.cart.length === 0) {
+    cartEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">Empty cart — scan a product</div>';
+    return;
+  }
+
+  cartEl.innerHTML = `
+    <table style="width: 100%; font-size: 11px;">
+      <tr style="border-bottom: 1px solid var(--neutral-200);">
+        <th style="text-align: left;">Product</th>
+        <th style="text-align: center;">Qty</th>
+        <th style="text-align: right;">Price</th>
+        <th style="text-align: center;">✕</th>
+      </tr>
+      ${APP_STATE.cart.map((item, i) => `
+        <tr style="border-bottom: 1px solid var(--neutral-100);">
+          <td>${item.name}<br><span style="color: #999; font-size: 10px;">${item.color}/${item.size}</span></td>
+          <td style="text-align: center;">
+            <input type="number" value="${item.quantity}" min="1" style="width: 40px; padding: 2px; border: 1px solid var(--neutral-300); border-radius: 3px;" onchange="updateCartQty(${i}, this.value)">
+          </td>
+          <td style="text-align: right;">₹${(item.quantity * item.salePrice).toLocaleString('en-IN')}</td>
+          <td style="text-align: center; cursor: pointer;" onclick="removeFromCart(${i})">✕</td>
+        </tr>
+      `).join('')}
+    </table>
+  `;
+}
+
+function updateCartQty(index, qty) {
+  APP_STATE.cart[index].quantity = Math.max(1, Number(qty));
+  renderCart();
+  updateBillTotals();
+}
+
+function removeFromCart(index) {
+  APP_STATE.cart.splice(index, 1);
+  renderCart();
+  updateBillTotals();
+}
+
+function updateBillTotals() {
+  const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+  const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
+  const discount = subtotal * (discountPct / 100);
+  const total = subtotal - discount;
+
+  document.getElementById('billSubtotal').textContent = '₹' + subtotal.toLocaleString('en-IN');
+  document.getElementById('billDiscount').textContent = '-₹' + Math.round(discount).toLocaleString('en-IN');
+  document.getElementById('billTotal').textContent = '₹' + Math.round(total).toLocaleString('en-IN');
+}
+
+async function completeBill() {
+  if (APP_STATE.cart.length === 0) {
+    alert('Cart is empty');
+    return;
+  }
+
+  const customerMobile = document.getElementById('billCustomerMobile').value.trim();
+  const customerName = document.getElementById('billCustomerName').value.trim();
+
+  if (!customerMobile || !customerName) {
+    alert('Customer details required');
+    return;
+  }
+
+  const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+  const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
+  const discountAmount = subtotal * (discountPct / 100);
+  const totalAmount = subtotal - discountAmount;
+
+  const billData = {
+    customerName,
+    customerMobile,
+    staffID: APP_STATE.currentUser.staffID,
+    staffName: APP_STATE.currentUser.name,
+    items: APP_STATE.cart,
+    subtotal,
+    discountPercent: discountPct,
+    discountAmount: Math.round(discountAmount),
+    taxAmount: 0,
+    totalAmount: Math.round(totalAmount),
+    paymentMode: document.getElementById('billPaymentMode').value
+  };
+
+  const response = await apiCall('addBill', billData);
+  if (response.success) {
+    alert('✓ Bill #' + response.data.billNumber + ' created successfully');
+    APP_STATE.cart = [];
+    renderCart();
+    updateBillTotals();
+    document.getElementById('billCustomerMobile').value = '';
+    document.getElementById('billCustomerName').value = '';
+    refreshDashboard();
+  } else {
+    alert('Error: ' + response.error);
+  }
+}
+
+// ============================================================================
+// PRODUCTS
+// ============================================================================
+function refreshProducts() {
+  const table = document.getElementById('productsTable').querySelector('tbody');
+  const searchTerm = (document.getElementById('productSearch').value || '').toLowerCase();
+  
+  const filtered = (APP_STATE.data.products || []).filter(p =>
+    p.Name.toLowerCase().includes(searchTerm) ||
+    p.UID.toLowerCase().includes(searchTerm)
+  );
+
+  table.innerHTML = filtered.map(p => `
+    <tr>
+      <td><strong>${p.UID}</strong></td>
+      <td>${p.Name}</td>
+      <td>${p.Brand || '—'}</td>
+      <td>${p.TotalStock || 0}</td>
+      <td>₹${Number(p.CostPrice || 0).toLocaleString('en-IN')}</td>
+      <td>₹${Number(p.SalePrice || 0).toLocaleString('en-IN')}</td>
+      <td>₹${Number(p.MRP || 0).toLocaleString('en-IN')}</td>
+      <td><span class="badge ${p.Status === 'Active' ? 'badge-success' : 'badge-warning'}">${p.Status}</span></td>
+      <td>
+        <button class="btn btn-secondary btn-small" onclick="editProduct('${p.ProductID}')">Edit</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="9" style="text-align: center; color: #999;">No products found</td></tr>';
+}
+
+function openAddProductModal() {
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Product Name</label>
+      <input type="text" class="form-input" id="modalProductName" placeholder="Product name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Gender</label>
+      <select class="form-input" id="modalGender">
+        <option>Men</option>
+        <option>Women</option>
+        <option>Kids</option>
+        <option>Unisex</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Brand</label>
+      <input type="text" class="form-input" id="modalBrand">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fabric Type</label>
+      <select class="form-input" id="modalFabric">
+        <option>Cotton</option>
+        <option>Denim</option>
+        <option>Linen</option>
+        <option>Lycra</option>
+        <option>Rayon</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cost Price</label>
+      <input type="number" class="form-input" id="modalCP" placeholder="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Sale Price</label>
+      <input type="number" class="form-input" id="modalSP" placeholder="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">MRP</label>
+      <input type="number" class="form-input" id="modalMRP" placeholder="0">
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveProduct()">Save Product</button>
+  `;
+
+  openModal('Add Product', body, footer);
+}
+
+async function saveProduct() {
+  const productData = {
+    name: document.getElementById('modalProductName').value,
+    gender: document.getElementById('modalGender').value,
+    description: '',
+    brand: document.getElementById('modalBrand').value,
+    fabricType: document.getElementById('modalFabric').value,
+    costPrice: Number(document.getElementById('modalCP').value),
+    salePrice: Number(document.getElementById('modalSP').value),
+    mrp: Number(document.getElementById('modalMRP').value),
+    batchNumber: new Date().toISOString().slice(0, 7),
+    tags: [],
+    seasonTags: [],
+    imageURL: '',
+    sizeChartURL: '',
+    supplierID: (APP_STATE.data.suppliers[0] || {}).SupplierID || '',
+    staffID: APP_STATE.currentUser.staffID
+  };
+
+  const response = await apiCall('addProduct', productData);
+  if (response.success) {
+    alert('✓ Product created with UID: ' + response.data.uid);
+    closeModal();
+    await syncData();
+    refreshProducts();
+  } else {
+    alert('Error: ' + response.error);
+  }
+}
+
+// ============================================================================
+// INVENTORY
+// ============================================================================
+function refreshInventory() {
+  const table = document.getElementById('inventoryTable').querySelector('tbody');
+  const rows = [];
+
+  (APP_STATE.data.products || []).forEach(product => {
+    (product.variants || []).forEach(variant => {
+      rows.push({
+        uid: product.UID,
+        name: product.Name,
+        color: variant.Color,
+        size: variant.Size,
+        stock: variant.Stock,
+        floor: variant.Floor,
+        rack: variant.Rack,
+        shelf: variant.Shelf,
+        variantID: variant.VariantID
+      });
+    });
+  });
+
+  table.innerHTML = rows.map(row => `
+    <tr>
+      <td><strong>${row.uid}</strong></td>
+      <td>${row.name}</td>
+      <td>${row.color} / ${row.size}</td>
+      <td>${row.stock}</td>
+      <td>${row.floor} · ${row.rack} · ${row.shelf}</td>
+      <td>
+        ${row.stock === 0 ? '<span class="badge badge-danger">Out of Stock</span>' :
+          row.stock <= 5 ? '<span class="badge badge-warning">Low Stock</span>' :
+          '<span class="badge badge-success">In Stock</span>'}
+      </td>
+      <td>
+        <button class="btn btn-secondary btn-small" onclick="adjustStock('${row.variantID}')">Adjust</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function adjustStock(variantID) {
+  const qty = prompt('Enter quantity change (+/-):', '1');
+  if (qty === null) return;
+
+  const response = await apiCall('updateStock', {
+    variantID,
+    qtyChange: Number(qty),
+    staffID: APP_STATE.currentUser.staffID
+  });
+
+  if (response.success) {
+    await syncData();
+    refreshInventory();
+  }
+}
+
+// ============================================================================
+// CUSTOMERS
+// ============================================================================
+function refreshCustomers() {
+  const table = document.getElementById('customersTable').querySelector('tbody');
+  table.innerHTML = (APP_STATE.data.customers || []).map(c => `
+    <tr>
+      <td>${c.Name}</td>
+      <td>${c.Mobile}</td>
+      <td>₹${Number(c.TotalSpend || 0).toLocaleString('en-IN')}</td>
+      <td>${c.LoyaltyPoints || 0}</td>
+      <td>₹${Number(c.DueBalance || 0).toLocaleString('en-IN')}</td>
+      <td><button class="btn btn-secondary btn-small" onclick="editCustomer('${c.CustomerID}')">Edit</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align: center; color: #999;">No customers</td></tr>';
+}
+
+function openAddCustomerModal() {
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="modalCustName">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mobile</label>
+      <input type="text" class="form-input" id="modalCustMobile" placeholder="10-digit">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="modalCustEmail">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Birthday</label>
+      <input type="date" class="form-input" id="modalCustBirthday">
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveCustomer()">Save Customer</button>
+  `;
+
+  openModal('Add Customer', body, footer);
+}
+
+async function saveCustomer() {
+  const custData = {
+    name: document.getElementById('modalCustName').value,
+    mobile: document.getElementById('modalCustMobile').value,
+    email: document.getElementById('modalCustEmail').value,
+    birthday: document.getElementById('modalCustBirthday').value,
+    address: '',
+    staffID: APP_STATE.currentUser.staffID
+  };
+
+  const response = await apiCall('addCustomer', custData);
+  if (response.success) {
+    alert('✓ Customer added');
+    closeModal();
+    await syncData();
+    refreshCustomers();
+  } else {
+    alert('Error: ' + response.error);
+  }
+}
+
+// ============================================================================
+// SUPPLIERS
+// ============================================================================
+function refreshSuppliers() {
+  const table = document.getElementById('suppliersTable').querySelector('tbody');
+  table.innerHTML = (APP_STATE.data.suppliers || []).map(s => `
+    <tr>
+      <td>${s.Name}</td>
+      <td>${s.Mobile}</td>
+      <td>${s.City || '—'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="text-align: center; color: #999;">No suppliers</td></tr>';
+
+  const supplierSelect = document.getElementById('purchaseSupplier');
+  supplierSelect.innerHTML = (APP_STATE.data.suppliers || []).map(s => `<option value="${s.SupplierID}">${s.Name}</option>`).join('');
+}
+
+function openAddSupplierModal() {
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="modalSupplierName">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mobile</label>
+      <input type="text" class="form-input" id="modalSupplierMobile">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="modalSupplierEmail">
+    </div>
+    <div class="form-group">
+      <label class="form-label">City</label>
+      <input type="text" class="form-input" id="modalSupplierCity">
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveSupplier()">Save Supplier</button>
+  `;
+
+  openModal('Add Supplier', body, footer);
+}
+
+async function saveSupplier() {
+  const suppData = {
+    name: document.getElementById('modalSupplierName').value,
+    mobile: document.getElementById('modalSupplierMobile').value,
+    email: document.getElementById('modalSupplierEmail').value,
+    address: '',
+    city: document.getElementById('modalSupplierCity').value,
+    gstin: '',
+    bankAccount: '',
+    staffID: APP_STATE.currentUser.staffID
+  };
+
+  const response = await apiCall('addSupplier', suppData);
+  if (response.success) {
+    alert('✓ Supplier added');
+    closeModal();
+    await syncData();
+    refreshSuppliers();
+  } else {
+    alert('Error: ' + response.error);
+  }
+}
+
+// ============================================================================
+// EXPENSES
+// ============================================================================
+function refreshExpenses() {
+  const table = document.getElementById('expensesTable').querySelector('tbody');
+  table.innerHTML = (APP_STATE.data.expenses || []).map(e => `
+    <tr>
+      <td>${e.Date}</td>
+      <td>${e.Category}</td>
+      <td>${e.Description}</td>
+      <td>₹${Number(e.Amount || 0).toLocaleString('en-IN')}</td>
+      <td>${e.StaffName}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="text-align: center; color: #999;">No expenses</td></tr>';
+}
+
+function openAddExpenseModal() {
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input type="date" class="form-input" id="modalExpDate" value="${new Date().toISOString().split('T')[0]}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-input" id="modalExpCategory">
+        <option>Utilities</option>
+        <option>Maintenance</option>
+        <option>Transport</option>
+        <option>Supplies</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <input type="text" class="form-input" id="modalExpDesc">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Amount</label>
+      <input type="number" class="form-input" id="modalExpAmount">
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveExpense()">Add Expense</button>
+  `;
+
+  openModal('Add Expense', body, footer);
+}
+
+async function saveExpense() {
+  const expData = {
+    date: document.getElementById('modalExpDate').value,
+    category: document.getElementById('modalExpCategory').value,
+    description: document.getElementById('modalExpDesc').value,
+    amount: Number(document.getElementById('modalExpAmount').value),
+    staffName: APP_STATE.currentUser.name,
+    notes: '',
+    staffID: APP_STATE.currentUser.staffID
+  };
+
+  const response = await apiCall('addExpense', expData);
+  if (response.success) {
+    alert('✓ Expense added');
+    closeModal();
+    await syncData();
+    refreshExpenses();
+  } else {
+    alert('Error: ' + response.error);
+  }
+}
+
+// ============================================================================
+// REPORTS
+// ============================================================================
+function refreshReports() {
+  const bills = APP_STATE.data.bills || [];
+  const totalSales = bills.reduce((sum, b) => sum + (Number(b.TotalAmount) || 0), 0);
+
+  document.getElementById('totalSales').textContent = totalSales.toLocaleString('en-IN');
+  document.getElementById('totalBills').textContent = bills.length;
+
+  const variants = [];
+  (APP_STATE.data.products || []).forEach(p => {
+    (p.variants || []).forEach(v => variants.push(v));
+  });
+  const inventoryValue = variants.reduce((sum, v) => sum + (v.Stock * 100), 0); // rough estimate
+  const totalUnits = variants.reduce((sum, v) => sum + v.Stock, 0);
+
+  document.getElementById('inventoryValue').textContent = inventoryValue.toLocaleString('en-IN');
+  document.getElementById('totalUnits').textContent = totalUnits;
+
+  const staffPerf = {};
+  bills.forEach(b => {
+    const staff = b.StaffName || 'Unknown';
+    if (!staffPerf[staff]) staffPerf[staff] = { bills: 0, revenue: 0 };
+    staffPerf[staff].bills++;
+    staffPerf[staff].revenue += Number(b.TotalAmount) || 0;
+  });
+
+  const staffTable = document.getElementById('staffPerformanceTable').querySelector('tbody');
+  staffTable.innerHTML = Object.entries(staffPerf).map(([name, data]) => `
+    <tr>
+      <td>${name}</td>
+      <td>${data.bills}</td>
+      <td>₹${data.revenue.toLocaleString('en-IN')}</td>
+    </tr>
+  `).join('');
+}
+
+// ============================================================================
+// STAFF MANAGEMENT
+// ============================================================================
+function refreshStaff() {
+  const table = document.getElementById('staffTable').querySelector('tbody');
+  table.innerHTML = (APP_STATE.data.staff || []).map(s => `
+    <tr>
+      <td>${s.Name}</td>
+      <td>${s.Mobile}</td>
+      <td><span class="badge badge-success">${s.Role}</span></td>
+      <td><span class="badge ${s.Status === 'Active' ? 'badge-success' : 'badge-danger'}">${s.Status}</span></td>
+      <td>${s.LastLogin ? new Date(s.LastLogin).toLocaleDateString() : '—'}</td>
+      <td><button class="btn btn-secondary btn-small" onclick="editStaff('${s.StaffID}')">Edit</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align: center; color: #999;">No staff</td></tr>';
+}
+
+function openAddStaffModal() {
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="modalStaffName">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mobile</label>
+      <input type="text" class="form-input" id="modalStaffMobile">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="modalStaffEmail">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" class="form-input" id="modalStaffPassword">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN (4 digits)</label>
+      <input type="text" class="form-input" id="modalStaffPIN" maxlength="4" placeholder="1234">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Role</label>
+      <select class="form-input" id="modalStaffRole">
+        <option value="Staff">Staff</option>
+        <option value="Admin">Admin</option>
+        <option value="SuperAdmin">Super Admin</option>
+      </select>
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveStaff()">Add Staff</button>
+  `;
+
+  openModal('Add Staff Member', body, footer);
+}
+
+async function saveStaff() {
+  // This would require the backend to be fully configured
+  alert('Staff management requires backend to be configured');
+}
+
+// ============================================================================
+// MODAL HELPERS
+// ============================================================================
+function openModal(title, body, footer) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('modalFooter').innerHTML = footer;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('active');
+}
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+function refreshAllScreens() {
+  refreshDashboard();
+  refreshProducts();
+  refreshInventory();
+  refreshCustomers();
+  refreshSuppliers();
+  refreshExpenses();
+  refreshReports();
+  refreshStaff();
+}
+
+async function downloadBackup() {
+  const backup = {
+    exportDate: new Date().toISOString(),
+    data: APP_STATE.data
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ak-fashion-hub-backup-' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+}
+
+function editProduct(id) {
+  alert('Edit functionality coming soon');
+}
+
+function editCustomer(id) {
+  alert('Edit functionality coming soon');
+}
+
+function editStaff(id) {
+  alert('Edit functionality coming soon');
+}
+
+// ============================================================================
+// INITIALIZE
+// ============================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  checkSession();
+  const searchInput = document.getElementById('productSearch');
+  if (searchInput) {
+    searchInput.addEventListener('input', refreshProducts);
+  }
+});
+</script>
+</body>
+</html>
