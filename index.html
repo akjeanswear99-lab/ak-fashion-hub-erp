@@ -678,7 +678,7 @@
 // CONFIG & STATE
 // ============================================================================
 const CONFIG = {
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycbw_KpfA8B-pRA23NCH0MaiZ45AGk0QrP9vH3pg7LwQeK_2vh4m61EysxgAZ_pSSkAoNOw/exec',
   RAZORPAY_KEY: '',
   SHOP_NAME: 'AK FASHION HUB',
   SHOP_LOGO: '',
@@ -892,8 +892,7 @@ function successfulLogin() {
   document.getElementById('loginContainer').style.display = 'none';
   document.getElementById('appShell').classList.add('active');
   document.getElementById('userName').textContent = APP_STATE.currentUser.name;
-  
-  loadSampleData();
+  loadDataFromSheet();
   navigateToScreen('dashboard');
 }
 
@@ -916,15 +915,47 @@ function checkSession() {
     document.getElementById('loginContainer').style.display = 'none';
     document.getElementById('appShell').classList.add('active');
     document.getElementById('userName').textContent = APP_STATE.currentUser.name;
-    loadSampleData();
+   loadDataFromSheet();
     navigateToScreen('dashboard');
   }
 }
+async function loadDataFromSheet() {
 
+  if (!CONFIG.API_URL) {
+    console.log("API URL Missing");
+    return;
+  }
+
+  try {
+
+    const response = await fetch(
+      CONFIG.API_URL + "?action=getAll"
+    );
+
+    const data = await response.json();
+
+    APP_STATE.data.products = data.products || [];
+    APP_STATE.data.customers = data.customers || [];
+    APP_STATE.data.bills = data.bills || [];
+    APP_STATE.data.billItems = data.billItems || [];
+    APP_STATE.data.suppliers = data.suppliers || [];
+    APP_STATE.data.purchases = data.purchases || [];
+    APP_STATE.data.staff = data.staff || [];
+    APP_STATE.data.expenses = data.expenses || [];
+
+    refreshDashboard();
+
+  } catch(err){
+    console.error(err);
+    alert("Google Sheet Load Failed");
+  }
+
+}
 // ============================================================================
 // SAMPLE DATA
 // ============================================================================
 function loadSampleData() {
+  return;
   // Load or initialize demo data
   if (!APP_STATE.data.products.length) {
     APP_STATE.data.products = [
