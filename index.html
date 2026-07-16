@@ -1220,6 +1220,7 @@ function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subt
 }
 
 async function createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode, paymentID = null) {
+
   const billID = 'bill_' + Date.now();
   const billNumber = 'BILL-' + Date.now();
 
@@ -1241,38 +1242,79 @@ async function createBillDirectly(customerName, customerMobile, totalAmount, sub
 
   APP_STATE.data.bills.push(bill);
 
-  APP_STATE.cart.forEach(item => {
-    const billItem = {
-      BillID: billID,
-      VariantID: item.variantID,
-      UID: item.uid,
-      Color: item.color,
-      Size: item.size,
-      Quantity: item.quantity,
-      SalePrice: item.salePrice
-    };
-    APP_STATE.data.billItems.push(billItem);
+  try {
 
-    // Update stock
-    const variant = APP_STATE.data.products.forEach(p => {
-      const v = p.variants?.find(v => v.VariantID === item.variantID);
-      if (v) {
-        v.Stock = Math.max(0, Number(v.Stock) - item.quantity);
-        p.TotalStock = p.variants.reduce((s, vr) => s + Number(vr.Stock), 0);
-      }
+    const response = await fetch(CONFIG.API_URL,{
+      method:'POST',
+      headers:{
+        'Content-Type':'text/plain'
+      },
+      body:JSON.stringify({
+        action:'addBill',
+        data:{
+          customerID:'walk-in',
+          customerName:customerName,
+          customerMobile:customerMobile,
+          staffID:'staff001',
+          staffName:APP_STATE.currentUser.name,
+
+          subtotal:subtotal,
+          discountPercent:discountPct,
+          discountAmount:Math.round(discountAmount),
+          taxAmount:0,
+          totalAmount:Math.round(totalAmount),
+          paymentMode:paymentMode,
+
+          items:APP_STATE.cart.map(item => ({
+            variantID:item.variantID,
+            productID:item.productID,
+            uid:item.uid,
+            color:item.color,
+            size:item.size,
+            quantity:item.quantity,
+            salePrice:item.salePrice
+          }))
+        }
+      })
     });
-  });
 
-  alert('✓ Bill #' + billNumber + ' created\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
-  
-  APP_STATE.cart = [];
-  renderCart();
-  updateBillTotals();
-  document.getElementById('billCustomerMobile').value = '';
-  document.getElementById('billCustomerName').value = '';
-  refreshDashboard();
+    const result = await response.json();
+    console.log(result);
 
-  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+    APP_STATE.cart.forEach(item => {
+
+      const billItem = {
+        BillID: billID,
+        VariantID: item.variantID,
+        UID: item.uid,
+        Color: item.color,
+        Size: item.size,
+        Quantity: item.quantity,
+        SalePrice: item.salePrice
+      };
+
+      APP_STATE.data.billItems.push(billItem);
+
+    });
+
+    alert('✓ Bill #' + billNumber + ' created\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
+
+    APP_STATE.cart = [];
+    renderCart();
+    updateBillTotals();
+
+    document.getElementById('billCustomerMobile').value = '';
+    document.getElementById('billCustomerName').value = '';
+
+    refreshDashboard();
+
+    localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+
+  } catch(err) {
+    console.error(err);
+    alert('Google Sheet Save Failed');
+  }
+
 }
 
 function printBill() {
