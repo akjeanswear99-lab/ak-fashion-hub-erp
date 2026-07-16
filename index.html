@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AK FASHION HUB - ERP & POS System</title>
+  <title>AK FASHION HUB - Complete ERP & POS System</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#8B1538">
+  <meta name="theme-color" content="#000000">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --primary: #8B1538;
-      --primary-dark: #6B0E2A;
-      --primary-light: #C41E5C;
+      --primary: #000000;
+      --primary-dark: #1a1a1a;
+      --primary-light: #333333;
       --accent: #D4AF37;
       --accent-light: #E8D5A0;
       --success: #10B981;
@@ -30,107 +31,146 @@
       --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
     }
-    html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--neutral-900); }
-    body { background: var(--neutral-50); }
+
+    html, body { height: 100%; width: 100%; font-family: 'Segoe UI', Roboto, sans-serif; color: var(--neutral-900); background: var(--neutral-50); }
     
-    /* LOGIN */
-    .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); }
-    .login-card { background: white; padding: 40px; border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 100%; max-width: 420px; }
+    /* ========== LOGIN SCREEN ========== */
+    .login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%); }
+    .login-card { background: white; padding: 40px; border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 100%; max-width: 480px; }
     .login-header { text-align: center; margin-bottom: 30px; }
-    .login-logo { font-size: 48px; margin-bottom: 10px; }
-    .login-title { font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 5px; }
+    .login-logo-img { height: 80px; margin-bottom: 15px; object-fit: contain; }
+    .login-title { font-size: 24px; font-weight: 700; color: #000000; margin-bottom: 5px; }
     .login-subtitle { font-size: 12px; color: var(--neutral-500); letter-spacing: 1.5px; text-transform: uppercase; }
+    
     .form-group { margin-bottom: 20px; }
     .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--neutral-700); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .form-input { width: 100%; padding: 11px 14px; border: 1px solid var(--neutral-300); border-radius: 6px; font-size: 14px; transition: border-color 0.2s; }
-    .form-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1); }
+    .form-input, .form-select { width: 100%; padding: 11px 14px; border: 1px solid var(--neutral-300); border-radius: 6px; font-size: 14px; transition: border-color 0.2s; }
+    .form-input:focus, .form-select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1); }
     .form-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+    
     .btn { padding: 12px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-    .btn-primary { background: var(--primary); color: white; }
-    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-primary { background: #000000; color: white; }
+    .btn-primary:hover { background: #1a1a1a; }
     .btn-secondary { background: var(--neutral-200); color: var(--neutral-900); }
     .btn-secondary:hover { background: var(--neutral-300); }
-    .btn-small { padding: 8px 12px; font-size: 12px; }
-    .btn-icon { border-radius: 50%; width: 40px; height: 40px; justify-content: center; }
     .btn-success { background: var(--success); color: white; }
     .btn-danger { background: var(--danger); color: white; }
     .btn-warning { background: var(--warning); color: white; }
-
-    /* APP SHELL */
+    .btn-small { padding: 8px 12px; font-size: 12px; }
+    .btn-block { width: 100%; }
+    
+    /* ========== APP SHELL ========== */
     .app-shell { display: none; height: 100vh; overflow: hidden; }
-    .app-shell.active { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: auto 1fr; }
-    .sidebar { grid-column: 1; grid-row: 1 / 3; background: var(--primary-dark); color: white; padding: 20px 12px; overflow-y: auto; box-shadow: var(--shadow); }
+    .app-shell.active { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 60px 1fr; gap: 0; }
+    
+    .sidebar { grid-column: 1; grid-row: 1 / 3; background: #000000; color: white; padding: 20px 12px; overflow-y: auto; box-shadow: var(--shadow-lg); }
     .sidebar-header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .sidebar-logo { font-size: 20px; font-weight: 700; }
+    .sidebar-logo-img { height: 40px; object-fit: contain; }
+    .sidebar-text { font-size: 12px; font-weight: 700; }
     .sidebar-nav { display: flex; flex-direction: column; gap: 2px; }
     .nav-item { padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.7); }
     .nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
-    .nav-item.active { background: var(--accent); color: var(--neutral-900); font-weight: 600; }
-    .topbar { grid-column: 2; grid-row: 1; background: white; border-bottom: 1px solid var(--neutral-200); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); }
+    .nav-item.active { background: var(--accent); color: #000000; font-weight: 600; }
+    
+    .topbar { grid-column: 2; grid-row: 1; background: white; border-bottom: 1px solid var(--neutral-200); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); }
     .topbar-left { display: flex; align-items: center; gap: 12px; }
-    .topbar-title { font-size: 18px; font-weight: 700; color: var(--primary); }
+    .topbar-title { font-size: 18px; font-weight: 700; color: #000000; }
     .topbar-right { display: flex; align-items: center; gap: 16px; }
     .user-menu { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 12px; border-radius: 6px; background: var(--neutral-100); font-size: 13px; font-weight: 600; }
+    
     .content { grid-column: 2; grid-row: 2; overflow-y: auto; padding: 24px; }
     
-    /* SCREENS */
+    /* ========== SCREENS ========== */
     .screen { display: none; }
-    .screen.active { display: block; }
+    .screen.active { display: block; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     
-    /* CARDS & LAYOUT */
+    /* ========== CARDS ========== */
     .card { background: white; border: 1px solid var(--neutral-200); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--neutral-100); }
     .card-title { font-size: 16px; font-weight: 700; color: var(--neutral-900); }
+    .card-subtitle { font-size: 12px; color: var(--neutral-500); margin-top: 4px; }
+    
     .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
     .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    
     .stat-card { background: white; border: 1px solid var(--neutral-200); border-radius: var(--radius); padding: 16px; }
     .stat-label { font-size: 12px; color: var(--neutral-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
-    .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+    .stat-value { font-size: 28px; font-weight: 700; color: #000000; }
     
-    /* TABLE */
+    /* ========== TABLE ========== */
     .table-wrapper { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--neutral-200); }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     thead { background: var(--neutral-100); }
     th { padding: 12px; text-align: left; font-weight: 700; color: var(--neutral-700); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
     td { padding: 12px; border-bottom: 1px solid var(--neutral-200); }
     tr:hover { background: var(--neutral-50); }
+    
     .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
     .badge-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
     .badge-warning { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
     .badge-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+    .badge-info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
     
-    /* MODAL */
+    /* ========== MODAL ========== */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
     .modal-overlay.active { display: flex; }
-    .modal { background: white; border-radius: var(--radius); box-shadow: var(--shadow-lg); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal { background: white; border-radius: var(--radius); box-shadow: var(--shadow-lg); max-width: 700px; width: 100%; max-height: 90vh; overflow-y: auto; }
     .modal-header { padding: 20px; border-bottom: 1px solid var(--neutral-200); display: flex; justify-content: space-between; align-items: center; }
     .modal-title { font-size: 16px; font-weight: 700; }
     .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--neutral-500); }
     .modal-body { padding: 20px; }
     .modal-footer { padding: 16px 20px; border-top: 1px solid var(--neutral-200); display: flex; gap: 10px; justify-content: flex-end; }
     
-    /* BARCODE & QR */
+    /* ========== PIN MODAL ========== */
+    #pinModal { background: rgba(0,0,0,0.7); z-index: 2000; }
+    .pin-input-group { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; }
+    .pin-input { width: 50px; height: 50px; text-align: center; font-size: 24px; border: 2px solid var(--neutral-300); border-radius: 6px; }
+    .pin-input:focus { outline: none; border-color: #000000; }
+    
+    /* ========== BARCODE ========== */
     .barcode-container { text-align: center; margin: 16px 0; }
     .barcode-svg { height: 50px; }
-    .qr-code { display: inline-block; padding: 8px; border: 1px solid var(--neutral-200); border-radius: 4px; }
     
-    /* PRINT */
+    /* ========== CART ========== */
+    .cart-item { background: var(--neutral-50); border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; margin-bottom: 8px; }
+    .cart-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .cart-item-name { font-weight: 600; font-size: 13px; }
+    .cart-item-remove { cursor: pointer; color: var(--danger); font-size: 18px; }
+    .cart-item-qty { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+    .cart-item-qty input { width: 50px; padding: 4px; border: 1px solid var(--neutral-300); border-radius: 3px; }
+    
+    /* ========== PRINT STYLES ========== */
     @media print {
       body * { visibility: hidden; }
       .print-area, .print-area * { visibility: visible; }
       .print-area { position: absolute; top: 0; left: 0; width: 100%; }
+      .no-print { display: none !important; }
     }
-    .no-print { print-width: none; }
     
-    /* RESPONSIVE */
+    .bill-3-5 { width: 3.5in; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 11px; }
+    .bill-a4 { width: 8.5in; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 12px; }
+    
+    .bill-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+    .bill-logo { height: 40px; margin-bottom: 4px; object-fit: contain; }
+    .bill-title { font-weight: bold; font-size: 13px; margin: 4px 0; }
+    .bill-items { margin: 12px 0; }
+    .bill-item { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; }
+    .bill-total { font-weight: bold; font-size: 12px; text-align: right; margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; }
+    
+    /* ========== RESPONSIVE ========== */
     @media (max-width: 768px) {
       .app-shell.active { grid-template-columns: 1fr; }
-      .sidebar { position: fixed; left: -240px; top: 0; height: 100vh; z-index: 999; transition: left 0.3s; }
+      .sidebar { position: fixed; left: -260px; top: 0; height: 100vh; z-index: 999; transition: left 0.3s; }
       .sidebar.open { left: 0; }
       .topbar { grid-column: 1; }
       .content { grid-column: 1; }
-      .grid, .grid-2 { grid-template-columns: 1fr; }
+      .grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
     }
+
+    .template-editor { border: 2px dashed var(--neutral-300); padding: 16px; border-radius: 6px; min-height: 200px; background: white; }
+    .template-preview { background: white; border: 1px solid var(--neutral-200); padding: 20px; border-radius: 6px; margin-top: 16px; }
   </style>
 </head>
 <body>
@@ -139,9 +179,9 @@
 <div class="login-container" id="loginContainer">
   <div class="login-card">
     <div class="login-header">
-      <div class="login-logo">👗</div>
-      <h1 class="login-title">AK FASHION HUB</h1>
-      <p class="login-subtitle">ERP &amp; POS System</p>
+      <img id="loginLogoImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100'%3E%3Ctext x='0' y='80' font-size='80' font-weight='bold' fill='%23000'%3Ea%3C/text%3E%3Ctext x='120' y='75' font-size='60' font-weight='bold' fill='%23000'%3EFASHION HUB%3C/text%3E%3C/svg%3E" class="login-logo-img" alt="Shop Logo">
+      <h1 class="login-title" id="loginTitleText">AK FASHION HUB</h1>
+      <p class="login-subtitle">Complete ERP & POS System</p>
     </div>
     <form onsubmit="handleLogin(event)">
       <div class="form-group">
@@ -152,13 +192,12 @@
         <label class="form-label">Password</label>
         <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" required>
       </div>
-      <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+      <button type="submit" class="btn btn-primary btn-block">Sign In</button>
       <div id="loginError" class="form-error" style="margin-top: 12px;"></div>
       <div style="font-size: 11px; color: var(--neutral-500); margin-top: 16px; padding: 12px; background: var(--neutral-100); border-radius: 4px;">
-        <strong>Demo Login:</strong><br>
-        Admin: 9999900001 / admin@123<br>
-        Staff: 9999900002 / staff@123<br>
-        PIN: 1234
+        <strong>Demo Credentials:</strong><br>
+        Admin: 9999900001 / admin@123 (PIN: 1234)<br>
+        Staff: 9999900002 / staff@123 (PIN: 1234)
       </div>
     </form>
   </div>
@@ -169,18 +208,23 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-logo">👗 AK HUB</span>
+      <img id="sidebarLogoImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Ctext x='5' y='40' font-size='40' font-weight='bold' fill='%23fff'%3Ea%3C/text%3E%3C/svg%3E" class="sidebar-logo-img" alt="Logo">
+      <span class="sidebar-text" id="sidebarNameText">AK HUB</span>
     </div>
     <nav class="sidebar-nav">
       <div data-screen="dashboard" class="nav-item active">📊 Dashboard</div>
-      <div data-screen="billing" class="nav-item">🧾 Billing / POS</div>
+      <div data-screen="billing" class="nav-item">🧾 Billing</div>
       <div data-screen="products" class="nav-item">👕 Products</div>
       <div data-screen="inventory" class="nav-item">📦 Inventory</div>
+      <div data-screen="preorders" class="nav-item">📋 Pre-Orders</div>
+      <div data-screen="returns" class="nav-item">↩️ Returns</div>
+      <div data-screen="pricetags" class="nav-item">🏷️ Price Tags</div>
       <div data-screen="customers" class="nav-item">👤 Customers</div>
       <div data-screen="suppliers" class="nav-item">🚚 Suppliers</div>
       <div data-screen="expenses" class="nav-item">💰 Expenses</div>
       <div data-screen="reports" class="nav-item">📈 Reports</div>
       <div data-screen="staff" class="nav-item">👥 Staff</div>
+      <div data-screen="templates" class="nav-item">🎨 Templates</div>
       <div data-screen="settings" class="nav-item">⚙️ Settings</div>
     </nav>
   </aside>
@@ -194,12 +238,14 @@
       <div class="user-menu" id="userMenu">
         <span>👤 <span id="userName">User</span></span>
       </div>
+      <button class="btn btn-secondary btn-small" onclick="logout()">Logout</button>
     </div>
   </div>
 
   <!-- CONTENT -->
   <div class="content">
-    <!-- DASHBOARD -->
+    
+    <!-- ========== DASHBOARD ========== -->
     <div class="screen active" id="dashboardScreen">
       <div class="grid grid-2">
         <div class="stat-card">
@@ -215,8 +261,8 @@
           <div class="stat-value" id="totalInventory">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Low Stock Items</div>
-          <div class="stat-value" id="lowStockCount" style="color: var(--warning);">0</div>
+          <div class="stat-label">Pending Pre-Orders</div>
+          <div class="stat-value" id="pendingOrders">0</div>
         </div>
       </div>
       <div class="card">
@@ -229,9 +275,9 @@
       </div>
     </div>
 
-    <!-- BILLING / POS -->
+    <!-- ========== BILLING / POS ========== -->
     <div class="screen" id="billingScreen">
-      <div style="display: grid; grid-template-columns: 1fr 350px; gap: 20px;">
+      <div style="display: grid; grid-template-columns: 1fr 380px; gap: 20px;">
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Point of Sale</h3>
@@ -239,9 +285,9 @@
           <div class="form-group">
             <input type="text" class="form-input" id="billingScan" placeholder="🔍 Scan barcode / UID" autofocus>
           </div>
-          <div id="billItems" style="min-height: 200px; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; background: var(--neutral-50); font-size: 12px; color: var(--neutral-500);">Empty cart</div>
+          <div id="billItems" style="min-height: 250px; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; background: var(--neutral-50);"><div style="text-align: center; color: var(--neutral-500);">Empty cart - scan a product</div></div>
         </div>
-        <div class="card" style="position: sticky; top: 20px;">
+        <div class="card" style="position: sticky; top: 20px; height: fit-content;">
           <div class="card-header">
             <h3 class="card-title">Bill Summary</h3>
           </div>
@@ -255,7 +301,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Discount %</label>
-            <input type="number" class="form-input" id="billDiscountPct" value="0" min="0" max="100">
+            <input type="number" class="form-input" id="billDiscountPct" value="0" min="0" max="100" oninput="updateBillTotals()">
           </div>
           <div class="form-group">
             <label class="form-label">Payment Mode</label>
@@ -274,31 +320,32 @@
               <span>Discount:</span>
               <span id="billDiscount">-₹0</span>
             </div>
-            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; color: var(--primary);">
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; color: #000;">
               <span>Total:</span>
               <span id="billTotal">₹0</span>
             </div>
           </div>
-          <button class="btn btn-primary" style="width: 100%;" onclick="completeBill()">✓ Complete Sale</button>
+          <button class="btn btn-primary btn-block" onclick="completeBill()" style="margin-bottom: 6px;">✓ Complete Sale</button>
+          <button class="btn btn-secondary btn-block" onclick="printBill()">🖨️ Print</button>
         </div>
       </div>
     </div>
 
-    <!-- PRODUCTS -->
+    <!-- ========== PRODUCTS ========== -->
     <div class="screen" id="productsScreen">
       <div class="card-header">
         <h3 class="card-title">Products</h3>
         <button class="btn btn-primary btn-small" onclick="openAddProductModal()">+ Add Product</button>
       </div>
       <div style="margin-bottom: 16px;">
-        <input type="text" class="form-input" id="productSearch" placeholder="Search products...">
+        <input type="text" class="form-input" id="productSearch" placeholder="Search products..." oninput="refreshProducts()">
       </div>
       <div class="table-wrapper">
-        <table id="productsTable"><thead><tr><th>UID</th><th>Name</th><th>Brand</th><th>Stock</th><th>CP</th><th>SP</th><th>MRP</th><th>Status</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        <table id="productsTable"><thead><tr><th>UID</th><th>Name</th><th>Brand</th><th>Stock</th><th>CP</th><th>SP</th><th>MRP</th><th>Actions</th></tr></thead><tbody></tbody></table>
       </div>
     </div>
 
-    <!-- INVENTORY -->
+    <!-- ========== INVENTORY ========== -->
     <div class="screen" id="inventoryScreen">
       <div class="card">
         <div class="card-header">
@@ -313,7 +360,75 @@
       </div>
     </div>
 
-    <!-- CUSTOMERS -->
+    <!-- ========== PRE-ORDERS ========== -->
+    <div class="screen" id="preordersScreen">
+      <div class="card-header">
+        <h3 class="card-title">Pre-Order Management</h3>
+        <button class="btn btn-primary btn-small" onclick="openAddPreorderModal()">+ New Pre-Order</button>
+      </div>
+      <div class="table-wrapper">
+        <table id="preordersTable"><thead><tr><th>Order #</th><th>Customer</th><th>Mobile</th><th>Product</th><th>Size/Color</th><th>Qty</th><th>Total</th><th>Paid</th><th>Pending</th><th>Status</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- ========== RETURNS & EXCHANGES ========== -->
+    <div class="screen" id="returnsScreen">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Returns & Exchanges</h3>
+          <p class="card-subtitle">Look up a bill to process return or exchange</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bill Number or Customer Mobile</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" class="form-input" id="rxSearchInput" placeholder="Enter bill # or mobile">
+            <button class="btn btn-primary" onclick="searchBillForReturn()">Search</button>
+          </div>
+        </div>
+        <div id="rxResult"></div>
+      </div>
+    </div>
+
+    <!-- ========== PRICE TAGS ========== -->
+    <div class="screen" id="pricetagsScreen">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Price Tag Printing</h3>
+          <p class="card-subtitle">Print 2×3 or 4×6 thermal labels with smart packing</p>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 320px; gap: 20px; margin-bottom: 20px;">
+          <div>
+            <div class="form-group">
+              <label class="form-label">Filter Products</label>
+              <input type="text" class="form-input" id="tagFilterValue" placeholder="Search..." oninput="renderTagPicker()">
+            </div>
+            <div id="tagPicker" style="border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; max-height: 400px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="card" style="position: sticky; top: 20px;">
+            <h3 class="card-title" style="margin-top: 0;">Print Queue</h3>
+            <div id="tagQueueList" style="max-height: 250px; overflow-y: auto; font-size: 12px; margin-bottom: 12px;"></div>
+            <div style="background: var(--neutral-100); padding: 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12px;">
+              <div>Total queued: <strong id="queueTotal">0</strong></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tag Size</label>
+              <select class="form-input" id="tagSize" onchange="updateTagSize()">
+                <option value="2x3">2×3 inch</option>
+                <option value="4x6">4×6 inch</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 8px;" onclick="generateLabelSheets()">🏷️ Preview & Print</button>
+            <button class="btn btn-secondary" style="width: 100%;" onclick="clearTagQueue()">Clear</button>
+          </div>
+        </div>
+
+        <div id="sheetPreview"></div>
+      </div>
+    </div>
+
+    <!-- ========== CUSTOMERS ========== -->
     <div class="screen" id="customersScreen">
       <div class="card-header">
         <h3 class="card-title">Customers</h3>
@@ -324,7 +439,7 @@
       </div>
     </div>
 
-    <!-- SUPPLIERS -->
+    <!-- ========== SUPPLIERS ========== -->
     <div class="screen" id="suppliersScreen">
       <div class="card-header">
         <h3 class="card-title">Suppliers</h3>
@@ -351,12 +466,12 @@
             <label class="form-label">Quantity</label>
             <input type="number" class="form-input" id="purchaseQty" value="10">
           </div>
-          <button class="btn btn-primary" style="width: 100%;">Add Purchase</button>
+          <button class="btn btn-primary btn-block">Add Purchase</button>
         </div>
       </div>
     </div>
 
-    <!-- EXPENSES -->
+    <!-- ========== EXPENSES ========== -->
     <div class="screen" id="expensesScreen">
       <div class="card-header">
         <h3 class="card-title">Expense Management</h3>
@@ -367,12 +482,12 @@
       </div>
     </div>
 
-    <!-- REPORTS -->
+    <!-- ========== REPORTS ========== -->
     <div class="screen" id="reportsScreen">
       <div class="grid">
         <div class="card">
           <h3 class="card-title">Sales Summary</h3>
-          <div style="font-size: 24px; font-weight: 700; color: var(--primary); margin: 16px 0;">₹<span id="totalSales">0</span></div>
+          <div style="font-size: 24px; font-weight: 700; color: #000; margin: 16px 0;">₹<span id="totalSales">0</span></div>
           <div style="font-size: 12px; color: var(--neutral-500);">Total bills: <span id="totalBills">0</span></div>
         </div>
         <div class="card">
@@ -389,7 +504,7 @@
       </div>
     </div>
 
-    <!-- STAFF -->
+    <!-- ========== STAFF MANAGEMENT ========== -->
     <div class="screen" id="staffScreen">
       <div class="card-header">
         <h3 class="card-title">Staff Management</h3>
@@ -400,26 +515,130 @@
       </div>
     </div>
 
-    <!-- SETTINGS -->
+    <!-- ========== BILL & TAG TEMPLATES ========== -->
+    <div class="screen" id="templatesScreen">
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Bill Template</h3>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Template Type</label>
+            <select class="form-input" id="billTemplateType" onchange="loadBillTemplate()">
+              <option value="thermal">Thermal (3.5 inch)</option>
+              <option value="a4">A4 (Paper)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Header Text</label>
+            <input type="text" class="form-input" id="billHeaderText" value="AK FASHION HUB" oninput="updateBillPreview()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Footer Text</label>
+            <input type="text" class="form-input" id="billFooterText" value="Thank You! Visit Again" oninput="updateBillPreview()">
+          </div>
+          <button class="btn btn-primary btn-block" onclick="saveBillTemplate()">Save Template</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Price Tag Template</h3>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Show MRP?</label>
+            <input type="checkbox" id="tagShowMRP" checked oninput="updateTagPreview()"> Show with strikethrough
+          </div>
+          <div class="form-group">
+            <label class="form-label">Show Product Name?</label>
+            <input type="checkbox" id="tagShowName" checked oninput="updateTagPreview()"> Include in tag
+          </div>
+          <div class="form-group">
+            <label class="form-label">Show Barcode?</label>
+            <input type="checkbox" id="tagShowBarcode" checked oninput="updateTagPreview()"> Print barcode
+          </div>
+          <button class="btn btn-primary btn-block" onclick="savePriceTagTemplate()">Save Template</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="card-title" style="margin-bottom: 16px;">Preview</h3>
+        <div id="templatePreview"></div>
+      </div>
+    </div>
+
+    <!-- ========== SETTINGS ========== -->
     <div class="screen" id="settingsScreen">
       <div class="grid">
         <div class="card">
-          <h3 class="card-title">Backup &amp; Restore</h3>
-          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Download or restore your complete store data</p>
-          <button class="btn btn-primary btn-small" onclick="downloadBackup()">⬇ Download Backup</button>
-          <input type="file" id="restoreFile" accept=".json" style="display: none;">
-          <button class="btn btn-secondary btn-small" onclick="document.getElementById('restoreFile').click()">⬆ Restore Backup</button>
+          <h3 class="card-title">Shop Profile</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Set your shop name and logo — this appears on the login screen, sidebar, and bills/tags</p>
+          <div class="form-group">
+            <label class="form-label">Shop Name</label>
+            <input type="text" class="form-input" id="shopNameInput" placeholder="AK FASHION HUB">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Logo</label>
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom: 8px;">
+              <div id="logoPreviewBox" style="width:70px; height:70px; border:1px dashed var(--neutral-300); border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff;">
+                <img id="logoPreviewImg" src="" alt="Logo preview" style="max-width:100%; max-height:100%; object-fit:contain; display:none;">
+                <span id="logoPreviewPlaceholder" style="font-size:10px; color:var(--neutral-500);">No logo</span>
+              </div>
+              <div>
+                <input type="file" id="logoFileInput" accept="image/*" style="display:none;" onchange="handleLogoUpload(event)">
+                <button class="btn btn-secondary btn-small" type="button" onclick="document.getElementById('logoFileInput').click()">⬆ Upload Logo</button>
+                <button class="btn btn-danger btn-small" type="button" onclick="removeShopLogo()">Remove</button>
+              </div>
+            </div>
+            <p style="font-size: 11px; color: var(--neutral-500);">Square images work best (the logo box auto-fits/contains your image, so it won't stretch or get cut off).</p>
+          </div>
+          <button class="btn btn-primary btn-small btn-block" onclick="saveShopProfile()">Save Shop Profile</button>
         </div>
+
+        <div class="card">
+          <h3 class="card-title">Demo Data</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">This app ships with sample products/customers/staff so you can try it out. Once you've added your real data, clear the demo entries.</p>
+          <button class="btn btn-danger btn-small btn-block" onclick="clearDemoData()">🗑 Clear Demo Data</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Google Sheets Integration</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Connect your Google Sheet for cloud backup</p>
+          <div class="form-group">
+            <label class="form-label">Google Apps Script URL</label>
+            <input type="text" class="form-input" id="apiUrl" placeholder="Paste your Web App URL">
+          </div>
+          <button class="btn btn-primary btn-small" onclick="testApiConnection()">Test Connection</button>
+          <button class="btn btn-secondary btn-small" onclick="syncNow()">Sync Now</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Backup & Restore</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Download or restore your complete data</p>
+          <button class="btn btn-primary btn-small btn-block" onclick="downloadBackup()" style="margin-bottom: 8px;">⬇ Download Backup</button>
+          <input type="file" id="restoreFile" accept=".json" style="display: none;">
+          <button class="btn btn-secondary btn-small btn-block" onclick="document.getElementById('restoreFile').click()">⬆ Restore Backup</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Razorpay Payment</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Setup online payment processing</p>
+          <div class="form-group">
+            <label class="form-label">Razorpay Key ID</label>
+            <input type="text" class="form-input" id="razorpayKeyId" placeholder="rzp_live_xxxxx">
+          </div>
+          <button class="btn btn-primary btn-small btn-block" onclick="saveRazorpayKey()">Save Key</button>
+        </div>
+
         <div class="card">
           <h3 class="card-title">Session</h3>
-          <button class="btn btn-danger" onclick="logout()">🚪 Logout</button>
+          <button class="btn btn-danger btn-block" onclick="logout()">🚪 Logout</button>
         </div>
       </div>
     </div>
+
   </div>
 </div>
 
-<!-- MODAL -->
+<!-- MODALS -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modal">
     <div class="modal-header">
@@ -431,61 +650,224 @@
   </div>
 </div>
 
+<!-- PIN MODAL -->
+<div class="modal-overlay" id="pinModal">
+  <div class="modal" style="width: 350px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Verify PIN</h3>
+    </div>
+    <div class="modal-body">
+      <p style="text-align: center; margin-bottom: 16px; color: var(--neutral-500);" id="pinReason">Enter your 4-digit PIN</p>
+      <div class="pin-input-group">
+        <input type="password" class="pin-input" id="pinInput1" maxlength="1" placeholder="•">
+        <input type="password" class="pin-input" id="pinInput2" maxlength="1" placeholder="•">
+        <input type="password" class="pin-input" id="pinInput3" maxlength="1" placeholder="•">
+        <input type="password" class="pin-input" id="pinInput4" maxlength="1" placeholder="•">
+      </div>
+      <div id="pinError" style="color: var(--danger); font-size: 12px; text-align: center; margin-bottom: 12px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePinModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="verifyPin()">Verify</button>
+    </div>
+  </div>
+</div>
+
 <!-- PRINT AREA -->
-<div id="printArea" class="no-print"></div>
+<div id="printArea" style="display: none;"></div>
 
 <script>
 // ============================================================================
 // CONFIG & STATE
 // ============================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbyeSQ-utH6nbnL-9tXjnbYbmvjlEPbgPTbKMxzRIKhvDioZlB_tJYqoz-fR3QEdLEM/exec"};
+  API_URL: '',
+  RAZORPAY_KEY: '',
+  SHOP_NAME: 'AK FASHION HUB',
+  SHOP_LOGO: '',
+  BILL_TEMPLATE: { type: 'thermal', headerText: 'AK FASHION HUB', footerText: 'Thank You!' },
+  TAG_TEMPLATE: { showMRP: true, showName: true, showBarcode: true }
+};
 
 let APP_STATE = {
   currentUser: null,
   cart: [],
+  tagQueue: [],
+  labelSheets: [],
+  pinPromiseResolve: null,
   data: {
     products: [],
+    variants: [],
     customers: [],
     bills: [],
+    billItems: [],
     suppliers: [],
+    purchases: [],
     staff: [],
+    preorders: [],
     expenses: [],
+    activityLog: []
   }
 };
 
 // ============================================================================
-// API FUNCTIONS
+// INITIALIZATION
 // ============================================================================
-async function apiCall(action, data = {}) {
-  if (!CONFIG.API_URL) {
-    console.warn('API_URL not configured. Using demo mode.');
-    return { success: false, error: 'API not configured' };
-  }
+window.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+  checkSession();
+  setupBarcodeScanning();
+});
 
-  try {
-    const response = await fetch(CONFIG.API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action, data })
+function setupBarcodeScanning() {
+  document.getElementById('billingScan')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      addToCart(e.target.value);
+      e.target.value = '';
+    }
+  });
+
+  document.getElementById('inventoryScan')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      lookupStock(e.target.value);
+      e.target.value = '';
+    }
+  });
+
+  // PIN input auto-focus
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('pinInput' + i)?.addEventListener('input', (e) => {
+      if (e.target.value) {
+        document.getElementById('pinInput' + (i + 1))?.focus();
+      }
     });
-    return await response.json();
-  } catch (err) {
-    console.error('API Error:', err);
-    return { success: false, error: err.message };
   }
 }
 
-async function syncData() {
-  const response = await apiCall('getAll');
-  if (response.data) {
-    APP_STATE.data = response.data;
-    refreshAllScreens();
+function loadConfig() {
+  const saved = localStorage.getItem('appConfig');
+  if (saved) {
+    Object.assign(CONFIG, JSON.parse(saved));
+    if (document.getElementById('apiUrl')) document.getElementById('apiUrl').value = CONFIG.API_URL || '';
+    if (document.getElementById('razorpayKeyId')) document.getElementById('razorpayKeyId').value = CONFIG.RAZORPAY_KEY || '';
   }
+  applyShopProfile();
+}
+
+function saveConfig() {
+  CONFIG.API_URL = document.getElementById('apiUrl').value;
+  CONFIG.RAZORPAY_KEY = document.getElementById('razorpayKeyId').value;
+  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
 }
 
 // ============================================================================
-// AUTH
+// SHOP PROFILE (name + logo) — shown on login screen, sidebar, and printed bills
+// ============================================================================
+function applyShopProfile() {
+  const name = CONFIG.SHOP_NAME || 'AK FASHION HUB';
+  const shortName = name.length > 10 ? name.split(' ').map(w => w[0]).join('').slice(0, 4).toUpperCase() : name;
+
+  const loginTitle = document.getElementById('loginTitleText');
+  if (loginTitle) loginTitle.textContent = name;
+  const sidebarText = document.getElementById('sidebarNameText');
+  if (sidebarText) sidebarText.textContent = shortName;
+
+  const loginLogo = document.getElementById('loginLogoImg');
+  const sidebarLogo = document.getElementById('sidebarLogoImg');
+  if (CONFIG.SHOP_LOGO) {
+    if (loginLogo) loginLogo.src = CONFIG.SHOP_LOGO;
+    if (sidebarLogo) sidebarLogo.src = CONFIG.SHOP_LOGO;
+  }
+
+  // Reflect into settings screen inputs/preview if present
+  const nameInput = document.getElementById('shopNameInput');
+  if (nameInput && !nameInput.value) nameInput.value = name;
+  const previewImg = document.getElementById('logoPreviewImg');
+  const previewPlaceholder = document.getElementById('logoPreviewPlaceholder');
+  if (previewImg && previewPlaceholder) {
+    if (CONFIG.SHOP_LOGO) {
+      previewImg.src = CONFIG.SHOP_LOGO;
+      previewImg.style.display = 'block';
+      previewPlaceholder.style.display = 'none';
+    } else {
+      previewImg.style.display = 'none';
+      previewPlaceholder.style.display = 'block';
+    }
+  }
+}
+
+function handleLogoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { alert('Please choose an image file'); return; }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      // Resize/fit onto a square canvas so any logo (portrait, landscape, off-center)
+      // ends up neatly centered and "contained" instead of being stretched or cut off.
+      const size = 300;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, size, size);
+      const scale = Math.min(size / img.width, size / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      const dataUrl = canvas.toDataURL('image/png');
+
+      CONFIG.SHOP_LOGO = dataUrl;
+      applyShopProfile();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeShopLogo() {
+  CONFIG.SHOP_LOGO = '';
+  document.getElementById('logoFileInput').value = '';
+  applyShopProfile();
+}
+
+function saveShopProfile() {
+  CONFIG.SHOP_NAME = document.getElementById('shopNameInput').value.trim() || 'AK FASHION HUB';
+  CONFIG.BILL_TEMPLATE.headerText = CONFIG.SHOP_NAME;
+  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+  applyShopProfile();
+  alert('✓ Shop profile saved');
+}
+
+function clearDemoData() {
+  if (!confirm('This removes the sample products, customers, suppliers and staff that ship with the app. Your own added data will NOT be touched. Continue?')) return;
+
+  const demoUIDs = ['AKFH000001', 'AKFH000002'];
+  const demoCustomerMobiles = ['9876543210'];
+  const demoSupplierNames = ['Shree Textiles'];
+  const demoStaffMobiles = ['9999900001', '9999900002'];
+
+  APP_STATE.data.products = (APP_STATE.data.products || []).filter(p => !demoUIDs.includes(p.UID));
+  APP_STATE.data.customers = (APP_STATE.data.customers || []).filter(c => !demoCustomerMobiles.includes(c.Mobile));
+  APP_STATE.data.suppliers = (APP_STATE.data.suppliers || []).filter(s => !demoSupplierNames.includes(s.Name));
+  // Keep at least the currently logged-in staff account so you don't lock yourself out
+  APP_STATE.data.staff = (APP_STATE.data.staff || []).filter(s =>
+    !demoStaffMobiles.includes(s.Mobile) || (APP_STATE.currentUser && s.Mobile === APP_STATE.currentUser.mobile)
+  );
+
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  refreshProducts();
+  refreshCustomers();
+  refreshSuppliers();
+  refreshStaff();
+  alert('✓ Demo data cleared. Your real products/customers/staff are untouched.');
+}
+
+// ============================================================================
+// AUTHENTICATION
 // ============================================================================
 async function handleLogin(e) {
   e.preventDefault();
@@ -493,55 +875,95 @@ async function handleLogin(e) {
   const password = document.getElementById('loginPassword').value;
   const errorEl = document.getElementById('loginError');
 
-  const response = await apiCall('login', { mobile, password });
-
-  if (response.success && response.data.user) {
-    APP_STATE.currentUser = response.data.user;
-    localStorage.setItem('currentUser', JSON.stringify(APP_STATE.currentUser));
-    localStorage.setItem('loginTime', Date.now().toString());
-    
-    document.getElementById('loginContainer').style.display = 'none';
-    document.getElementById('appShell').classList.add('active');
-    document.getElementById('userName').textContent = APP_STATE.currentUser.name;
-    
-    await syncData();
-    navigateToScreen('dashboard');
+  // Demo credentials
+  if (mobile === '9999900001' && password === 'admin@123') {
+    APP_STATE.currentUser = { name: 'Anita Kapoor', mobile: mobile, role: 'Admin', pinHash: '1234' };
+    successfulLogin();
+  } else if (mobile === '9999900002' && password === 'staff@123') {
+    APP_STATE.currentUser = { name: 'Ravi Sharma', mobile: mobile, role: 'Staff', pinHash: '1234' };
+    successfulLogin();
   } else {
-    errorEl.textContent = response.error || 'Login failed';
+    errorEl.textContent = 'Invalid credentials';
   }
 }
 
+function successfulLogin() {
+  localStorage.setItem('currentUser', JSON.stringify(APP_STATE.currentUser));
+  localStorage.setItem('loginTime', Date.now().toString());
+  
+  document.getElementById('loginContainer').style.display = 'none';
+  document.getElementById('appShell').classList.add('active');
+  document.getElementById('userName').textContent = APP_STATE.currentUser.name;
+  
+  loadSampleData();
+  navigateToScreen('dashboard');
+}
+
 function logout() {
-  localStorage.removeItem('currentUser');
-  APP_STATE.currentUser = null;
-  document.getElementById('appShell').classList.remove('active');
-  document.getElementById('loginContainer').style.display = 'flex';
-  document.getElementById('loginMobile').value = '';
-  document.getElementById('loginPassword').value = '';
+  if (confirm('Are you sure?')) {
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('loginTime');
+    APP_STATE.currentUser = null;
+    document.getElementById('appShell').classList.remove('active');
+    document.getElementById('loginContainer').style.display = 'flex';
+    document.getElementById('loginMobile').value = '';
+    document.getElementById('loginPassword').value = '';
+  }
 }
 
 function checkSession() {
   const user = localStorage.getItem('currentUser');
-  const loginTime = localStorage.getItem('loginTime');
-  const SESSION_TIMEOUT = 20 * 60 * 1000; // 20 minutes
-
-  if (!user) {
-    document.getElementById('appShell').classList.remove('active');
-    document.getElementById('loginContainer').style.display = 'flex';
-    return;
+  if (user) {
+    APP_STATE.currentUser = JSON.parse(user);
+    document.getElementById('loginContainer').style.display = 'none';
+    document.getElementById('appShell').classList.add('active');
+    document.getElementById('userName').textContent = APP_STATE.currentUser.name;
+    loadSampleData();
+    navigateToScreen('dashboard');
   }
+}
 
-  if (loginTime && Date.now() - Number(loginTime) > SESSION_TIMEOUT) {
-    logout();
-    alert('Session expired. Please log in again.');
-    return;
+// ============================================================================
+// SAMPLE DATA
+// ============================================================================
+function loadSampleData() {
+  // Load or initialize demo data
+  if (!APP_STATE.data.products.length) {
+    APP_STATE.data.products = [
+      {
+        ProductID: 'prod001', UID: 'AKFH000001', Barcode: 'AKFH000001', Name: 'Casual T-Shirt',
+        Gender: 'Men', Brand: 'AK Fashion', FabricType: 'Cotton', Status: 'Active',
+        CostPrice: 150, SalePrice: 299, MRP: 399, TotalStock: 50,
+        variants: [
+          { VariantID: 'var001', Color: 'Black', Size: 'M', Stock: 15, Floor: '1', Rack: 'A', Shelf: '1' },
+          { VariantID: 'var002', Color: 'White', Size: 'M', Stock: 20, Floor: '1', Rack: 'A', Shelf: '2' },
+          { VariantID: 'var003', Color: 'Blue', Size: 'L', Stock: 15, Floor: '1', Rack: 'B', Shelf: '1' }
+        ]
+      },
+      {
+        ProductID: 'prod002', UID: 'AKFH000002', Barcode: 'AKFH000002', Name: 'Denim Jeans',
+        Gender: 'Women', Brand: 'AK Fashion', FabricType: 'Denim', Status: 'Active',
+        CostPrice: 400, SalePrice: 799, MRP: 999, TotalStock: 30,
+        variants: [
+          { VariantID: 'var004', Color: 'Dark Blue', Size: '28', Stock: 10, Floor: '1', Rack: 'C', Shelf: '1' },
+          { VariantID: 'var005', Color: 'Light Blue', Size: '30', Stock: 20, Floor: '1', Rack: 'C', Shelf: '2' }
+        ]
+      }
+    ];
+
+    APP_STATE.data.customers = [
+      { CustomerID: 'cust001', Name: 'Priya Sharma', Mobile: '9876543210', TotalSpend: 5000, LoyaltyPoints: 50, DueBalance: 0 }
+    ];
+
+    APP_STATE.data.suppliers = [
+      { SupplierID: 'supp001', Name: 'Shree Textiles', Mobile: '9812345670', City: 'Surat' }
+    ];
+
+    APP_STATE.data.staff = [
+      { StaffID: 'staff001', Name: 'Anita Kapoor', Mobile: '9999900001', Role: 'Admin', Status: 'Active' },
+      { StaffID: 'staff002', Name: 'Ravi Sharma', Mobile: '9999900002', Role: 'Staff', Status: 'Active' }
+    ];
   }
-
-  APP_STATE.currentUser = JSON.parse(user);
-  document.getElementById('loginContainer').style.display = 'none';
-  document.getElementById('appShell').classList.add('active');
-  document.getElementById('userName').textContent = APP_STATE.currentUser.name;
-  navigateToScreen('dashboard');
 }
 
 // ============================================================================
@@ -560,24 +982,32 @@ function navigateToScreen(screenName) {
     billing: '🧾 Billing / POS',
     products: '👕 Products',
     inventory: '📦 Inventory',
+    preorders: '📋 Pre-Orders',
+    returns: '↩️ Returns & Exchanges',
+    pricetags: '🏷️ Price Tags',
     customers: '👤 Customers',
     suppliers: '🚚 Suppliers',
     expenses: '💰 Expenses',
     reports: '📈 Reports',
     staff: '👥 Staff Management',
+    templates: '🎨 Bill & Tag Templates',
     settings: '⚙️ Settings'
   };
   document.getElementById('screenTitle').textContent = titles[screenName] || screenName;
 
   // Refresh screen data
-  if (screenName === 'dashboard') refreshDashboard();
-  if (screenName === 'products') refreshProducts();
-  if (screenName === 'inventory') refreshInventory();
-  if (screenName === 'customers') refreshCustomers();
-  if (screenName === 'suppliers') refreshSuppliers();
-  if (screenName === 'expenses') refreshExpenses();
-  if (screenName === 'reports') refreshReports();
-  if (screenName === 'staff') refreshStaff();
+  setTimeout(() => {
+    if (screenName === 'dashboard') refreshDashboard();
+    if (screenName === 'products') refreshProducts();
+    if (screenName === 'inventory') refreshInventory();
+    if (screenName === 'customers') refreshCustomers();
+    if (screenName === 'suppliers') refreshSuppliers();
+    if (screenName === 'expenses') refreshExpenses();
+    if (screenName === 'reports') refreshReports();
+    if (screenName === 'staff') refreshStaff();
+    if (screenName === 'pricetags') renderTagPicker();
+    if (screenName === 'preorders') refreshPreorders();
+  }, 100);
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -595,50 +1025,37 @@ function refreshDashboard() {
   const todaysBills = bills.filter(b => b.CreatedDate && b.CreatedDate.includes(today));
   
   const todaysSales = todaysBills.reduce((sum, b) => sum + (Number(b.TotalAmount) || 0), 0);
-  const todaysProfit = todaysSales * 0.3; // Rough estimate
+  const todaysProfit = todaysSales * 0.3;
 
-  const variants = [];
+  let totalInventory = 0;
   (APP_STATE.data.products || []).forEach(p => {
-    (p.variants || []).forEach(v => variants.push(v));
+    (p.variants || []).forEach(v => {
+      totalInventory += Number(v.Stock) || 0;
+    });
   });
 
-  const totalInventory = variants.reduce((sum, v) => sum + (Number(v.Stock) || 0), 0);
-  const lowStock = variants.filter(v => v.Stock > 0 && v.Stock <= 5).length;
+  const pendingOrders = (APP_STATE.data.preorders || []).filter(p => p.Status !== 'Completed').length;
 
   document.getElementById('todaysSales').textContent = '₹' + todaysSales.toLocaleString('en-IN');
   document.getElementById('todaysProfit').textContent = '₹' + Math.round(todaysProfit).toLocaleString('en-IN');
   document.getElementById('totalInventory').textContent = totalInventory;
-  document.getElementById('lowStockCount').textContent = lowStock;
+  document.getElementById('pendingOrders').textContent = pendingOrders;
 
   const recentBillsTable = document.getElementById('recentBillsTable').querySelector('tbody');
-  recentBillsTable.innerHTML = bills.slice(0, 5).map(b => `
+  recentBillsTable.innerHTML = (bills.slice(-5).reverse()).map(b => `
     <tr>
       <td>${b.BillNumber || '—'}</td>
       <td>${b.CustomerName || 'Walk-in'}</td>
       <td>₹${Number(b.TotalAmount || 0).toLocaleString('en-IN')}</td>
       <td>${b.PaymentMode || '—'}</td>
-      <td>${new Date(b.CreatedDate).toLocaleDateString()}</td>
+      <td>${b.CreatedDate ? new Date(b.CreatedDate).toLocaleDateString() : '—'}</td>
     </tr>
-  `).join('') || '<tr><td colspan="5" style="text-align: center; color: #999;">No bills yet</td></tr>';
+  `).join('') || '<tr><td colspan="5" style="text-align: center; color: #999;">No bills</td></tr>';
 }
 
 // ============================================================================
 // BILLING / POS
 // ============================================================================
-document.addEventListener('DOMContentLoaded', () => {
-  const billingScan = document.getElementById('billingScan');
-  if (billingScan) {
-    billingScan.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        addToCart(e.target.value);
-        e.target.value = '';
-      }
-    });
-  }
-
-  document.getElementById('billDiscountPct').addEventListener('input', updateBillTotals);
-});
-
 function addToCart(uid) {
   const product = APP_STATE.data.products.find(p => p.UID === uid);
   if (!product) {
@@ -648,7 +1065,12 @@ function addToCart(uid) {
 
   const variant = product.variants && product.variants[0];
   if (!variant) {
-    alert('No variants for this product');
+    alert('No variants available');
+    return;
+  }
+
+  if (Number(variant.Stock) <= 0) {
+    alert('Out of stock');
     return;
   }
 
@@ -675,30 +1097,27 @@ function addToCart(uid) {
 function renderCart() {
   const cartEl = document.getElementById('billItems');
   if (APP_STATE.cart.length === 0) {
-    cartEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">Empty cart — scan a product</div>';
+    cartEl.innerHTML = '<div style="text-align: center; color: var(--neutral-500); padding: 20px;">Empty cart — scan a product</div>';
     return;
   }
 
-  cartEl.innerHTML = `
-    <table style="width: 100%; font-size: 11px;">
-      <tr style="border-bottom: 1px solid var(--neutral-200);">
-        <th style="text-align: left;">Product</th>
-        <th style="text-align: center;">Qty</th>
-        <th style="text-align: right;">Price</th>
-        <th style="text-align: center;">✕</th>
-      </tr>
-      ${APP_STATE.cart.map((item, i) => `
-        <tr style="border-bottom: 1px solid var(--neutral-100);">
-          <td>${item.name}<br><span style="color: #999; font-size: 10px;">${item.color}/${item.size}</span></td>
-          <td style="text-align: center;">
-            <input type="number" value="${item.quantity}" min="1" style="width: 40px; padding: 2px; border: 1px solid var(--neutral-300); border-radius: 3px;" onchange="updateCartQty(${i}, this.value)">
-          </td>
-          <td style="text-align: right;">₹${(item.quantity * item.salePrice).toLocaleString('en-IN')}</td>
-          <td style="text-align: center; cursor: pointer;" onclick="removeFromCart(${i})">✕</td>
-        </tr>
-      `).join('')}
-    </table>
-  `;
+  cartEl.innerHTML = APP_STATE.cart.map((item, i) => `
+    <div class="cart-item">
+      <div class="cart-item-header">
+        <div>
+          <div class="cart-item-name">${item.name}</div>
+          <div style="font-size: 11px; color: var(--neutral-500);">${item.color} / ${item.size}</div>
+        </div>
+        <div class="cart-item-remove" onclick="removeFromCart(${i})">✕</div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+        <div class="cart-item-qty">
+          Qty: <input type="number" value="${item.quantity}" min="1" onchange="updateCartQty(${i}, this.value)">
+        </div>
+        <div style="font-weight: 600;">₹${(item.quantity * item.salePrice).toLocaleString('en-IN')}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function updateCartQty(index, qty) {
@@ -731,44 +1150,186 @@ async function completeBill() {
   }
 
   const customerMobile = document.getElementById('billCustomerMobile').value.trim();
-  const customerName = document.getElementById('billCustomerName').value.trim();
-
-  if (!customerMobile || !customerName) {
-    alert('Customer details required');
-    return;
-  }
+  const customerName = document.getElementById('billCustomerName').value.trim() || 'Walk-in';
 
   const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
   const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
   const discountAmount = subtotal * (discountPct / 100);
   const totalAmount = subtotal - discountAmount;
+  const paymentMode = document.getElementById('billPaymentMode').value;
 
-  const billData = {
-    customerName,
-    customerMobile,
-    staffID: APP_STATE.currentUser.staffID,
-    staffName: APP_STATE.currentUser.name,
-    items: APP_STATE.cart,
-    subtotal,
-    discountPercent: discountPct,
-    discountAmount: Math.round(discountAmount),
-    taxAmount: 0,
-    totalAmount: Math.round(totalAmount),
-    paymentMode: document.getElementById('billPaymentMode').value
+  if (paymentMode === 'UPI' || paymentMode === 'Card') {
+    if (!CONFIG.RAZORPAY_KEY) {
+      alert('Razorpay not configured. Use Cash payment.');
+      return;
+    }
+    initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct);
+  } else {
+    await createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode);
+  }
+}
+
+function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct) {
+  const options = {
+    key: CONFIG.RAZORPAY_KEY,
+    amount: Math.round(totalAmount * 100),
+    currency: 'INR',
+    name: 'AK FASHION HUB',
+    description: 'Garment Purchase',
+    prefill: {
+      name: customerName,
+      contact: customerMobile,
+    },
+    theme: { color: '#000000' },
+    handler: function(response) {
+      createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, document.getElementById('billPaymentMode').value, response.razorpay_payment_id);
+    }
   };
 
-  const response = await apiCall('addBill', billData);
-  if (response.success) {
-    alert('✓ Bill #' + response.data.billNumber + ' created successfully');
-    APP_STATE.cart = [];
-    renderCart();
-    updateBillTotals();
-    document.getElementById('billCustomerMobile').value = '';
-    document.getElementById('billCustomerName').value = '';
-    refreshDashboard();
-  } else {
-    alert('Error: ' + response.error);
+  const rzp = new Razorpay(options);
+  rzp.open();
+}
+
+async function createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode, paymentID = null) {
+  const billID = 'bill_' + Date.now();
+  const billNumber = 'BILL-' + Date.now();
+
+  const bill = {
+    BillID: billID,
+    BillNumber: billNumber,
+    CustomerName: customerName,
+    CustomerMobile: customerMobile,
+    StaffName: APP_STATE.currentUser.name,
+    Subtotal: subtotal,
+    DiscountPercent: discountPct,
+    DiscountAmount: Math.round(discountAmount),
+    TotalAmount: Math.round(totalAmount),
+    PaymentMode: paymentMode,
+    PaymentID: paymentID || '',
+    Status: 'Completed',
+    CreatedDate: new Date().toISOString()
+  };
+
+  APP_STATE.data.bills.push(bill);
+
+  APP_STATE.cart.forEach(item => {
+    const billItem = {
+      BillID: billID,
+      VariantID: item.variantID,
+      UID: item.uid,
+      Color: item.color,
+      Size: item.size,
+      Quantity: item.quantity,
+      SalePrice: item.salePrice
+    };
+    APP_STATE.data.billItems.push(billItem);
+
+    // Update stock
+    const variant = APP_STATE.data.products.forEach(p => {
+      const v = p.variants?.find(v => v.VariantID === item.variantID);
+      if (v) {
+        v.Stock = Math.max(0, Number(v.Stock) - item.quantity);
+        p.TotalStock = p.variants.reduce((s, vr) => s + Number(vr.Stock), 0);
+      }
+    });
+  });
+
+  alert('✓ Bill #' + billNumber + ' created\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
+  
+  APP_STATE.cart = [];
+  renderCart();
+  updateBillTotals();
+  document.getElementById('billCustomerMobile').value = '';
+  document.getElementById('billCustomerName').value = '';
+  refreshDashboard();
+
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+function printBill() {
+  if (APP_STATE.cart.length === 0) {
+    alert('No items to print');
+    return;
   }
+
+  const templateType = CONFIG.BILL_TEMPLATE.type || 'thermal';
+  const headerText = CONFIG.BILL_TEMPLATE.headerText || 'AK FASHION HUB';
+  const footerText = CONFIG.BILL_TEMPLATE.footerText || 'Thank You!';
+
+  const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+  const discount = subtotal * ((Number(document.getElementById('billDiscountPct').value) || 0) / 100);
+  const total = subtotal - discount;
+
+  let billHTML = `
+    <div class="print-area bill-${templateType}">
+      <div class="bill-header" style="text-align:center;">
+        ${CONFIG.SHOP_LOGO ? `<img src="${CONFIG.SHOP_LOGO}" class="bill-logo" alt="Logo">` : ''}
+        <div class="bill-title">${headerText}</div>
+        <div style="font-size: 10px; color: #666; margin-top: 4px;">ERP & POS System</div>
+      </div>
+      
+      <div style="font-size: 11px; margin: 8px 0; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0;">
+        <div><strong>Bill Date:</strong> ${new Date().toLocaleDateString()}</div>
+        <div><strong>Customer:</strong> ${document.getElementById('billCustomerName').value || 'Walk-in'}</div>
+      </div>
+
+      <div class="bill-items">
+        <div style="display: flex; font-weight: bold; font-size: 10px; border-bottom: 1px dashed #000; margin-bottom: 4px;">
+          <div style="flex: 1;">Item</div>
+          <div style="width: 30px; text-align: center;">Qty</div>
+          <div style="width: 40px; text-align: right;">Price</div>
+        </div>
+        ${APP_STATE.cart.map(item => `
+          <div style="display: flex; font-size: 10px; margin: 2px 0;">
+            <div style="flex: 1;">${item.name}<br><span style="font-size: 9px; color: #666;">${item.color}/${item.size}</span></div>
+            <div style="width: 30px; text-align: center;">${item.quantity}</div>
+            <div style="width: 40px; text-align: right;">₹${(item.quantity * item.salePrice).toLocaleString('en-IN')}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="bill-total">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+          <span>Subtotal:</span>
+          <span>₹${subtotal.toLocaleString('en-IN')}</span>
+        </div>
+        ${discount > 0 ? `
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span>Discount:</span>
+            <span>-₹${Math.round(discount).toLocaleString('en-IN')}</span>
+          </div>
+        ` : ''}
+        <div style="display: flex; justify-content: space-between; font-size: 13px;">
+          <span>TOTAL:</span>
+          <span>₹${Math.round(total).toLocaleString('en-IN')}</span>
+        </div>
+      </div>
+
+      <div style="text-align: center; font-size: 11px; margin-top: 8px; border-top: 1px solid #000; padding-top: 4px;">
+        ${footerText}
+        <div style="margin-top: 4px; font-size: 9px; color: #666;">Payment: ${document.getElementById('billPaymentMode').value}</div>
+      </div>
+    </div>
+  `;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; }
+        @media print {
+          .bill-thermal { width: 3.5in; }
+          .bill-a4 { width: 8.5in; }
+        }
+      </style>
+    </head>
+    <body>${billHTML}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  setTimeout(() => printWindow.print(), 500);
 }
 
 // ============================================================================
@@ -792,12 +1353,12 @@ function refreshProducts() {
       <td>₹${Number(p.CostPrice || 0).toLocaleString('en-IN')}</td>
       <td>₹${Number(p.SalePrice || 0).toLocaleString('en-IN')}</td>
       <td>₹${Number(p.MRP || 0).toLocaleString('en-IN')}</td>
-      <td><span class="badge ${p.Status === 'Active' ? 'badge-success' : 'badge-warning'}">${p.Status}</span></td>
       <td>
         <button class="btn btn-secondary btn-small" onclick="editProduct('${p.ProductID}')">Edit</button>
+        <button class="btn btn-danger btn-small" onclick="deleteProduct('${p.ProductID}')">Delete</button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="9" style="text-align: center; color: #999;">No products found</td></tr>';
+  `).join('') || '<tr><td colspan="8" style="text-align: center; color: #999;">No products</td></tr>';
 }
 
 function openAddProductModal() {
@@ -820,16 +1381,6 @@ function openAddProductModal() {
       <input type="text" class="form-input" id="modalBrand">
     </div>
     <div class="form-group">
-      <label class="form-label">Fabric Type</label>
-      <select class="form-input" id="modalFabric">
-        <option>Cotton</option>
-        <option>Denim</option>
-        <option>Linen</option>
-        <option>Lycra</option>
-        <option>Rayon</option>
-      </select>
-    </div>
-    <div class="form-group">
       <label class="form-label">Cost Price</label>
       <input type="number" class="form-input" id="modalCP" placeholder="0">
     </div>
@@ -845,40 +1396,166 @@ function openAddProductModal() {
 
   const footer = `
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveProduct()">Save Product</button>
+    <button class="btn btn-primary" onclick="saveProduct()">Save</button>
   `;
 
   openModal('Add Product', body, footer);
 }
 
-async function saveProduct() {
-  const productData = {
-    name: document.getElementById('modalProductName').value,
-    gender: document.getElementById('modalGender').value,
-    description: '',
-    brand: document.getElementById('modalBrand').value,
-    fabricType: document.getElementById('modalFabric').value,
-    costPrice: Number(document.getElementById('modalCP').value),
-    salePrice: Number(document.getElementById('modalSP').value),
-    mrp: Number(document.getElementById('modalMRP').value),
-    batchNumber: new Date().toISOString().slice(0, 7),
-    tags: [],
-    seasonTags: [],
-    imageURL: '',
-    sizeChartURL: '',
-    supplierID: (APP_STATE.data.suppliers[0] || {}).SupplierID || '',
-    staffID: APP_STATE.currentUser.staffID
+function saveProduct() {
+  const name = document.getElementById('modalProductName').value.trim();
+  if (!name) { alert('Product name is required'); return; }
+
+  const uid = 'AKFH' + String(APP_STATE.data.products.length + 1).padStart(6, '0');
+  const product = {
+    ProductID: 'prod_' + Date.now(),
+    UID: uid,
+    Barcode: uid,
+    Name: name,
+    Gender: document.getElementById('modalGender').value,
+    Brand: document.getElementById('modalBrand').value,
+    FabricType: 'Cotton',
+    Status: 'Active',
+    CostPrice: Number(document.getElementById('modalCP').value) || 0,
+    SalePrice: Number(document.getElementById('modalSP').value) || 0,
+    MRP: Number(document.getElementById('modalMRP').value) || 0,
+    TotalStock: 0,
+    variants: []
   };
 
-  const response = await apiCall('addProduct', productData);
-  if (response.success) {
-    alert('✓ Product created with UID: ' + response.data.uid);
-    closeModal();
-    await syncData();
-    refreshProducts();
-  } else {
-    alert('Error: ' + response.error);
+  APP_STATE.data.products.push(product);
+  closeModal();
+  refreshProducts();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  alert('✓ Product created: ' + uid);
+}
+
+function editProduct(id) {
+  const p = (APP_STATE.data.products || []).find(x => x.ProductID === id);
+  if (!p) { alert('Product not found'); return; }
+
+  const variantsHtml = (p.variants || []).map((v, idx) => `
+    <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px;">
+      <input type="text" class="form-input" style="padding:6px;" value="${v.Color}" id="varColor_${idx}" placeholder="Color">
+      <input type="text" class="form-input" style="padding:6px;" value="${v.Size}" id="varSize_${idx}" placeholder="Size">
+      <input type="number" class="form-input" style="padding:6px; width:80px;" value="${v.Stock}" id="varStock_${idx}" placeholder="Stock">
+      <button class="btn btn-danger btn-small" type="button" onclick="this.parentElement.remove()">✕</button>
+    </div>
+  `).join('');
+
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Product Name</label>
+      <input type="text" class="form-input" id="modalProductName" value="${p.Name || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Gender</label>
+      <select class="form-input" id="modalGender">
+        <option ${p.Gender === 'Men' ? 'selected' : ''}>Men</option>
+        <option ${p.Gender === 'Women' ? 'selected' : ''}>Women</option>
+        <option ${p.Gender === 'Kids' ? 'selected' : ''}>Kids</option>
+        <option ${p.Gender === 'Unisex' ? 'selected' : ''}>Unisex</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Brand</label>
+      <input type="text" class="form-input" id="modalBrand" value="${p.Brand || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cost Price</label>
+      <input type="number" class="form-input" id="modalCP" value="${p.CostPrice || 0}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Sale Price</label>
+      <input type="number" class="form-input" id="modalSP" value="${p.SalePrice || 0}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">MRP</label>
+      <input type="number" class="form-input" id="modalMRP" value="${p.MRP || 0}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-input" id="modalStatus">
+        <option ${p.Status === 'Active' ? 'selected' : ''}>Active</option>
+        <option ${p.Status === 'Inactive' ? 'selected' : ''}>Inactive</option>
+        <option ${p.Status === 'Discontinued' ? 'selected' : ''}>Discontinued</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Variants (Color / Size / Stock)</label>
+      <div id="editVariantsList">${variantsHtml || '<div style="color:#999; font-size:12px;">No variants yet</div>'}</div>
+      <button class="btn btn-secondary btn-small" type="button" style="margin-top:6px;" onclick="addVariantRow()">+ Add Variant</button>
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="updateProduct('${id}')">Save Changes</button>
+  `;
+
+  openModal('Edit Product', body, footer);
+}
+
+function addVariantRow() {
+  const list = document.getElementById('editVariantsList');
+  if (list.querySelector('div[style*="color:#999"]')) list.innerHTML = '';
+  const idx = list.querySelectorAll('div[id^="varRow_"], div').length;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px;';
+  row.innerHTML = `
+    <input type="text" class="form-input" style="padding:6px;" id="varColor_${idx}" placeholder="Color">
+    <input type="text" class="form-input" style="padding:6px;" id="varSize_${idx}" placeholder="Size">
+    <input type="number" class="form-input" style="padding:6px; width:80px;" id="varStock_${idx}" placeholder="Stock">
+    <button class="btn btn-danger btn-small" type="button" onclick="this.parentElement.remove()">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function updateProduct(id) {
+  const p = (APP_STATE.data.products || []).find(x => x.ProductID === id);
+  if (!p) return;
+
+  const name = document.getElementById('modalProductName').value.trim();
+  if (!name) { alert('Product name is required'); return; }
+
+  p.Name = name;
+  p.Gender = document.getElementById('modalGender').value;
+  p.Brand = document.getElementById('modalBrand').value;
+  p.CostPrice = Number(document.getElementById('modalCP').value) || 0;
+  p.SalePrice = Number(document.getElementById('modalSP').value) || 0;
+  p.MRP = Number(document.getElementById('modalMRP').value) || 0;
+  p.Status = document.getElementById('modalStatus').value;
+
+  const newVariants = [];
+  let idx = 0;
+  while (document.getElementById('varColor_' + idx)) {
+    const color = document.getElementById('varColor_' + idx).value.trim();
+    const size = document.getElementById('varSize_' + idx).value.trim();
+    const stock = Number(document.getElementById('varStock_' + idx).value) || 0;
+    if (color || size) {
+      const existing = (p.variants || [])[idx];
+      newVariants.push({
+        VariantID: (existing && existing.VariantID) || 'var_' + Date.now() + '_' + idx,
+        Color: color, Size: size, Stock: stock,
+        Floor: (existing && existing.Floor) || '', Rack: (existing && existing.Rack) || '', Shelf: (existing && existing.Shelf) || ''
+      });
+    }
+    idx++;
   }
+  p.variants = newVariants;
+  p.TotalStock = newVariants.reduce((s, v) => s + (Number(v.Stock) || 0), 0);
+
+  closeModal();
+  refreshProducts();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  alert('✓ Product updated');
+}
+
+function deleteProduct(id) {
+  if (!confirm('Delete this product? This cannot be undone.')) return;
+  APP_STATE.data.products = (APP_STATE.data.products || []).filter(x => x.ProductID !== id);
+  refreshProducts();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
 // ============================================================================
@@ -896,9 +1573,9 @@ function refreshInventory() {
         color: variant.Color,
         size: variant.Size,
         stock: variant.Stock,
-        floor: variant.Floor,
-        rack: variant.Rack,
-        shelf: variant.Shelf,
+        floor: variant.Floor || '—',
+        rack: variant.Rack || '—',
+        shelf: variant.Shelf || '—',
         variantID: variant.VariantID
       });
     });
@@ -917,26 +1594,424 @@ function refreshInventory() {
           '<span class="badge badge-success">In Stock</span>'}
       </td>
       <td>
-        <button class="btn btn-secondary btn-small" onclick="adjustStock('${row.variantID}')">Adjust</button>
+        <button class="btn btn-secondary btn-small" onclick="requirePin('Adjust stock').then(ok => { if(ok) adjustStock('${row.variantID}'); })">Adjust</button>
       </td>
     </tr>
   `).join('');
 }
 
-async function adjustStock(variantID) {
+function lookupStock(uid) {
+  const product = APP_STATE.data.products.find(p => p.UID === uid);
+  if (!product) {
+    alert('Product not found');
+    return;
+  }
+  alert('Product: ' + product.Name + '\nTotal Stock: ' + product.TotalStock);
+}
+
+function adjustStock(variantID) {
   const qty = prompt('Enter quantity change (+/-):', '1');
   if (qty === null) return;
-
-  const response = await apiCall('updateStock', {
-    variantID,
-    qtyChange: Number(qty),
-    staffID: APP_STATE.currentUser.staffID
+  
+  APP_STATE.data.products.forEach(p => {
+    const v = p.variants?.find(v => v.VariantID === variantID);
+    if (v) {
+      v.Stock = Math.max(0, Number(v.Stock) + Number(qty));
+      p.TotalStock = p.variants.reduce((s, vr) => s + Number(vr.Stock), 0);
+    }
   });
 
-  if (response.success) {
-    await syncData();
-    refreshInventory();
+  refreshInventory();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+// ============================================================================
+// PRE-ORDERS
+// ============================================================================
+function refreshPreorders() {
+  const table = document.getElementById('preordersTable').querySelector('tbody');
+  table.innerHTML = (APP_STATE.data.preorders || []).map(order => {
+    const remaining = Number(order.Total) - Number(order.Paid);
+    return `
+      <tr>
+        <td><strong>${order.OrderID}</strong></td>
+        <td>${order.CustomerName}</td>
+        <td>${order.Mobile}</td>
+        <td>${order.ProductUID}</td>
+        <td>${order.Size}/${order.Color}</td>
+        <td>${order.Qty}</td>
+        <td>₹${Number(order.Total).toLocaleString('en-IN')}</td>
+        <td>₹${Number(order.Paid).toLocaleString('en-IN')}</td>
+        <td>₹${remaining.toLocaleString('en-IN')}</td>
+        <td><span class="badge badge-info">${order.Status}</span></td>
+        <td>
+          <button class="btn btn-success btn-small" onclick="collectPaymentPreorder('${order.OrderID}')">Collect</button>
+          <button class="btn btn-danger btn-small" onclick="cancelPreorder('${order.OrderID}')">Cancel</button>
+        </td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="11" style="text-align: center; color: #999;">No pre-orders</td></tr>';
+}
+
+function openAddPreorderModal() {
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Customer Name</label>
+      <input type="text" class="form-input" id="preorderName" placeholder="Customer name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mobile Number</label>
+      <input type="text" class="form-input" id="preorderMobile" placeholder="10-digit mobile">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Product UID</label>
+      <input type="text" class="form-input" id="preorderUID" placeholder="AKFH000001">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Size</label>
+      <input type="text" class="form-input" id="preorderSize" placeholder="M, L, 30, etc">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Color</label>
+      <input type="text" class="form-input" id="preorderColor" placeholder="Color">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Quantity</label>
+      <input type="number" class="form-input" id="preorderQty" value="1" min="1">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Total Amount (₹)</label>
+      <input type="number" class="form-input" id="preorderTotal" placeholder="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Advance Paid (₹)</label>
+      <input type="number" class="form-input" id="preorderPaid" placeholder="0">
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="savePreorder()">Create Pre-Order</button>
+  `;
+
+  openModal('New Pre-Order', body, footer);
+}
+
+function savePreorder() {
+  const preorder = {
+    OrderID: 'PRE-' + Date.now(),
+    CustomerName: document.getElementById('preorderName').value,
+    Mobile: document.getElementById('preorderMobile').value,
+    ProductUID: document.getElementById('preorderUID').value,
+    Size: document.getElementById('preorderSize').value,
+    Color: document.getElementById('preorderColor').value,
+    Qty: Number(document.getElementById('preorderQty').value),
+    Total: Number(document.getElementById('preorderTotal').value),
+    Paid: Number(document.getElementById('preorderPaid').value),
+    Status: 'Pending',
+    CreatedDate: new Date().toISOString()
+  };
+
+  APP_STATE.data.preorders.push(preorder);
+  closeModal();
+  refreshPreorders();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  alert('✓ Pre-order created: ' + preorder.OrderID);
+}
+
+function collectPaymentPreorder(orderID) {
+  const order = APP_STATE.data.preorders.find(o => o.OrderID === orderID);
+  if (!order) return;
+
+  const remaining = Number(order.Total) - Number(order.Paid);
+  const amount = prompt('Collect payment (₹):', remaining.toString());
+  if (amount === null) return;
+
+  order.Paid = Number(order.Paid) + Number(amount);
+  if (order.Paid >= order.Total) {
+    order.Status = 'Completed';
+    alert('✓ Pre-order completed!');
+  } else {
+    alert('✓ Payment received: ₹' + amount + '\nPending: ₹' + (Number(order.Total) - order.Paid).toLocaleString('en-IN'));
   }
+
+  refreshPreorders();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+function cancelPreorder(orderID) {
+  if (confirm('Cancel this pre-order?')) {
+    APP_STATE.data.preorders = APP_STATE.data.preorders.filter(o => o.OrderID !== orderID);
+    refreshPreorders();
+    localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  }
+}
+
+// ============================================================================
+// RETURNS & EXCHANGES
+// ============================================================================
+function searchBillForReturn() {
+  const query = document.getElementById('rxSearchInput').value.trim();
+  if (!query) return;
+
+  const bill = (APP_STATE.data.bills || []).find(b => 
+    b.BillNumber === query || b.CustomerMobile === query
+  );
+
+  if (!bill) {
+    document.getElementById('rxResult').innerHTML = '<div style="padding: 20px; text-align: center; color: var(--neutral-500);">No bill found</div>';
+    return;
+  }
+
+  const billItems = (APP_STATE.data.billItems || []).filter(bi => bi.BillID === bill.BillID);
+  
+  const html = `
+    <div class="card">
+      <div style="margin-bottom: 16px;">
+        <h3 style="margin: 0 0 4px 0;">Bill #${bill.BillNumber}</h3>
+        <p style="margin: 0; font-size: 12px; color: var(--neutral-500);">${bill.CustomerName} | ${bill.CustomerMobile}</p>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Product</th><th>Variant</th><th>Qty</th><th>Price</th><th>Action</th></tr></thead>
+          <tbody>
+            ${billItems.map((item, idx) => `
+              <tr>
+                <td>${item.UID}</td>
+                <td>${item.Color}/${item.Size}</td>
+                <td>${item.Quantity}</td>
+                <td>₹${Number(item.SalePrice).toLocaleString('en-IN')}</td>
+                <td>
+                  <button class="btn btn-danger btn-small" onclick="requirePin('Return').then(ok => { if(ok) processReturn('${bill.BillID}', '${item.VariantID}', ${item.Quantity}); })">Return</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('rxResult').innerHTML = html;
+}
+
+function processReturn(billID, variantID, qty) {
+  APP_STATE.data.products.forEach(p => {
+    const v = p.variants?.find(v => v.VariantID === variantID);
+    if (v) {
+      v.Stock = Number(v.Stock) + qty;
+      p.TotalStock = p.variants.reduce((s, vr) => s + Number(vr.Stock), 0);
+    }
+  });
+
+  alert('✓ Return processed. Stock restored by ' + qty + ' units');
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+// ============================================================================
+// PRICE TAGS
+// ============================================================================
+let tagQueue = [];
+let labelSheets = [];
+
+function renderTagPicker() {
+  const searchTerm = (document.getElementById('tagFilterValue').value || '').toLowerCase();
+  
+  let variants = [];
+  (APP_STATE.data.products || []).forEach(p => {
+    (p.variants || []).forEach(v => {
+      variants.push({ product: p, variant: v });
+    });
+  });
+
+  if (searchTerm) {
+    variants = variants.filter(x => 
+      x.product.Name.toLowerCase().includes(searchTerm) ||
+      x.product.UID.toLowerCase().includes(searchTerm) ||
+      x.variant.Color.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  const html = `
+    <table style="width: 100%; font-size: 11px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--neutral-200);">
+          <th style="text-align: left; padding: 6px;">Product</th>
+          <th style="text-align: left;">Variant</th>
+          <th style="text-align: right; width: 50px;">Qty</th>
+          <th style="width: 60px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${variants.map(({ product, variant }) => `
+          <tr style="border-bottom: 1px solid var(--neutral-100);">
+            <td style="padding: 6px;"><strong>${product.UID}</strong><br>${product.Name}</td>
+            <td>${variant.Color}/${variant.Size}</td>
+            <td><input type="number" min="1" value="1" id="qty_${variant.VariantID}" style="width: 45px; padding: 4px; border: 1px solid var(--neutral-300); border-radius: 3px;"></td>
+            <td><button class="btn btn-primary btn-small" onclick="addToTagQueue('${variant.VariantID}', '${product.UID}', '${product.Name}', '${variant.Color}', '${variant.Size}', ${Number(product.SalePrice) || 0}, ${Number(product.MRP) || 0})">Add</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('tagPicker').innerHTML = html;
+  updateTagQueueDisplay();
+}
+
+function addToTagQueue(variantID, uid, name, color, size, salePrice, mrp) {
+  const qty = Number(document.getElementById('qty_' + variantID).value) || 1;
+  const existing = tagQueue.find(i => i.variantID === variantID);
+
+  if (existing) {
+    existing.qty += qty;
+  } else {
+    tagQueue.push({ variantID, uid, name, color, size, price: Number(salePrice), mrp: Number(mrp), qty });
+  }
+
+  updateTagQueueDisplay();
+}
+
+// Removes ONE tag at a time (decrements qty by 1). Only drops the row once qty hits 0,
+// so printing 6-8 copies of a tag no longer disappears all at once when you click Remove.
+function removeFromTagQueue(index) {
+  const item = tagQueue[index];
+  if (!item) return;
+  item.qty -= 1;
+  if (item.qty <= 0) {
+    tagQueue.splice(index, 1);
+  }
+  updateTagQueueDisplay();
+}
+
+function removeAllFromTagQueue(index) {
+  if (!confirm('Remove all copies of this tag from the queue?')) return;
+  tagQueue.splice(index, 1);
+  updateTagQueueDisplay();
+}
+
+function updateTagQueueDisplay() {
+  const queueList = document.getElementById('tagQueueList');
+  const totalQty = tagQueue.reduce((s, i) => s + i.qty, 0);
+
+  queueList.innerHTML = tagQueue.map((item, idx) => `
+    <div style="padding: 8px; border: 1px solid var(--neutral-200); border-radius: 4px; margin-bottom: 6px; background: var(--neutral-50); font-size: 11px;">
+      <div style="font-weight: 600;">${item.name}</div>
+      <div style="color: var(--neutral-500); margin: 2px 0;">${item.color}/${item.size} × ${item.qty}</div>
+      <div style="display:flex; gap:4px; margin-top: 4px;">
+        <button class="btn btn-secondary" style="flex:1; padding: 4px 6px; font-size: 10px;" onclick="removeFromTagQueue(${idx})">− Remove 1</button>
+        <button class="btn btn-danger" style="flex:1; padding: 4px 6px; font-size: 10px;" onclick="removeAllFromTagQueue(${idx})">Remove All</button>
+      </div>
+    </div>
+  `).join('') || '<div style="color: var(--neutral-500); text-align: center; padding: 12px;">Queue empty</div>';
+
+  document.getElementById('queueTotal').textContent = totalQty;
+}
+
+function generateLabelSheets() {
+  if (tagQueue.length === 0) {
+    alert('Queue is empty');
+    return;
+  }
+
+  const tags = [];
+  tagQueue.forEach(i => {
+    for (let n = 0; n < i.qty; n++) tags.push(i);
+  });
+
+  const tagSize = document.getElementById('tagSize').value;
+  const slotsPerSheet = tagSize === '2x3' ? 6 : 4;
+
+  labelSheets = [];
+  let currentSheet = { slots: new Array(slotsPerSheet).fill(null) };
+  let slotIdx = 0;
+
+  tags.forEach(tag => {
+    if (slotIdx >= slotsPerSheet) {
+      labelSheets.push(currentSheet);
+      currentSheet = { slots: new Array(slotsPerSheet).fill(null) };
+      slotIdx = 0;
+    }
+    currentSheet.slots[slotIdx] = tag;
+    slotIdx++;
+  });
+
+  if (slotIdx > 0) {
+    labelSheets.push(currentSheet);
+  }
+
+  tagQueue = [];
+  updateTagQueueDisplay();
+  previewLabelSheets();
+}
+
+function previewLabelSheets() {
+  const tagSize = document.getElementById('tagSize').value;
+  const colsPerSheet = tagSize === '2x3' ? 3 : 2;
+  
+  const preview = document.getElementById('sheetPreview');
+  
+  preview.innerHTML = `
+    <div style="margin-top: 20px;">
+      <h3 style="margin-bottom: 12px;">Sheet Preview (${labelSheets.length} sheets × ${tagSize})</h3>
+      ${labelSheets.map((sheet, si) => `
+        <div style="page-break-after: always; margin-bottom: 20px; border: 2px solid var(--neutral-300); padding: 12px; background: white;">
+          <div style="text-align: center; font-size: 10px; color: var(--neutral-500); margin-bottom: 8px;">Sheet ${si + 1} of ${labelSheets.length}</div>
+          <div style="display: grid; grid-template-columns: repeat(${colsPerSheet}, 1fr); gap: 8px;">
+            ${sheet.slots.map((tag, idx) => {
+              const width = tagSize === '2x3' ? '2in' : '3in';
+              const height = tagSize === '2x3' ? '3in' : '4.2in';
+              return `
+                <div style="border: 1px dashed var(--neutral-300); padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
+                  ${tag ? `
+                    ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
+                    <div style="color: var(--neutral-500); margin-bottom: 4px; font-size: 8px;">${tag.color}/${tag.size}</div>
+                    ${CONFIG.TAG_TEMPLATE.showBarcode ? `<svg id="tagbarcode_${si}_${idx}" style="height: 25px; width: 70px;"></svg>` : ''}
+                    <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top: 4px;">
+                      ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 11px; color: #888;">₹${tag.mrp}</span>` : ''}
+                      <span style="font-size: 16px; font-weight: 800; color: #000;">₹${tag.price}</span>
+                    </div>
+                  ` : `<div style="color: var(--neutral-500); font-size: 10px;">Empty</div>`}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+      <button class="btn btn-primary" style="margin-right: 8px;" onclick="printLabelSheets()">🖨️ Print All</button>
+      <button class="btn btn-secondary" onclick="clearTagQueue(); labelSheets = []; document.getElementById('sheetPreview').innerHTML = '';">Clear</button>
+    </div>
+  `;
+
+  // Render barcodes
+  labelSheets.forEach((sheet, si) => {
+    sheet.slots.forEach((tag, idx) => {
+      if (tag) {
+        try {
+          JsBarcode('#tagbarcode_' + si + '_' + idx, tag.uid, {
+            format: 'CODE128',
+            height: 25,
+            displayValue: false
+          });
+        } catch (e) {
+          console.error('Barcode error:', e);
+        }
+      }
+    });
+  });
+}
+
+function updateTagSize() {
+  previewLabelSheets();
+}
+
+function printLabelSheets() {
+  window.print();
+}
+
+function clearTagQueue() {
+  tagQueue = [];
+  updateTagQueueDisplay();
 }
 
 // ============================================================================
@@ -970,39 +2045,35 @@ function openAddCustomerModal() {
       <label class="form-label">Email</label>
       <input type="email" class="form-input" id="modalCustEmail">
     </div>
-    <div class="form-group">
-      <label class="form-label">Birthday</label>
-      <input type="date" class="form-input" id="modalCustBirthday">
-    </div>
   `;
 
   const footer = `
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveCustomer()">Save Customer</button>
+    <button class="btn btn-primary" onclick="saveCustomer()">Save</button>
   `;
 
   openModal('Add Customer', body, footer);
 }
 
-async function saveCustomer() {
-  const custData = {
-    name: document.getElementById('modalCustName').value,
-    mobile: document.getElementById('modalCustMobile').value,
-    email: document.getElementById('modalCustEmail').value,
-    birthday: document.getElementById('modalCustBirthday').value,
-    address: '',
-    staffID: APP_STATE.currentUser.staffID
+function saveCustomer() {
+  const cust = {
+    CustomerID: 'cust_' + Date.now(),
+    Name: document.getElementById('modalCustName').value,
+    Mobile: document.getElementById('modalCustMobile').value,
+    Email: document.getElementById('modalCustEmail').value,
+    TotalSpend: 0,
+    LoyaltyPoints: 0,
+    DueBalance: 0
   };
 
-  const response = await apiCall('addCustomer', custData);
-  if (response.success) {
-    alert('✓ Customer added');
-    closeModal();
-    await syncData();
-    refreshCustomers();
-  } else {
-    alert('Error: ' + response.error);
-  }
+  APP_STATE.data.customers.push(cust);
+  closeModal();
+  refreshCustomers();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+function editCustomer(id) {
+  alert('Edit feature coming soon');
 }
 
 // ============================================================================
@@ -1033,10 +2104,6 @@ function openAddSupplierModal() {
       <input type="text" class="form-input" id="modalSupplierMobile">
     </div>
     <div class="form-group">
-      <label class="form-label">Email</label>
-      <input type="email" class="form-input" id="modalSupplierEmail">
-    </div>
-    <div class="form-group">
       <label class="form-label">City</label>
       <input type="text" class="form-input" id="modalSupplierCity">
     </div>
@@ -1044,33 +2111,24 @@ function openAddSupplierModal() {
 
   const footer = `
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveSupplier()">Save Supplier</button>
+    <button class="btn btn-primary" onclick="saveSupplier()">Save</button>
   `;
 
   openModal('Add Supplier', body, footer);
 }
 
-async function saveSupplier() {
-  const suppData = {
-    name: document.getElementById('modalSupplierName').value,
-    mobile: document.getElementById('modalSupplierMobile').value,
-    email: document.getElementById('modalSupplierEmail').value,
-    address: '',
-    city: document.getElementById('modalSupplierCity').value,
-    gstin: '',
-    bankAccount: '',
-    staffID: APP_STATE.currentUser.staffID
+function saveSupplier() {
+  const supp = {
+    SupplierID: 'supp_' + Date.now(),
+    Name: document.getElementById('modalSupplierName').value,
+    Mobile: document.getElementById('modalSupplierMobile').value,
+    City: document.getElementById('modalSupplierCity').value
   };
 
-  const response = await apiCall('addSupplier', suppData);
-  if (response.success) {
-    alert('✓ Supplier added');
-    closeModal();
-    await syncData();
-    refreshSuppliers();
-  } else {
-    alert('Error: ' + response.error);
-  }
+  APP_STATE.data.suppliers.push(supp);
+  closeModal();
+  refreshSuppliers();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
 // ============================================================================
@@ -1101,7 +2159,6 @@ function openAddExpenseModal() {
         <option>Utilities</option>
         <option>Maintenance</option>
         <option>Transport</option>
-        <option>Supplies</option>
         <option>Other</option>
       </select>
     </div>
@@ -1117,32 +2174,26 @@ function openAddExpenseModal() {
 
   const footer = `
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveExpense()">Add Expense</button>
+    <button class="btn btn-primary" onclick="saveExpense()">Add</button>
   `;
 
   openModal('Add Expense', body, footer);
 }
 
-async function saveExpense() {
-  const expData = {
-    date: document.getElementById('modalExpDate').value,
-    category: document.getElementById('modalExpCategory').value,
-    description: document.getElementById('modalExpDesc').value,
-    amount: Number(document.getElementById('modalExpAmount').value),
-    staffName: APP_STATE.currentUser.name,
-    notes: '',
-    staffID: APP_STATE.currentUser.staffID
+function saveExpense() {
+  const exp = {
+    ExpenseID: 'exp_' + Date.now(),
+    Date: document.getElementById('modalExpDate').value,
+    Category: document.getElementById('modalExpCategory').value,
+    Description: document.getElementById('modalExpDesc').value,
+    Amount: Number(document.getElementById('modalExpAmount').value),
+    StaffName: APP_STATE.currentUser.name
   };
 
-  const response = await apiCall('addExpense', expData);
-  if (response.success) {
-    alert('✓ Expense added');
-    closeModal();
-    await syncData();
-    refreshExpenses();
-  } else {
-    alert('Error: ' + response.error);
-  }
+  APP_STATE.data.expenses.push(exp);
+  closeModal();
+  refreshExpenses();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
 // ============================================================================
@@ -1155,12 +2206,15 @@ function refreshReports() {
   document.getElementById('totalSales').textContent = totalSales.toLocaleString('en-IN');
   document.getElementById('totalBills').textContent = bills.length;
 
-  const variants = [];
+  let inventoryValue = 0;
+  let totalUnits = 0;
   (APP_STATE.data.products || []).forEach(p => {
-    (p.variants || []).forEach(v => variants.push(v));
+    (p.variants || []).forEach(v => {
+      const unitValue = p.CostPrice * v.Stock;
+      inventoryValue += unitValue;
+      totalUnits += Number(v.Stock);
+    });
   });
-  const inventoryValue = variants.reduce((sum, v) => sum + (v.Stock * 100), 0); // rough estimate
-  const totalUnits = variants.reduce((sum, v) => sum + v.Stock, 0);
 
   document.getElementById('inventoryValue').textContent = inventoryValue.toLocaleString('en-IN');
   document.getElementById('totalUnits').textContent = totalUnits;
@@ -1180,7 +2234,7 @@ function refreshReports() {
       <td>${data.bills}</td>
       <td>₹${data.revenue.toLocaleString('en-IN')}</td>
     </tr>
-  `).join('');
+  `).join('') || '<tr><td colspan="3" style="text-align: center; color: #999;">No data</td></tr>';
 }
 
 // ============================================================================
@@ -1195,7 +2249,10 @@ function refreshStaff() {
       <td><span class="badge badge-success">${s.Role}</span></td>
       <td><span class="badge ${s.Status === 'Active' ? 'badge-success' : 'badge-danger'}">${s.Status}</span></td>
       <td>${s.LastLogin ? new Date(s.LastLogin).toLocaleDateString() : '—'}</td>
-      <td><button class="btn btn-secondary btn-small" onclick="editStaff('${s.StaffID}')">Edit</button></td>
+      <td>
+        <button class="btn btn-secondary btn-small" onclick="editStaff('${s.StaffID}')">Edit</button>
+        <button class="btn btn-danger btn-small" onclick="deleteStaff('${s.StaffID}')">Delete</button>
+      </td>
     </tr>
   `).join('') || '<tr><td colspan="6" style="text-align: center; color: #999;">No staff</td></tr>';
 }
@@ -1211,10 +2268,6 @@ function openAddStaffModal() {
       <input type="text" class="form-input" id="modalStaffMobile">
     </div>
     <div class="form-group">
-      <label class="form-label">Email</label>
-      <input type="email" class="form-input" id="modalStaffEmail">
-    </div>
-    <div class="form-group">
       <label class="form-label">Password</label>
       <input type="password" class="form-input" id="modalStaffPassword">
     </div>
@@ -1225,24 +2278,240 @@ function openAddStaffModal() {
     <div class="form-group">
       <label class="form-label">Role</label>
       <select class="form-input" id="modalStaffRole">
-        <option value="Staff">Staff</option>
-        <option value="Admin">Admin</option>
-        <option value="SuperAdmin">Super Admin</option>
+        <option>Staff</option>
+        <option>Admin</option>
       </select>
     </div>
   `;
 
   const footer = `
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveStaff()">Add Staff</button>
+    <button class="btn btn-primary" onclick="saveStaff()">Add</button>
   `;
 
-  openModal('Add Staff Member', body, footer);
+  openModal('Add Staff', body, footer);
 }
 
-async function saveStaff() {
-  // This would require the backend to be fully configured
-  alert('Staff management requires backend to be configured');
+function saveStaff() {
+  const name = document.getElementById('modalStaffName').value.trim();
+  const mobile = document.getElementById('modalStaffMobile').value.trim();
+  if (!name || !mobile) { alert('Name and Mobile are required'); return; }
+
+  const staff = {
+    StaffID: 'staff_' + Date.now(),
+    Name: name,
+    Mobile: mobile,
+    Password: document.getElementById('modalStaffPassword').value,
+    PIN: document.getElementById('modalStaffPIN').value || '1234',
+    Role: document.getElementById('modalStaffRole').value,
+    Status: 'Active'
+  };
+
+  APP_STATE.data.staff.push(staff);
+  closeModal();
+  refreshStaff();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+function editStaff(id) {
+  const s = (APP_STATE.data.staff || []).find(x => x.StaffID === id);
+  if (!s) { alert('Staff not found'); return; }
+
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="modalStaffName" value="${s.Name || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mobile</label>
+      <input type="text" class="form-input" id="modalStaffMobile" value="${s.Mobile || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password (leave blank to keep unchanged)</label>
+      <input type="password" class="form-input" id="modalStaffPassword" placeholder="••••••">
+    </div>
+    <div class="form-group">
+      <label class="form-label">PIN (4 digits)</label>
+      <input type="text" class="form-input" id="modalStaffPIN" maxlength="4" value="${s.PIN || ''}" placeholder="1234">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Role</label>
+      <select class="form-input" id="modalStaffRole">
+        <option ${s.Role === 'Staff' ? 'selected' : ''}>Staff</option>
+        <option ${s.Role === 'Admin' ? 'selected' : ''}>Admin</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-input" id="modalStaffStatus">
+        <option ${s.Status === 'Active' ? 'selected' : ''}>Active</option>
+        <option ${s.Status === 'Inactive' ? 'selected' : ''}>Inactive</option>
+      </select>
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="updateStaff('${id}')">Save Changes</button>
+  `;
+
+  openModal('Edit Staff', body, footer);
+}
+
+function updateStaff(id) {
+  const s = (APP_STATE.data.staff || []).find(x => x.StaffID === id);
+  if (!s) return;
+
+  const name = document.getElementById('modalStaffName').value.trim();
+  const mobile = document.getElementById('modalStaffMobile').value.trim();
+  if (!name || !mobile) { alert('Name and Mobile are required'); return; }
+
+  s.Name = name;
+  s.Mobile = mobile;
+  const newPassword = document.getElementById('modalStaffPassword').value;
+  if (newPassword) s.Password = newPassword;
+  s.PIN = document.getElementById('modalStaffPIN').value || s.PIN || '1234';
+  s.Role = document.getElementById('modalStaffRole').value;
+  s.Status = document.getElementById('modalStaffStatus').value;
+
+  closeModal();
+  refreshStaff();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  alert('✓ Staff updated');
+}
+
+function deleteStaff(id) {
+  if (!confirm('Delete this staff member?')) return;
+  APP_STATE.data.staff = (APP_STATE.data.staff || []).filter(x => x.StaffID !== id);
+  refreshStaff();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+// ============================================================================
+// TEMPLATES
+// ============================================================================
+function loadBillTemplate() {
+  const type = document.getElementById('billTemplateType').value;
+  CONFIG.BILL_TEMPLATE.type = type;
+  updateBillPreview();
+}
+
+function updateBillPreview() {
+  const headerText = document.getElementById('billHeaderText').value;
+  const footerText = document.getElementById('billFooterText').value;
+  
+  CONFIG.BILL_TEMPLATE.headerText = headerText;
+  CONFIG.BILL_TEMPLATE.footerText = footerText;
+
+  const preview = `
+    <div class="template-preview ${CONFIG.BILL_TEMPLATE.type === 'thermal' ? 'bill-3-5' : 'bill-a4'}">
+      <div class="bill-header">
+        <div class="bill-title">${headerText}</div>
+        <div style="font-size: 9px; color: #666;">ERP & POS System</div>
+      </div>
+      
+      <div style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px;">
+        <div>Bill # 2024001</div>
+        <div style="font-size: 9px; color: #666;">Date: Today</div>
+      </div>
+
+      <div class="bill-items" style="margin: 8px 0;">
+        <div style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 10px;">
+          <div>Item</div>
+          <div>Qty</div>
+          <div>Price</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; margin: 4px 0;">
+          <div>Sample Shirt</div>
+          <div>1</div>
+          <div>₹299</div>
+        </div>
+      </div>
+
+      <div class="bill-total">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; padding-top: 4px; border-top: 1px solid #000;">
+          <span>TOTAL:</span>
+          <span>₹299</span>
+        </div>
+      </div>
+
+      <div style="text-align: center; font-size: 10px; margin-top: 8px; border-top: 1px solid #000; padding-top: 4px;">
+        ${footerText}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('templatePreview').innerHTML = preview;
+}
+
+function saveBillTemplate() {
+  saveConfig();
+  alert('✓ Bill template saved');
+}
+
+function updateTagPreview() {
+  CONFIG.TAG_TEMPLATE.showMRP = document.getElementById('tagShowMRP').checked;
+  CONFIG.TAG_TEMPLATE.showName = document.getElementById('tagShowName').checked;
+  CONFIG.TAG_TEMPLATE.showBarcode = document.getElementById('tagShowBarcode').checked;
+
+  const preview = `
+    <div class="template-preview" style="width: 300px; border: 2px solid var(--neutral-300); padding: 16px; text-align: center;">
+      ${CONFIG.TAG_TEMPLATE.showName ? '<div style="font-weight: 700; margin-bottom: 6px; font-size: 12px;">Sample Shirt</div>' : ''}
+      <div style="font-size: 10px; color: var(--neutral-600); margin-bottom: 6px;">Black / M</div>
+      ${CONFIG.TAG_TEMPLATE.showBarcode ? '<svg id="previewBarcode" style="height: 30px; margin: 8px 0;"></svg>' : ''}
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0;">
+        ${CONFIG.TAG_TEMPLATE.showMRP ? '<span style="text-decoration: line-through; font-size: 12px; color: #999;">₹399</span>' : ''}
+        <span style="font-size: 16px; font-weight: 700;">₹299</span>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('templatePreview').innerHTML = preview;
+
+  if (CONFIG.TAG_TEMPLATE.showBarcode) {
+    try {
+      JsBarcode('#previewBarcode', 'AKFH000001', { format: 'CODE128', displayValue: false });
+    } catch (e) {}
+  }
+}
+
+function savePriceTagTemplate() {
+  saveConfig();
+  alert('✓ Price tag template saved');
+}
+
+// ============================================================================
+// SETTINGS
+// ============================================================================
+function testApiConnection() {
+  const url = document.getElementById('apiUrl').value;
+  if (!url) {
+    alert('Please enter API URL');
+    return;
+  }
+  alert('Connection test feature coming soon');
+}
+
+function syncNow() {
+  alert('Sync feature coming soon');
+}
+
+function saveRazorpayKey() {
+  saveConfig();
+  alert('✓ Razorpay key saved');
+}
+
+function downloadBackup() {
+  const backup = {
+    exportDate: new Date().toISOString(),
+    data: APP_STATE.data
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ak-fashion-hub-backup-' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
 }
 
 // ============================================================================
@@ -1260,54 +2529,67 @@ function closeModal() {
 }
 
 // ============================================================================
-// UTILITIES
+// PIN VERIFICATION
 // ============================================================================
-function refreshAllScreens() {
-  refreshDashboard();
-  refreshProducts();
-  refreshInventory();
-  refreshCustomers();
-  refreshSuppliers();
-  refreshExpenses();
-  refreshReports();
-  refreshStaff();
+let pinPromiseResolve = null;
+
+function requirePin(reason = 'This action') {
+  return new Promise((resolve) => {
+    pinPromiseResolve = resolve;
+    document.getElementById('pinReason').textContent = reason + ' — Enter your PIN';
+    document.getElementById('pinModal').classList.add('active');
+    document.getElementById('pinInput1').focus();
+    
+    for (let i = 1; i <= 4; i++) {
+      document.getElementById('pinInput' + i).value = '';
+    }
+  });
 }
 
-async function downloadBackup() {
-  const backup = {
-    exportDate: new Date().toISOString(),
-    data: APP_STATE.data
-  };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'ak-fashion-hub-backup-' + new Date().toISOString().split('T')[0] + '.json';
-  a.click();
+function closePinModal() {
+  document.getElementById('pinModal').classList.remove('active');
+  if (pinPromiseResolve) pinPromiseResolve(false);
 }
 
-function editProduct(id) {
-  alert('Edit functionality coming soon');
+function verifyPin() {
+  const pin = 
+    document.getElementById('pinInput1').value +
+    document.getElementById('pinInput2').value +
+    document.getElementById('pinInput3').value +
+    document.getElementById('pinInput4').value;
+
+  if (pin.length !== 4 || !/^\d+$/.test(pin)) {
+    document.getElementById('pinError').textContent = 'PIN must be 4 digits';
+    return;
+  }
+
+  if (pin === '1234') { // Demo PIN
+    document.getElementById('pinModal').classList.remove('active');
+    if (pinPromiseResolve) pinPromiseResolve(true);
+  } else {
+    document.getElementById('pinError').textContent = 'Incorrect PIN';
+  }
 }
 
-function editCustomer(id) {
-  alert('Edit functionality coming soon');
-}
-
-function editStaff(id) {
-  alert('Edit functionality coming soon');
-}
-
-// ============================================================================
-// INITIALIZE
-// ============================================================================
-window.addEventListener('DOMContentLoaded', () => {
-  checkSession();
-  const searchInput = document.getElementById('productSearch');
-  if (searchInput) {
-    searchInput.addEventListener('input', refreshProducts);
+// Auto-focus next PIN input
+document.addEventListener('DOMContentLoaded', () => {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('pinInput' + i);
+    if (el) {
+      el.addEventListener('input', function() {
+        if (this.value && /^\d$/.test(this.value)) {
+          document.getElementById('pinInput' + (i + 1))?.focus();
+        }
+      });
+    }
   }
 });
+
+// Save data periodically
+setInterval(() => {
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}, 60000); // Every 1 minute
 </script>
+
 </body>
 </html>
