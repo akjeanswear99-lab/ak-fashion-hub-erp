@@ -195,9 +195,6 @@
       <button type="submit" class="btn btn-primary btn-block">Sign In</button>
       <div id="loginError" class="form-error" style="margin-top: 12px;"></div>
       <div style="font-size: 11px; color: var(--neutral-500); margin-top: 16px; padding: 12px; background: var(--neutral-100); border-radius: 4px;">
-        <strong>Demo Credentials:</strong><br>
-        Admin: 9999900001 / admin@123 (PIN: 1234)<br>
-        Staff: 9999900002 / staff@123 (PIN: 1234)
       </div>
     </form>
   </div>
@@ -758,6 +755,7 @@ function saveConfig() {
   CONFIG.API_URL = document.getElementById('apiUrl').value;
   CONFIG.RAZORPAY_KEY = document.getElementById('razorpayKeyId').value;
   localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+  alert("Google Sheet URL Saved Successfully");
 }
 
 // ============================================================================
@@ -2483,17 +2481,61 @@ function savePriceTagTemplate() {
 // ============================================================================
 // SETTINGS
 // ============================================================================
-function testApiConnection() {
-  const url = document.getElementById('apiUrl').value;
+async function testApiConnection() {
+  const url = document.getElementById('apiUrl').value.trim();
+
   if (!url) {
-    alert('Please enter API URL');
+    alert('Please enter Google Apps Script URL');
     return;
   }
-  alert('Connection test feature coming soon');
+
+  try {
+    const response = await fetch(url + '?action=ping');
+    const data = await response.json();
+
+    if (data.success) {
+      alert('✅ Google Sheet Connected Successfully');
+      saveConfig();
+    } else {
+      alert('❌ Connection Failed');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('❌ Unable to connect to Google Apps Script');
+  }
 }
 
-function syncNow() {
-  alert('Sync feature coming soon');
+async function syncNow() {
+  const url = document.getElementById('apiUrl').value.trim();
+
+  if (!url) {
+    alert('Please enter Google Apps Script URL');
+    return;
+  }
+
+  try {
+    saveConfig();
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'sync',
+        data: APP_STATE.data
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert('✅ Data Synced Successfully');
+    } else {
+      alert('❌ Sync Failed');
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert('❌ Sync Error');
+  }
 }
 
 function saveRazorpayKey() {
