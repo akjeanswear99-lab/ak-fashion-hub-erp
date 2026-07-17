@@ -9,6 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -194,8 +196,6 @@
       </div>
       <button type="submit" class="btn btn-primary btn-block">Sign In</button>
       <div id="loginError" class="form-error" style="margin-top: 12px;"></div>
-      <div style="font-size: 11px; color: var(--neutral-500); margin-top: 16px; padding: 12px; background: var(--neutral-100); border-radius: 4px;">
-      </div>
     </form>
   </div>
 </div>
@@ -279,8 +279,9 @@
           <div class="card-header">
             <h3 class="card-title">Point of Sale</h3>
           </div>
-          <div class="form-group">
-            <input type="text" class="form-input" id="billingScan" placeholder="🔍 Scan barcode / UID" autofocus>
+          <div class="form-group" style="display:flex; gap:8px;">
+            <input type="text" class="form-input" id="billingScan" placeholder="🔍 Scan barcode / UID" autofocus style="flex:1;">
+            <button type="button" class="btn btn-secondary" onclick="openCameraScanner(addToCart)">📷 Scan</button>
           </div>
           <div id="billItems" style="min-height: 250px; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; background: var(--neutral-50);"><div style="text-align: center; color: var(--neutral-500);">Empty cart - scan a product</div></div>
         </div>
@@ -323,7 +324,8 @@
             </div>
           </div>
           <button class="btn btn-primary btn-block" onclick="completeBill()" style="margin-bottom: 6px;">✓ Complete Sale</button>
-          <button class="btn btn-secondary btn-block" onclick="printBill()">🖨️ Print</button>
+          <button class="btn btn-secondary btn-block" onclick="printBill()" style="margin-bottom: 6px;">🖨️ Print</button>
+          <button class="btn btn-secondary btn-block" id="whatsappShareBtn" onclick="shareBillToWhatsApp()">📱 WhatsApp Bill</button>
         </div>
       </div>
     </div>
@@ -334,8 +336,9 @@
         <h3 class="card-title">Products</h3>
         <button class="btn btn-primary btn-small" onclick="openAddProductModal()">+ Add Product</button>
       </div>
-      <div style="margin-bottom: 16px;">
-        <input type="text" class="form-input" id="productSearch" placeholder="Search products..." oninput="refreshProducts()">
+      <div style="margin-bottom: 16px; display:flex; gap:8px;">
+        <input type="text" class="form-input" id="productSearch" placeholder="Search products..." oninput="refreshProducts()" style="flex:1;">
+        <button type="button" class="btn btn-secondary" onclick="openCameraScanner(function(code){ document.getElementById('productSearch').value = code; refreshProducts(); })">📷 Scan</button>
       </div>
       <div class="table-wrapper">
         <table id="productsTable"><thead><tr><th>UID</th><th>Name</th><th>Brand</th><th>Stock</th><th>CP</th><th>SP</th><th>MRP</th><th>Actions</th></tr></thead><tbody></tbody></table>
@@ -348,8 +351,9 @@
         <div class="card-header">
           <h3 class="card-title">Inventory Management</h3>
         </div>
-        <div style="margin-bottom: 16px;">
-          <input type="text" class="form-input" id="inventoryScan" placeholder="Scan barcode for stock check">
+        <div style="margin-bottom: 16px; display:flex; gap:8px;">
+          <input type="text" class="form-input" id="inventoryScan" placeholder="Scan barcode for stock check" style="flex:1;">
+          <button type="button" class="btn btn-secondary" onclick="openCameraScanner(lookupStock)">📷 Scan</button>
         </div>
         <div class="table-wrapper">
           <table id="inventoryTable"><thead><tr><th>UID</th><th>Product</th><th>Color/Size</th><th>Stock</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead><tbody></tbody></table>
@@ -591,12 +595,6 @@
         </div>
 
         <div class="card">
-          <h3 class="card-title">Demo Data</h3>
-          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">This app ships with sample products/customers/staff so you can try it out. Once you've added your real data, clear the demo entries.</p>
-          <button class="btn btn-danger btn-small btn-block" onclick="clearDemoData()">🗑 Clear Demo Data</button>
-        </div>
-
-        <div class="card">
           <h3 class="card-title">Google Sheets Integration</h3>
           <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Connect your Google Sheet for cloud backup</p>
           <div class="form-group">
@@ -666,6 +664,24 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closePinModal()">Cancel</button>
       <button class="btn btn-primary" onclick="verifyPin()">Verify</button>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA SCANNER MODAL -->
+<div class="modal-overlay" id="scannerModal">
+  <div class="modal" style="width: 380px;">
+    <div class="modal-header">
+      <h3 class="modal-title">📷 Scan Barcode / QR</h3>
+      <button class="modal-close" onclick="closeCameraScanner()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="scannerReader" style="width: 100%;"></div>
+      <div id="scannerError" style="color: var(--danger); font-size: 12px; text-align: center; margin-top: 10px;"></div>
+      <p style="font-size: 11px; color: var(--neutral-500); text-align: center; margin-top: 10px;">Camera ko barcode/QR ke saamne rakhein — scan hote hi apne aap band ho jayega.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeCameraScanner()">Cancel</button>
     </div>
   </div>
 </div>
@@ -741,6 +757,57 @@ function setupBarcodeScanning() {
   }
 }
 
+// ============================================================================
+// CAMERA BARCODE / QR SCANNER (mobile camera or laptop webcam — no external service)
+// ============================================================================
+let activeScanner = null;
+let scannerResultCallback = null;
+
+function openCameraScanner(onResult) {
+  if (typeof Html5Qrcode === 'undefined') {
+    alert('Camera scanner library load nahi hui — internet connection check karein.');
+    return;
+  }
+  scannerResultCallback = onResult;
+  document.getElementById('scannerError').textContent = '';
+  document.getElementById('scannerModal').classList.add('active');
+
+  activeScanner = new Html5Qrcode('scannerReader');
+  const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+  Html5Qrcode.getCameras().then(cameras => {
+    if (!cameras || !cameras.length) {
+      document.getElementById('scannerError').textContent = 'Koi camera nahi mila.';
+      return;
+    }
+    // Prefer the back/rear camera on phones
+    const backCam = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+    activeScanner.start(
+      backCam.id,
+      config,
+      (decodedText) => {
+        closeCameraScanner();
+        if (scannerResultCallback) scannerResultCallback(decodedText);
+      },
+      () => { /* ignore per-frame scan errors */ }
+    ).catch(err => {
+      document.getElementById('scannerError').textContent = 'Camera access fail hua: ' + err;
+    });
+  }).catch(err => {
+    document.getElementById('scannerError').textContent = 'Camera permission chahiye. Browser settings check karein.';
+  });
+}
+
+function closeCameraScanner() {
+  document.getElementById('scannerModal').classList.remove('active');
+  if (activeScanner) {
+    activeScanner.stop().then(() => {
+      activeScanner.clear();
+      activeScanner = null;
+    }).catch(() => { activeScanner = null; });
+  }
+}
+
 function loadConfig() {
   const saved = localStorage.getItem('appConfig');
   if (saved) {
@@ -755,7 +822,6 @@ function saveConfig() {
   CONFIG.API_URL = document.getElementById('apiUrl').value;
   CONFIG.RAZORPAY_KEY = document.getElementById('razorpayKeyId').value;
   localStorage.setItem('appConfig', JSON.stringify(CONFIG));
-  alert("Google Sheet URL Saved Successfully");
 }
 
 // ============================================================================
@@ -840,48 +906,46 @@ function saveShopProfile() {
   alert('✓ Shop profile saved');
 }
 
-function clearDemoData() {
-  if (!confirm('This removes the sample products, customers, suppliers and staff that ship with the app. Your own added data will NOT be touched. Continue?')) return;
-
-  const demoUIDs = ['AKFH000001', 'AKFH000002'];
-  const demoCustomerMobiles = ['9876543210'];
-  const demoSupplierNames = ['Shree Textiles'];
-  const demoStaffMobiles = ['9999900001', '9999900002'];
-
-  APP_STATE.data.products = (APP_STATE.data.products || []).filter(p => !demoUIDs.includes(p.UID));
-  APP_STATE.data.customers = (APP_STATE.data.customers || []).filter(c => !demoCustomerMobiles.includes(c.Mobile));
-  APP_STATE.data.suppliers = (APP_STATE.data.suppliers || []).filter(s => !demoSupplierNames.includes(s.Name));
-  // Keep at least the currently logged-in staff account so you don't lock yourself out
-  APP_STATE.data.staff = (APP_STATE.data.staff || []).filter(s =>
-    !demoStaffMobiles.includes(s.Mobile) || (APP_STATE.currentUser && s.Mobile === APP_STATE.currentUser.mobile)
-  );
-
-  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-  refreshProducts();
-  refreshCustomers();
-  refreshSuppliers();
-  refreshStaff();
-  alert('✓ Demo data cleared. Your real products/customers/staff are untouched.');
-}
-
 // ============================================================================
 // AUTHENTICATION
 // ============================================================================
 async function handleLogin(e) {
   e.preventDefault();
-  const mobile = document.getElementById('loginMobile').value;
+  const mobile = document.getElementById('loginMobile').value.trim();
   const password = document.getElementById('loginPassword').value;
   const errorEl = document.getElementById('loginError');
+  errorEl.textContent = '';
 
-  // Demo credentials
-  if (mobile === '9999900001' && password === 'admin@123') {
-    APP_STATE.currentUser = { name: 'Anita Kapoor', mobile: mobile, role: 'Admin', pinHash: '1234' };
-    successfulLogin();
-  } else if (mobile === '9999900002' && password === 'staff@123') {
-    APP_STATE.currentUser = { name: 'Ravi Sharma', mobile: mobile, role: 'Staff', pinHash: '1234' };
-    successfulLogin();
-  } else {
-    errorEl.textContent = 'Invalid credentials';
+  if (!CONFIG.API_URL) {
+    errorEl.textContent = 'Google Sheet API URL set nahi hai — Settings me set karein.';
+    return;
+  }
+
+  try {
+    const response = await fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'login', data: { mobile, password } })
+    });
+    const result = await response.json();
+    const loginResult = result.data || result; // doPost wraps in {success,data}
+
+    if (loginResult && loginResult.success && loginResult.user) {
+      APP_STATE.currentUser = {
+        staffID: loginResult.user.staffID,
+        name: loginResult.user.name,
+        mobile: loginResult.user.mobile,
+        role: loginResult.user.role,
+        permissions: loginResult.user.permissions
+      };
+      successfulLogin();
+      return;
+    }
+
+    errorEl.textContent = (loginResult && loginResult.error) || 'Login fail hua';
+  } catch (err) {
+    console.error('Login request failed:', err);
+    errorEl.textContent = 'Google Sheet se connect nahi ho paya. Internet ya API URL check karein.';
   }
 }
 
@@ -892,6 +956,7 @@ function successfulLogin() {
   document.getElementById('loginContainer').style.display = 'none';
   document.getElementById('appShell').classList.add('active');
   document.getElementById('userName').textContent = APP_STATE.currentUser.name;
+  
   loadDataFromSheet();
   navigateToScreen('dashboard');
 }
@@ -915,26 +980,36 @@ function checkSession() {
     document.getElementById('loginContainer').style.display = 'none';
     document.getElementById('appShell').classList.add('active');
     document.getElementById('userName').textContent = APP_STATE.currentUser.name;
-   loadDataFromSheet();
+    loadDataFromSheet();
     navigateToScreen('dashboard');
   }
 }
-async function loadDataFromSheet() {
 
+// Loads all data fresh from the Google Sheet. Falls back to whatever was cached
+// in localStorage the last time it succeeded, so the app still works offline —
+// but that cached copy is never treated as up to date once the Sheet is reachable.
+async function loadDataFromSheet() {
   if (!CONFIG.API_URL) {
-    console.log("API URL Missing");
+    const cached = localStorage.getItem('appData');
+    if (cached) APP_STATE.data = JSON.parse(cached);
+    refreshDashboard();
     return;
   }
 
   try {
-
-    const response = await fetch(
-      CONFIG.API_URL + "?action=getAll"
-    );
-
+    const response = await fetch(CONFIG.API_URL + '?action=getAll');
     const data = await response.json();
 
-    APP_STATE.data.products = data.products || [];
+    if (data.error) throw new Error(data.error);
+
+    APP_STATE.data.products = (data.products || []).map(p => ({
+      ...p,
+      variants: (p.variants || []).map(v => ({ ...v, Stock: Number(v.Stock) || 0 })),
+      TotalStock: Number(p.TotalStock) || 0,
+      CostPrice: Number(p.CostPrice) || 0,
+      SalePrice: Number(p.SalePrice) || 0,
+      MRP: Number(p.MRP) || 0
+    }));
     APP_STATE.data.customers = data.customers || [];
     APP_STATE.data.bills = data.bills || [];
     APP_STATE.data.billItems = data.billItems || [];
@@ -942,56 +1017,46 @@ async function loadDataFromSheet() {
     APP_STATE.data.purchases = data.purchases || [];
     APP_STATE.data.staff = data.staff || [];
     APP_STATE.data.expenses = data.expenses || [];
+    APP_STATE.data.preorders = data.orders || [];
 
+    localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
     refreshDashboard();
-
-  } catch(err){
-    console.error(err);
-    alert("Google Sheet Load Failed");
+  } catch (err) {
+    console.error('Google Sheet load failed, using last cached copy:', err);
+    const cached = localStorage.getItem('appData');
+    if (cached) APP_STATE.data = JSON.parse(cached);
+    alert('⚠️ Google Sheet se data load nahi ho paya — internet ya API URL check karein. Purana cached data dikha rahe hain.');
+    refreshDashboard();
   }
-
 }
-// ============================================================================
-// SAMPLE DATA
-// ============================================================================
-function loadSampleData() {
-  return;
-  // Load or initialize demo data
-  if (!APP_STATE.data.products.length) {
-    APP_STATE.data.products = [
-      {
-        ProductID: 'prod001', UID: 'AKFH000001', Barcode: 'AKFH000001', Name: 'Casual T-Shirt',
-        Gender: 'Men', Brand: 'AK Fashion', FabricType: 'Cotton', Status: 'Active',
-        CostPrice: 150, SalePrice: 299, MRP: 399, TotalStock: 50,
-        variants: [
-          { VariantID: 'var001', Color: 'Black', Size: 'M', Stock: 15, Floor: '1', Rack: 'A', Shelf: '1' },
-          { VariantID: 'var002', Color: 'White', Size: 'M', Stock: 20, Floor: '1', Rack: 'A', Shelf: '2' },
-          { VariantID: 'var003', Color: 'Blue', Size: 'L', Stock: 15, Floor: '1', Rack: 'B', Shelf: '1' }
-        ]
-      },
-      {
-        ProductID: 'prod002', UID: 'AKFH000002', Barcode: 'AKFH000002', Name: 'Denim Jeans',
-        Gender: 'Women', Brand: 'AK Fashion', FabricType: 'Denim', Status: 'Active',
-        CostPrice: 400, SalePrice: 799, MRP: 999, TotalStock: 30,
-        variants: [
-          { VariantID: 'var004', Color: 'Dark Blue', Size: '28', Stock: 10, Floor: '1', Rack: 'C', Shelf: '1' },
-          { VariantID: 'var005', Color: 'Light Blue', Size: '30', Stock: 20, Floor: '1', Rack: 'C', Shelf: '2' }
-        ]
-      }
-    ];
 
-    APP_STATE.data.customers = [
-      { CustomerID: 'cust001', Name: 'Priya Sharma', Mobile: '9876543210', TotalSpend: 5000, LoyaltyPoints: 50, DueBalance: 0 }
-    ];
+// Generic helper for every write action — POSTs to the backend and returns
+// { success, data } or { success:false, error } consistently. Used by every
+// save/update/delete function below so writes actually reach the Google Sheet.
+async function backendCall(action, data) {
+  if (!CONFIG.API_URL) {
+    return { success: false, error: 'Google Sheet API URL configured nahi hai (Settings me set karein)' };
+  }
+  try {
+    const response = await fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, data })
+    });
+    const result = await response.json();
+    if (!result.success) return { success: false, error: result.error || 'Unknown error' };
 
-    APP_STATE.data.suppliers = [
-      { SupplierID: 'supp001', Name: 'Shree Textiles', Mobile: '9812345670', City: 'Surat' }
-    ];
+    // doPost always wraps as {success:true, data:...} unless it actually throws — but some
+    // backend functions (updateProduct, deleteProduct, updateStock, updateCustomer, returnBill...)
+    // return their OWN {success:false, error:'...'} for business-logic failures (e.g. "not found")
+    // without throwing. Surface those too, or a real failure would look like a success here.
+    if (result.data && typeof result.data === 'object' && result.data.success === false) {
+      return { success: false, error: result.data.error || 'Backend rejected the request' };
+    }
 
-    APP_STATE.data.staff = [
-      { StaffID: 'staff001', Name: 'Anita Kapoor', Mobile: '9999900001', Role: 'Admin', Status: 'Active' },
-      { StaffID: 'staff002', Name: 'Ravi Sharma', Mobile: '9999900002', Role: 'Staff', Status: 'Active' }
-    ];
+    return { success: true, data: result.data };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 }
 
@@ -1172,29 +1237,37 @@ function updateBillTotals() {
   document.getElementById('billTotal').textContent = '₹' + Math.round(total).toLocaleString('en-IN');
 }
 
+let billSubmitting = false;
+
 async function completeBill() {
+  if (billSubmitting) return; // block double-clicks from creating duplicate bills
   if (APP_STATE.cart.length === 0) {
     alert('Cart is empty');
     return;
   }
 
-  const customerMobile = document.getElementById('billCustomerMobile').value.trim();
-  const customerName = document.getElementById('billCustomerName').value.trim() || 'Walk-in';
+  billSubmitting = true;
+  try {
+    const customerMobile = document.getElementById('billCustomerMobile').value.trim();
+    const customerName = document.getElementById('billCustomerName').value.trim() || 'Walk-in';
 
-  const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
-  const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
-  const discountAmount = subtotal * (discountPct / 100);
-  const totalAmount = subtotal - discountAmount;
-  const paymentMode = document.getElementById('billPaymentMode').value;
+    const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+    const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
+    const discountAmount = subtotal * (discountPct / 100);
+    const totalAmount = subtotal - discountAmount;
+    const paymentMode = document.getElementById('billPaymentMode').value;
 
-  if (paymentMode === 'UPI' || paymentMode === 'Card') {
-    if (!CONFIG.RAZORPAY_KEY) {
-      alert('Razorpay not configured. Use Cash payment.');
-      return;
+    if (paymentMode === 'UPI' || paymentMode === 'Card') {
+      if (!CONFIG.RAZORPAY_KEY) {
+        alert('Razorpay not configured. Use Cash payment.');
+        return;
+      }
+      initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct);
+    } else {
+      await createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode);
     }
-    initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct);
-  } else {
-    await createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode);
+  } finally {
+    billSubmitting = false;
   }
 }
 
@@ -1220,109 +1293,72 @@ function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subt
 }
 
 async function createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode, paymentID = null) {
+  const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
 
-  const billID = 'bill_' + Date.now();
-  const billNumber = 'BILL-' + Date.now();
+  const completeBtn = document.querySelector('.btn-primary.btn-block');
+  if (completeBtn) { completeBtn.disabled = true; completeBtn.textContent = 'Saving...'; }
 
-  const bill = {
-    BillID: billID,
-    BillNumber: billNumber,
-    CustomerName: customerName,
-    CustomerMobile: customerMobile,
-    StaffName: APP_STATE.currentUser.name,
-    Subtotal: subtotal,
-    DiscountPercent: discountPct,
-    DiscountAmount: Math.round(discountAmount),
-    TotalAmount: Math.round(totalAmount),
-    PaymentMode: paymentMode,
-    PaymentID: paymentID || '',
-    Status: 'Completed',
-    CreatedDate: new Date().toISOString()
-  };
+  const result = await backendCall('addBill', {
+    customerID: customerMobile ? 'cust_' + customerMobile : 'walk-in',
+    customerName, customerMobile,
+    staffID, staffName: APP_STATE.currentUser.name,
+    subtotal, discountPercent: discountPct, discountAmount: Math.round(discountAmount),
+    taxAmount: 0, totalAmount: Math.round(totalAmount), paymentMode,
+    items: APP_STATE.cart.map(item => ({
+      variantID: item.variantID, productID: item.productID, uid: item.uid,
+      color: item.color, size: item.size, quantity: item.quantity, salePrice: item.salePrice
+    }))
+  });
 
-  APP_STATE.data.bills.push(bill);
+  if (completeBtn) { completeBtn.disabled = false; completeBtn.textContent = '✓ Complete Sale'; }
 
-  try {
-
-    const response = await fetch(CONFIG.API_URL,{
-      method:'POST',
-      headers:{
-        'Content-Type':'text/plain'
-      },
-      body:JSON.stringify({
-        action:'addBill',
-        data:{
-          customerID:'walk-in',
-          customerName:customerName,
-          customerMobile:customerMobile,
-          staffID:'staff001',
-          staffName:APP_STATE.currentUser.name,
-
-          subtotal:subtotal,
-          discountPercent:discountPct,
-          discountAmount:Math.round(discountAmount),
-          taxAmount:0,
-          totalAmount:Math.round(totalAmount),
-          paymentMode:paymentMode,
-
-          items:APP_STATE.cart.map(item => ({
-            variantID:item.variantID,
-            productID:item.productID,
-            uid:item.uid,
-            color:item.color,
-            size:item.size,
-            quantity:item.quantity,
-            salePrice:item.salePrice
-          }))
-        }
-      })
-    });
-
-    const result = await response.json();
-    console.log(result);
-
-    APP_STATE.cart.forEach(item => {
-
-      const billItem = {
-        BillID: billID,
-        VariantID: item.variantID,
-        UID: item.uid,
-        Color: item.color,
-        Size: item.size,
-        Quantity: item.quantity,
-        SalePrice: item.salePrice
-      };
-
-      APP_STATE.data.billItems.push(billItem);
-
-    });
-
-    alert('✓ Bill #' + billNumber + ' created\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
-
-    APP_STATE.cart = [];
-    renderCart();
-    updateBillTotals();
-
-    document.getElementById('billCustomerMobile').value = '';
-    document.getElementById('billCustomerName').value = '';
-
-    refreshDashboard();
-
-    localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-
-  } catch(err) {
-    console.error(err);
-    alert('Google Sheet Save Failed');
-  }
-
-}
-
-function printBill() {
-  if (APP_STATE.cart.length === 0) {
-    alert('No items to print');
+  if (!result.success) {
+    alert('❌ Bill Google Sheet me save nahi hua: ' + result.error + '\n\nDobara try karein — koi partial/duplicate bill nahi bana.');
     return;
   }
 
+  const { billID, billNumber } = result.data;
+
+  const bill = {
+    BillID: billID, BillNumber: billNumber, CustomerName: customerName, CustomerMobile: customerMobile,
+    StaffName: APP_STATE.currentUser.name, Subtotal: subtotal, DiscountPercent: discountPct,
+    DiscountAmount: Math.round(discountAmount), TotalAmount: Math.round(totalAmount),
+    PaymentMode: paymentMode, PaymentID: paymentID || '', Status: 'Completed', CreatedDate: new Date().toISOString()
+  };
+  APP_STATE.data.bills.push(bill);
+
+  APP_STATE.cart.forEach(item => {
+    APP_STATE.data.billItems.push({
+      BillID: billID, VariantID: item.variantID, UID: item.uid, Color: item.color,
+      Size: item.size, Quantity: item.quantity, SalePrice: item.salePrice
+    });
+
+    // Backend already reduced the Sheet's stock (addBill calls updateStock server-side);
+    // mirror the same change locally so the UI doesn't need a full reload to stay in sync.
+    APP_STATE.data.products.forEach(p => {
+      const v = p.variants?.find(v => v.VariantID === item.variantID);
+      if (v) {
+        v.Stock = Math.max(0, Number(v.Stock) - item.quantity);
+        p.TotalStock = p.variants.reduce((s, vr) => s + Number(vr.Stock), 0);
+      }
+    });
+  });
+
+  alert('✓ Bill #' + billNumber + ' Google Sheet me save ho gaya\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
+
+  APP_STATE.cart = [];
+  renderCart();
+  updateBillTotals();
+  document.getElementById('billCustomerMobile').value = '';
+  document.getElementById('billCustomerName').value = '';
+  refreshDashboard();
+  refreshInventory();
+  refreshProducts();
+
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+function buildBillHTML() {
   const templateType = CONFIG.BILL_TEMPLATE.type || 'thermal';
   const headerText = CONFIG.BILL_TEMPLATE.headerText || 'AK FASHION HUB';
   const footerText = CONFIG.BILL_TEMPLATE.footerText || 'Thank You!';
@@ -1331,8 +1367,8 @@ function printBill() {
   const discount = subtotal * ((Number(document.getElementById('billDiscountPct').value) || 0) / 100);
   const total = subtotal - discount;
 
-  let billHTML = `
-    <div class="print-area bill-${templateType}">
+  return `
+    <div class="print-area bill-${templateType}" style="background:#fff;">
       <div class="bill-header" style="text-align:center;">
         ${CONFIG.SHOP_LOGO ? `<img src="${CONFIG.SHOP_LOGO}" class="bill-logo" alt="Logo">` : ''}
         <div class="bill-title">${headerText}</div>
@@ -1382,6 +1418,15 @@ function printBill() {
       </div>
     </div>
   `;
+}
+
+function printBill() {
+  if (APP_STATE.cart.length === 0) {
+    alert('No items to print');
+    return;
+  }
+
+  const billHTML = buildBillHTML();
 
   const printWindow = window.open('', '_blank');
   printWindow.document.write(`
@@ -1401,6 +1446,70 @@ function printBill() {
   `);
   printWindow.document.close();
   setTimeout(() => printWindow.print(), 500);
+}
+
+// Renders the bill as a PNG image (via html2canvas — free, no paid API) and shares it
+// through the device's native share sheet, where WhatsApp shows up as one of the options
+// (if installed). This is the only way a browser can hand an image to WhatsApp without a
+// paid WhatsApp Business API — there's no way to auto-attach a file to a wa.me link.
+async function shareBillToWhatsApp() {
+  if (APP_STATE.cart.length === 0) {
+    alert('No items to share');
+    return;
+  }
+  if (typeof html2canvas === 'undefined') {
+    alert('Image library load nahi hui — internet connection check karein.');
+    return;
+  }
+
+  const shareBtn = document.getElementById('whatsappShareBtn');
+  if (shareBtn) { shareBtn.disabled = true; shareBtn.textContent = 'Photo bana rahe hain...'; }
+
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed; left:-9999px; top:0; background:#fff; padding:12px;';
+  holder.innerHTML = buildBillHTML();
+  document.body.appendChild(holder);
+
+  try {
+    const canvas = await html2canvas(holder, { backgroundColor: '#ffffff', scale: 2 });
+    document.body.removeChild(holder);
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const customerMobile = document.getElementById('billCustomerMobile').value.trim();
+    const fileName = 'bill-' + Date.now() + '.png';
+    const file = new File([blob], fileName, { type: 'image/png' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: CONFIG.SHOP_NAME || 'Bill',
+        text: 'Aapka bill'
+      });
+    } else {
+      // Fallback for browsers without file-sharing support (e.g. desktop):
+      // download the image, then open WhatsApp so it can be attached manually.
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      const waURL = customerMobile
+        ? `https://wa.me/91${customerMobile}?text=${encodeURIComponent('Aapka bill photo download ho gaya hai — use yahan attach kar dijiye.')}`
+        : `https://wa.me/?text=${encodeURIComponent('Bill photo download ho gaya hai — WhatsApp me attach kar dijiye.')}`;
+      window.open(waURL, '_blank');
+      alert('Bill photo download ho gayi — WhatsApp khul raha hai, usme photo attach kar dijiye (yeh browser file seedha attach nahi kar sakta).');
+    }
+  } catch (err) {
+    if (holder.parentNode) document.body.removeChild(holder);
+    if (err.name !== 'AbortError') { // user cancelling the share sheet isn't an error
+      console.error(err);
+      alert('❌ Bill photo share nahi ho payi: ' + err.message);
+    }
+  } finally {
+    if (shareBtn) { shareBtn.disabled = false; shareBtn.textContent = '📱 WhatsApp Bill'; }
+  }
 }
 
 // ============================================================================
@@ -1463,6 +1572,11 @@ function openAddProductModal() {
       <label class="form-label">MRP</label>
       <input type="number" class="form-input" id="modalMRP" placeholder="0">
     </div>
+    <div class="form-group">
+      <label class="form-label">Stock — Color / Size / Qty (yahi se inventory add hoti hai)</label>
+      <div id="editVariantsList"></div>
+      <button class="btn btn-secondary btn-small" type="button" style="margin-top:6px;" onclick="addVariantRow()">+ Add Color/Size</button>
+    </div>
   `;
 
   const footer = `
@@ -1471,48 +1585,72 @@ function openAddProductModal() {
   `;
 
   openModal('Add Product', body, footer);
+  addVariantRow();
 }
 
-function saveProduct() {
+async function saveProduct() {
   const name = document.getElementById('modalProductName').value.trim();
   if (!name) { alert('Product name is required'); return; }
 
-  const uid = 'AKFH' + String(APP_STATE.data.products.length + 1).padStart(6, '0');
+  const variants = collectVariantRows([]);
+  const gender = document.getElementById('modalGender').value;
+  const brand = document.getElementById('modalBrand').value;
+  const costPrice = Number(document.getElementById('modalCP').value) || 0;
+  const salePrice = Number(document.getElementById('modalSP').value) || 0;
+  const mrp = Number(document.getElementById('modalMRP').value) || 0;
+
+  const saveBtn = document.querySelector('#modalFooter .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  const result = await backendCall('addProduct', {
+    name, gender, description: '', brand, fabricType: 'Cotton',
+    costPrice, salePrice, mrp, batchNumber: '', tags: [], seasonTags: [],
+    imageURL: '', sizeChartURL: '', supplierID: '',
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+
+  if (!result.success) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    alert('❌ Google Sheet me product save nahi hua: ' + result.error + '\n\n(Local copy me bhi save nahi kiya gaya, taaki data mismatch na ho)');
+    return;
+  }
+
+  const { productID, uid, barcode } = result.data;
+
+  // Save each variant to the Variants sheet too, using the real ProductID/UID
+  const savedVariants = [];
+  for (const v of variants) {
+    const vResult = await backendCall('addVariant', {
+      productID, uid, color: v.Color, size: v.Size, stock: v.Stock,
+      floor: v.Floor, rack: v.Rack, shelf: v.Shelf,
+      staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+    });
+    if (vResult.success) {
+      savedVariants.push({ VariantID: vResult.data.variantID, Color: v.Color, Size: v.Size, Stock: v.Stock, Floor: v.Floor, Rack: v.Rack, Shelf: v.Shelf });
+    }
+  }
+
   const product = {
-    ProductID: 'prod_' + Date.now(),
-    UID: uid,
-    Barcode: uid,
-    Name: name,
-    Gender: document.getElementById('modalGender').value,
-    Brand: document.getElementById('modalBrand').value,
-    FabricType: 'Cotton',
-    Status: 'Active',
-    CostPrice: Number(document.getElementById('modalCP').value) || 0,
-    SalePrice: Number(document.getElementById('modalSP').value) || 0,
-    MRP: Number(document.getElementById('modalMRP').value) || 0,
-    TotalStock: 0,
-    variants: []
+    ProductID: productID, UID: uid, Barcode: barcode, Name: name,
+    Gender: gender, Brand: brand, FabricType: 'Cotton', Status: 'Active',
+    CostPrice: costPrice, SalePrice: salePrice, MRP: mrp,
+    TotalStock: savedVariants.reduce((s, v) => s + (Number(v.Stock) || 0), 0),
+    variants: savedVariants
   };
 
   APP_STATE.data.products.push(product);
   closeModal();
   refreshProducts();
+  refreshInventory();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-  alert('✓ Product created: ' + uid);
+  alert('✓ Product Google Sheet me save ho gaya: ' + uid);
 }
 
 function editProduct(id) {
   const p = (APP_STATE.data.products || []).find(x => x.ProductID === id);
   if (!p) { alert('Product not found'); return; }
 
-  const variantsHtml = (p.variants || []).map((v, idx) => `
-    <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px;">
-      <input type="text" class="form-input" style="padding:6px;" value="${v.Color}" id="varColor_${idx}" placeholder="Color">
-      <input type="text" class="form-input" style="padding:6px;" value="${v.Size}" id="varSize_${idx}" placeholder="Size">
-      <input type="number" class="form-input" style="padding:6px; width:80px;" value="${v.Stock}" id="varStock_${idx}" placeholder="Stock">
-      <button class="btn btn-danger btn-small" type="button" onclick="this.parentElement.remove()">✕</button>
-    </div>
-  `).join('');
+  const variantsHtml = (p.variants || []).map(v => variantRowHtml(v)).join('');
 
   const body = `
     <div class="form-group">
@@ -1553,9 +1691,9 @@ function editProduct(id) {
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Variants (Color / Size / Stock)</label>
-      <div id="editVariantsList">${variantsHtml || '<div style="color:#999; font-size:12px;">No variants yet</div>'}</div>
-      <button class="btn btn-secondary btn-small" type="button" style="margin-top:6px;" onclick="addVariantRow()">+ Add Variant</button>
+      <label class="form-label">Stock — Color / Size / Qty (yahi se inventory add/update hoti hai)</label>
+      <div id="editVariantsList">${variantsHtml}</div>
+      <button class="btn btn-secondary btn-small" type="button" style="margin-top:6px;" onclick="addVariantRow()">+ Add Color/Size</button>
     </div>
   `;
 
@@ -1567,65 +1705,137 @@ function editProduct(id) {
   openModal('Edit Product', body, footer);
 }
 
-function addVariantRow() {
-  const list = document.getElementById('editVariantsList');
-  if (list.querySelector('div[style*="color:#999"]')) list.innerHTML = '';
-  const idx = list.querySelectorAll('div[id^="varRow_"], div').length;
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px;';
-  row.innerHTML = `
-    <input type="text" class="form-input" style="padding:6px;" id="varColor_${idx}" placeholder="Color">
-    <input type="text" class="form-input" style="padding:6px;" id="varSize_${idx}" placeholder="Size">
-    <input type="number" class="form-input" style="padding:6px; width:80px;" id="varStock_${idx}" placeholder="Stock">
-    <button class="btn btn-danger btn-small" type="button" onclick="this.parentElement.remove()">✕</button>
+// Builds one variant row. Uses a data-vid attribute (not a positional index) to track
+// which existing variant a row belongs to, so removing a row from the middle of the
+// list can never shift/drop the rows that come after it when saving.
+function variantRowHtml(v) {
+  const vid = (v && v.VariantID) || '';
+  return `
+    <div class="variant-row" data-vid="${vid}" data-floor="${(v && v.Floor) || ''}" data-rack="${(v && v.Rack) || ''}" data-shelf="${(v && v.Shelf) || ''}" style="display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px;">
+      <input type="text" class="form-input var-color" style="padding:6px;" value="${(v && v.Color) || ''}" placeholder="Color">
+      <input type="text" class="form-input var-size" style="padding:6px;" value="${(v && v.Size) || ''}" placeholder="Size">
+      <input type="number" class="form-input var-stock" style="padding:6px; width:80px;" value="${(v && v.Stock) || 0}" placeholder="Stock">
+      <button class="btn btn-danger btn-small" type="button" onclick="this.parentElement.remove()">✕</button>
+    </div>
   `;
-  list.appendChild(row);
 }
 
-function updateProduct(id) {
+function addVariantRow() {
+  const list = document.getElementById('editVariantsList');
+  list.insertAdjacentHTML('beforeend', variantRowHtml(null));
+}
+
+// Reads all variant rows currently in the modal, in DOM order — safe against rows
+// having been removed or added in any order, unlike matching by array index.
+function collectVariantRows(existingVariants) {
+  const rows = document.querySelectorAll('#editVariantsList .variant-row');
+  const byId = {};
+  (existingVariants || []).forEach(v => { byId[v.VariantID] = v; });
+
+  const variants = [];
+  rows.forEach(row => {
+    const color = row.querySelector('.var-color').value.trim();
+    const size = row.querySelector('.var-size').value.trim();
+    const stock = Number(row.querySelector('.var-stock').value) || 0;
+    if (!color && !size) return;
+
+    const vid = row.dataset.vid;
+    const existing = vid && byId[vid];
+    variants.push({
+      VariantID: (existing && existing.VariantID) || ('var_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)),
+      Color: color, Size: size, Stock: stock,
+      Floor: (existing && existing.Floor) || row.dataset.floor || '',
+      Rack: (existing && existing.Rack) || row.dataset.rack || '',
+      Shelf: (existing && existing.Shelf) || row.dataset.shelf || ''
+    });
+  });
+  return variants;
+}
+
+async function updateProduct(id) {
   const p = (APP_STATE.data.products || []).find(x => x.ProductID === id);
   if (!p) return;
 
   const name = document.getElementById('modalProductName').value.trim();
   if (!name) { alert('Product name is required'); return; }
 
-  p.Name = name;
-  p.Gender = document.getElementById('modalGender').value;
-  p.Brand = document.getElementById('modalBrand').value;
-  p.CostPrice = Number(document.getElementById('modalCP').value) || 0;
-  p.SalePrice = Number(document.getElementById('modalSP').value) || 0;
-  p.MRP = Number(document.getElementById('modalMRP').value) || 0;
-  p.Status = document.getElementById('modalStatus').value;
+  const gender = document.getElementById('modalGender').value;
+  const brand = document.getElementById('modalBrand').value;
+  const costPrice = Number(document.getElementById('modalCP').value) || 0;
+  const salePrice = Number(document.getElementById('modalSP').value) || 0;
+  const mrp = Number(document.getElementById('modalMRP').value) || 0;
+  const status = document.getElementById('modalStatus').value;
+  const newVariants = collectVariantRows(p.variants);
+  const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
 
-  const newVariants = [];
-  let idx = 0;
-  while (document.getElementById('varColor_' + idx)) {
-    const color = document.getElementById('varColor_' + idx).value.trim();
-    const size = document.getElementById('varSize_' + idx).value.trim();
-    const stock = Number(document.getElementById('varStock_' + idx).value) || 0;
-    if (color || size) {
-      const existing = (p.variants || [])[idx];
-      newVariants.push({
-        VariantID: (existing && existing.VariantID) || 'var_' + Date.now() + '_' + idx,
-        Color: color, Size: size, Stock: stock,
-        Floor: (existing && existing.Floor) || '', Rack: (existing && existing.Rack) || '', Shelf: (existing && existing.Shelf) || ''
-      });
-    }
-    idx++;
+  const saveBtn = document.querySelector('#modalFooter .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  const result = await backendCall('updateProduct', {
+    productID: id, Name: name, Gender: gender, Brand: brand,
+    CostPrice: costPrice, SalePrice: salePrice, MRP: mrp, Status: status,
+    staffID
+  });
+
+  if (!result.success) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
+    alert('❌ Google Sheet me update save nahi hua: ' + result.error);
+    return;
   }
+
+  // Sync variants: new rows (no matching existing VariantID) → addVariant.
+  // Existing rows whose stock/location changed → updateStock / updateLocation.
+  const oldById = {};
+  (p.variants || []).forEach(v => { oldById[v.VariantID] = v; });
+
+  for (const v of newVariants) {
+    const old = oldById[v.VariantID];
+    if (!old) {
+      const vResult = await backendCall('addVariant', {
+        productID: id, uid: p.UID, color: v.Color, size: v.Size, stock: v.Stock,
+        floor: v.Floor, rack: v.Rack, shelf: v.Shelf, staffID
+      });
+      if (vResult.success) v.VariantID = vResult.data.variantID;
+    } else {
+      const stockDiff = Number(v.Stock) - Number(old.Stock);
+      if (stockDiff !== 0) {
+        await backendCall('updateStock', { variantID: v.VariantID, qtyChange: stockDiff, staffID });
+      }
+      if (v.Floor !== old.Floor || v.Rack !== old.Rack || v.Shelf !== old.Shelf) {
+        await backendCall('updateLocation', { variantID: v.VariantID, floor: v.Floor, rack: v.Rack, shelf: v.Shelf, staffID });
+      }
+    }
+  }
+
+  p.Name = name;
+  p.Gender = gender;
+  p.Brand = brand;
+  p.CostPrice = costPrice;
+  p.SalePrice = salePrice;
+  p.MRP = mrp;
+  p.Status = status;
   p.variants = newVariants;
   p.TotalStock = newVariants.reduce((s, v) => s + (Number(v.Stock) || 0), 0);
 
   closeModal();
   refreshProducts();
+  refreshInventory();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-  alert('✓ Product updated');
+  alert('✓ Google Sheet me update ho gaya');
 }
 
-function deleteProduct(id) {
+async function deleteProduct(id) {
   if (!confirm('Delete this product? This cannot be undone.')) return;
+
+  const result = await backendCall('deleteProduct', { productID: id, staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID });
+  if (!result.success) {
+    alert('❌ Google Sheet se delete nahi hua: ' + result.error);
+    return;
+  }
+
   APP_STATE.data.products = (APP_STATE.data.products || []).filter(x => x.ProductID !== id);
   refreshProducts();
+  refreshInventory();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
@@ -1681,18 +1891,68 @@ function lookupStock(uid) {
 }
 
 function adjustStock(variantID) {
-  const qty = prompt('Enter quantity change (+/-):', '1');
-  if (qty === null) return;
-  
+  let targetProduct = null, targetVariant = null;
+  APP_STATE.data.products.forEach(p => {
+    const v = p.variants?.find(v => v.VariantID === variantID);
+    if (v) { targetProduct = p; targetVariant = v; }
+  });
+  if (!targetVariant) { alert('Variant not found'); return; }
+
+  const body = `
+    <div class="form-group">
+      <label class="form-label">${targetProduct.Name} — ${targetVariant.Color}/${targetVariant.Size}</label>
+      <div style="font-size:12px; color:var(--neutral-500);">Current stock: ${targetVariant.Stock}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Quantity Change (+ to add, − to reduce)</label>
+      <input type="number" class="form-input" id="stockAdjustQty" placeholder="e.g. 5 or -2" value="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Location</label>
+      <div style="display:flex; gap:6px;">
+        <input type="text" class="form-input" id="stockFloor" placeholder="Floor" value="${targetVariant.Floor || ''}">
+        <input type="text" class="form-input" id="stockRack" placeholder="Rack" value="${targetVariant.Rack || ''}">
+        <input type="text" class="form-input" id="stockShelf" placeholder="Shelf" value="${targetVariant.Shelf || ''}">
+      </div>
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveStockAdjustment('${variantID}')">Save</button>
+  `;
+
+  openModal('Adjust Stock', body, footer);
+}
+
+async function saveStockAdjustment(variantID) {
+  const change = Number(document.getElementById('stockAdjustQty').value) || 0;
+  const floor = document.getElementById('stockFloor').value.trim();
+  const rack = document.getElementById('stockRack').value.trim();
+  const shelf = document.getElementById('stockShelf').value.trim();
+  const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
+
+  if (change !== 0) {
+    const r = await backendCall('updateStock', { variantID, qtyChange: change, staffID });
+    if (!r.success) { alert('❌ Google Sheet me stock update nahi hua: ' + r.error); return; }
+  }
+  const r2 = await backendCall('updateLocation', { variantID, floor, rack, shelf, staffID });
+  if (!r2.success) { alert('❌ Google Sheet me location update nahi hua: ' + r2.error); return; }
+
   APP_STATE.data.products.forEach(p => {
     const v = p.variants?.find(v => v.VariantID === variantID);
     if (v) {
-      v.Stock = Math.max(0, Number(v.Stock) + Number(qty));
+      v.Stock = Math.max(0, Number(v.Stock) + change);
+      v.Floor = floor;
+      v.Rack = rack;
+      v.Shelf = shelf;
       p.TotalStock = p.variants.reduce((s, vr) => s + Number(vr.Stock), 0);
     }
   });
 
+  closeModal();
   refreshInventory();
+  refreshProducts();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
@@ -1768,39 +2028,52 @@ function openAddPreorderModal() {
   openModal('New Pre-Order', body, footer);
 }
 
-function savePreorder() {
+async function savePreorder() {
+  const customerName = document.getElementById('preorderName').value.trim();
+  const mobile = document.getElementById('preorderMobile').value.trim();
+  const productUID = document.getElementById('preorderUID').value.trim();
+  const size = document.getElementById('preorderSize').value.trim();
+  const color = document.getElementById('preorderColor').value.trim();
+  const qty = Number(document.getElementById('preorderQty').value) || 1;
+  const total = Number(document.getElementById('preorderTotal').value) || 0;
+  const paid = Number(document.getElementById('preorderPaid').value) || 0;
+
+  const result = await backendCall('addPreorder', {
+    customerName, mobile, productUID, color, size, qty, total, paid,
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me pre-order save nahi hua: ' + result.error); return; }
+
   const preorder = {
-    OrderID: 'PRE-' + Date.now(),
-    CustomerName: document.getElementById('preorderName').value,
-    Mobile: document.getElementById('preorderMobile').value,
-    ProductUID: document.getElementById('preorderUID').value,
-    Size: document.getElementById('preorderSize').value,
-    Color: document.getElementById('preorderColor').value,
-    Qty: Number(document.getElementById('preorderQty').value),
-    Total: Number(document.getElementById('preorderTotal').value),
-    Paid: Number(document.getElementById('preorderPaid').value),
-    Status: 'Pending',
-    CreatedDate: new Date().toISOString()
+    OrderID: result.data.orderID, CustomerName: customerName, Mobile: mobile,
+    ProductUID: productUID, Size: size, Color: color, Qty: qty, Total: total, Paid: paid,
+    Status: 'Pending', CreatedDate: new Date().toISOString()
   };
 
   APP_STATE.data.preorders.push(preorder);
   closeModal();
   refreshPreorders();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-  alert('✓ Pre-order created: ' + preorder.OrderID);
+  alert('✓ Pre-order Google Sheet me save ho gaya: ' + preorder.OrderID);
 }
 
-function collectPaymentPreorder(orderID) {
+async function collectPaymentPreorder(orderID) {
   const order = APP_STATE.data.preorders.find(o => o.OrderID === orderID);
   if (!order) return;
 
   const remaining = Number(order.Total) - Number(order.Paid);
   const amount = prompt('Collect payment (₹):', remaining.toString());
-  if (amount === null) return;
+  if (amount === null || Number(amount) <= 0) return;
 
-  order.Paid = Number(order.Paid) + Number(amount);
-  if (order.Paid >= order.Total) {
-    order.Status = 'Completed';
+  const result = await backendCall('collectPreorderPayment', {
+    orderID, amount: Number(amount), staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me payment save nahi hua: ' + result.error); return; }
+
+  order.Paid = result.data.newPaid;
+  order.Status = result.data.status;
+
+  if (order.Status === 'Completed') {
     alert('✓ Pre-order completed!');
   } else {
     alert('✓ Payment received: ₹' + amount + '\nPending: ₹' + (Number(order.Total) - order.Paid).toLocaleString('en-IN'));
@@ -1810,12 +2083,17 @@ function collectPaymentPreorder(orderID) {
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
-function cancelPreorder(orderID) {
-  if (confirm('Cancel this pre-order?')) {
-    APP_STATE.data.preorders = APP_STATE.data.preorders.filter(o => o.OrderID !== orderID);
-    refreshPreorders();
-    localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-  }
+async function cancelPreorder(orderID) {
+  if (!confirm('Cancel this pre-order?')) return;
+
+  const result = await backendCall('cancelPreorder', {
+    orderID, staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet se cancel nahi hua: ' + result.error); return; }
+
+  APP_STATE.data.preorders = APP_STATE.data.preorders.filter(o => o.OrderID !== orderID);
+  refreshPreorders();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
 // ============================================================================
@@ -1866,7 +2144,14 @@ function searchBillForReturn() {
   document.getElementById('rxResult').innerHTML = html;
 }
 
-function processReturn(billID, variantID, qty) {
+async function processReturn(billID, variantID, qty) {
+  const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
+  const result = await backendCall('returnBill', { billID, variantID, quantity: qty, staffID });
+  if (!result.success) {
+    alert('❌ Google Sheet me return save nahi hua: ' + result.error);
+    return;
+  }
+
   APP_STATE.data.products.forEach(p => {
     const v = p.variants?.find(v => v.VariantID === variantID);
     if (v) {
@@ -1876,6 +2161,8 @@ function processReturn(billID, variantID, qty) {
   });
 
   alert('✓ Return processed. Stock restored by ' + qty + ' units');
+  refreshInventory();
+  refreshProducts();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
@@ -2126,15 +2413,21 @@ function openAddCustomerModal() {
   openModal('Add Customer', body, footer);
 }
 
-function saveCustomer() {
+async function saveCustomer() {
+  const name = document.getElementById('modalCustName').value.trim();
+  const mobile = document.getElementById('modalCustMobile').value.trim();
+  const email = document.getElementById('modalCustEmail').value.trim();
+  if (!name || !mobile) { alert('Name and Mobile are required'); return; }
+
+  const result = await backendCall('addCustomer', {
+    name, mobile, email, birthday: '', address: '',
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me customer save nahi hua: ' + result.error); return; }
+
   const cust = {
-    CustomerID: 'cust_' + Date.now(),
-    Name: document.getElementById('modalCustName').value,
-    Mobile: document.getElementById('modalCustMobile').value,
-    Email: document.getElementById('modalCustEmail').value,
-    TotalSpend: 0,
-    LoyaltyPoints: 0,
-    DueBalance: 0
+    CustomerID: result.data.customerID, Name: name, Mobile: mobile, Email: email,
+    TotalSpend: 0, LoyaltyPoints: 0, DueBalance: 0
   };
 
   APP_STATE.data.customers.push(cust);
@@ -2144,7 +2437,58 @@ function saveCustomer() {
 }
 
 function editCustomer(id) {
-  alert('Edit feature coming soon');
+  const c = (APP_STATE.data.customers || []).find(x => x.CustomerID === id);
+  if (!c) { alert('Customer not found'); return; }
+
+  const body = `
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" id="modalCustName" value="${c.Name || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mobile</label>
+      <input type="text" class="form-input" id="modalCustMobile" value="${c.Mobile || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="modalCustEmail" value="${c.Email || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Due Balance (₹)</label>
+      <input type="number" class="form-input" id="modalCustDue" value="${c.DueBalance || 0}">
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="updateCustomer('${id}')">Save Changes</button>
+  `;
+
+  openModal('Edit Customer', body, footer);
+}
+
+async function updateCustomer(id) {
+  const c = (APP_STATE.data.customers || []).find(x => x.CustomerID === id);
+  if (!c) return;
+
+  const name = document.getElementById('modalCustName').value.trim();
+  const mobile = document.getElementById('modalCustMobile').value.trim();
+  if (!name || !mobile) { alert('Name and Mobile are required'); return; }
+  const email = document.getElementById('modalCustEmail').value.trim();
+  const dueBalance = Number(document.getElementById('modalCustDue').value) || 0;
+
+  const result = await backendCall('updateCustomer', {
+    customerID: id, Name: name, Mobile: mobile, Email: email, DueBalance: dueBalance,
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me update save nahi hua: ' + result.error); return; }
+
+  c.Name = name; c.Mobile = mobile; c.Email = email; c.DueBalance = dueBalance;
+
+  closeModal();
+  refreshCustomers();
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  alert('✓ Customer update ho gaya');
 }
 
 // ============================================================================
@@ -2188,13 +2532,19 @@ function openAddSupplierModal() {
   openModal('Add Supplier', body, footer);
 }
 
-function saveSupplier() {
-  const supp = {
-    SupplierID: 'supp_' + Date.now(),
-    Name: document.getElementById('modalSupplierName').value,
-    Mobile: document.getElementById('modalSupplierMobile').value,
-    City: document.getElementById('modalSupplierCity').value
-  };
+async function saveSupplier() {
+  const name = document.getElementById('modalSupplierName').value.trim();
+  const mobile = document.getElementById('modalSupplierMobile').value.trim();
+  const city = document.getElementById('modalSupplierCity').value.trim();
+  if (!name) { alert('Name is required'); return; }
+
+  const result = await backendCall('addSupplier', {
+    name, mobile, email: '', address: '', city, gstin: '', bankAccount: '',
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me supplier save nahi hua: ' + result.error); return; }
+
+  const supp = { SupplierID: result.data.supplierID, Name: name, Mobile: mobile, City: city };
 
   APP_STATE.data.suppliers.push(supp);
   closeModal();
@@ -2251,14 +2601,21 @@ function openAddExpenseModal() {
   openModal('Add Expense', body, footer);
 }
 
-function saveExpense() {
+async function saveExpense() {
+  const date = document.getElementById('modalExpDate').value;
+  const category = document.getElementById('modalExpCategory').value;
+  const description = document.getElementById('modalExpDesc').value.trim();
+  const amount = Number(document.getElementById('modalExpAmount').value) || 0;
+
+  const result = await backendCall('addExpense', {
+    date, category, description, amount, staffName: APP_STATE.currentUser.name, notes: '',
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me expense save nahi hua: ' + result.error); return; }
+
   const exp = {
-    ExpenseID: 'exp_' + Date.now(),
-    Date: document.getElementById('modalExpDate').value,
-    Category: document.getElementById('modalExpCategory').value,
-    Description: document.getElementById('modalExpDesc').value,
-    Amount: Number(document.getElementById('modalExpAmount').value),
-    StaffName: APP_STATE.currentUser.name
+    ExpenseID: result.data.expenseID, Date: date, Category: category,
+    Description: description, Amount: amount, StaffName: APP_STATE.currentUser.name
   };
 
   APP_STATE.data.expenses.push(exp);
@@ -2363,20 +2720,21 @@ function openAddStaffModal() {
   openModal('Add Staff', body, footer);
 }
 
-function saveStaff() {
+async function saveStaff() {
   const name = document.getElementById('modalStaffName').value.trim();
   const mobile = document.getElementById('modalStaffMobile').value.trim();
   if (!name || !mobile) { alert('Name and Mobile are required'); return; }
+  const password = document.getElementById('modalStaffPassword').value;
+  const pin = document.getElementById('modalStaffPIN').value || '1234';
+  const role = document.getElementById('modalStaffRole').value;
 
-  const staff = {
-    StaffID: 'staff_' + Date.now(),
-    Name: name,
-    Mobile: mobile,
-    Password: document.getElementById('modalStaffPassword').value,
-    PIN: document.getElementById('modalStaffPIN').value || '1234',
-    Role: document.getElementById('modalStaffRole').value,
-    Status: 'Active'
-  };
+  const result = await backendCall('addStaff', {
+    name, mobile, email: '', password, pin, role, permissions: {},
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me staff save nahi hua: ' + result.error); return; }
+
+  const staff = { StaffID: result.data.staffID, Name: name, Mobile: mobile, Role: role, Status: 'Active' };
 
   APP_STATE.data.staff.push(staff);
   closeModal();
@@ -2402,8 +2760,8 @@ function editStaff(id) {
       <input type="password" class="form-input" id="modalStaffPassword" placeholder="••••••">
     </div>
     <div class="form-group">
-      <label class="form-label">PIN (4 digits)</label>
-      <input type="text" class="form-input" id="modalStaffPIN" maxlength="4" value="${s.PIN || ''}" placeholder="1234">
+      <label class="form-label">PIN (leave blank to keep unchanged)</label>
+      <input type="text" class="form-input" id="modalStaffPIN" maxlength="4" placeholder="1234">
     </div>
     <div class="form-group">
       <label class="form-label">Role</label>
@@ -2429,30 +2787,43 @@ function editStaff(id) {
   openModal('Edit Staff', body, footer);
 }
 
-function updateStaff(id) {
+async function updateStaff(id) {
   const s = (APP_STATE.data.staff || []).find(x => x.StaffID === id);
   if (!s) return;
 
   const name = document.getElementById('modalStaffName').value.trim();
   const mobile = document.getElementById('modalStaffMobile').value.trim();
   if (!name || !mobile) { alert('Name and Mobile are required'); return; }
+  const password = document.getElementById('modalStaffPassword').value;
+  const pin = document.getElementById('modalStaffPIN').value;
+  const role = document.getElementById('modalStaffRole').value;
+  const status = document.getElementById('modalStaffStatus').value;
+
+  const result = await backendCall('updateStaff', {
+    targetStaffID: id, name, mobile, password: password || undefined, pin: pin || undefined,
+    role, status, staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet me update save nahi hua: ' + result.error); return; }
 
   s.Name = name;
   s.Mobile = mobile;
-  const newPassword = document.getElementById('modalStaffPassword').value;
-  if (newPassword) s.Password = newPassword;
-  s.PIN = document.getElementById('modalStaffPIN').value || s.PIN || '1234';
-  s.Role = document.getElementById('modalStaffRole').value;
-  s.Status = document.getElementById('modalStaffStatus').value;
+  s.Role = role;
+  s.Status = status;
 
   closeModal();
   refreshStaff();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
-  alert('✓ Staff updated');
+  alert('✓ Staff Google Sheet me update ho gaya');
 }
 
-function deleteStaff(id) {
+async function deleteStaff(id) {
   if (!confirm('Delete this staff member?')) return;
+
+  const result = await backendCall('deleteStaff', {
+    targetStaffID: id, staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  });
+  if (!result.success) { alert('❌ Google Sheet se staff delete nahi hua: ' + result.error); return; }
+
   APP_STATE.data.staff = (APP_STATE.data.staff || []).filter(x => x.StaffID !== id);
   refreshStaff();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
@@ -2556,7 +2927,6 @@ function savePriceTagTemplate() {
 // ============================================================================
 async function testApiConnection() {
   const url = document.getElementById('apiUrl').value.trim();
-
   if (!url) {
     alert('Please enter Google Apps Script URL');
     return;
@@ -2570,45 +2940,28 @@ async function testApiConnection() {
       alert('✅ Google Sheet Connected Successfully');
       saveConfig();
     } else {
-      alert('❌ Connection Failed');
+      alert('❌ Connection Failed: ' + (data.error || 'unknown response'));
     }
   } catch (err) {
     console.error(err);
-    alert('❌ Unable to connect to Google Apps Script');
+    alert('❌ Unable to connect to Google Apps Script: ' + err.message);
   }
 }
 
+// Every save/update/delete already writes straight to the Sheet as it happens —
+// so "Sync Now" just re-pulls the latest copy from the Sheet (useful after
+// someone else added data, or after this device was offline for a while).
 async function syncNow() {
-  const url = document.getElementById('apiUrl').value.trim();
-
-  if (!url) {
-    alert('Please enter Google Apps Script URL');
-    return;
-  }
-
-  try {
-    saveConfig();
-
-    const response = await fetch(url, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'sync',
-        data: APP_STATE.data
-      })
-    });
-
-    const result = await response.json();
-
-    if (result.success) {
-      alert('✅ Data Synced Successfully');
-    } else {
-      alert('❌ Sync Failed');
-    }
-
-  } catch (err) {
-    console.error(err);
-    alert('❌ Sync Error');
-  }
+  saveConfig();
+  await loadDataFromSheet();
+  refreshProducts();
+  refreshInventory();
+  refreshCustomers();
+  refreshSuppliers();
+  refreshExpenses();
+  refreshStaff();
+  refreshPreorders();
+  alert('✅ Latest data Google Sheet se sync ho gaya');
 }
 
 function saveRazorpayKey() {
@@ -2666,7 +3019,7 @@ function closePinModal() {
   if (pinPromiseResolve) pinPromiseResolve(false);
 }
 
-function verifyPin() {
+async function verifyPin() {
   const pin = 
     document.getElementById('pinInput1').value +
     document.getElementById('pinInput2').value +
@@ -2678,12 +3031,18 @@ function verifyPin() {
     return;
   }
 
-  if (pin === '1234') { // Demo PIN
+  if (!APP_STATE.currentUser || !APP_STATE.currentUser.staffID) {
+    document.getElementById('pinError').textContent = 'Staff ID nahi mila — dobara login karein';
+    return;
+  }
+
+  const result = await backendCall('verifyPin', { staffID: APP_STATE.currentUser.staffID, pin });
+  if (result.success && result.data && result.data.success) {
     document.getElementById('pinModal').classList.remove('active');
     if (pinPromiseResolve) pinPromiseResolve(true);
-  } else {
-    document.getElementById('pinError').textContent = 'Incorrect PIN';
+    return;
   }
+  document.getElementById('pinError').textContent = result.success ? 'Incorrect PIN' : ('Google Sheet se connect nahi ho paya: ' + result.error);
 }
 
 // Auto-focus next PIN input
