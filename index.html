@@ -710,11 +710,11 @@
 // CONFIG & STATE
 // ============================================================================
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbw_KpfA8B-pRA23NCH0MaiZ45AGk0QrP9vH3pg7LwQeK_2vh4m61EysxgAZ_pSSkAoNOw/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbyp77RG4mkSSfhcXkLyTfrkWFhF2ep0cfmSK2DmwNW6UuxR3XMMniuJoX0LpEbaglqa/exec',
   RAZORPAY_KEY: '',
   SHOP_NAME: 'AK FASHION HUB',
   SHOP_LOGO: '',
-  BILL_TEMPLATE: { type: 'thermal', headerText: 'AK FASHION HUB', footerText: 'Thank You!' },
+  BILL_TEMPLATE: { type: 'thermal', headerText: 'AK FASHION HUB', footerText: '9599497909 Thank You!' },
   TAG_TEMPLATE: { showMRP: true, showName: true, showBarcode: true }
 };
 
@@ -1567,7 +1567,7 @@ function buildBillHTML() {
       <div class="bill-header" style="text-align:center;">
         ${CONFIG.SHOP_LOGO ? `<img src="${CONFIG.SHOP_LOGO}" class="bill-logo" alt="Logo">` : ''}
         <div class="bill-title">${headerText}</div>
-        <div style="font-size: 10px; color: #666; margin-top: 4px;">ERP & POS System</div>
+        
       </div>
       
       <div style="font-size: 11px; margin: 8px 0; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0;">
@@ -3117,7 +3117,7 @@ function updateBillPreview() {
     <div class="template-preview ${CONFIG.BILL_TEMPLATE.type === 'thermal' ? 'bill-3-5' : 'bill-a4'}">
       <div class="bill-header">
         <div class="bill-title">${headerText}</div>
-        <div style="font-size: 9px; color: #666;">ERP & POS System</div>
+       
       </div>
       
       <div style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10px;">
