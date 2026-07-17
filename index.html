@@ -2472,29 +2472,36 @@ function renderTagPicker() {
 }
 
 function addToTagQueue(variantID, uid, name, color, size, salePrice, mrp) {
+
   const variant = APP_STATE.data.variants?.find(
-  v => v.VariantID === variantID
-);
+    v => v.VariantID === variantID
+  );
+
   const qty = Number(document.getElementById('qty_' + variantID).value) || 1;
   const existing = tagQueue.find(i => i.variantID === variantID);
 
   if (existing) {
+
     existing.qty += qty;
+
   } else {
+
     tagQueue.push({
-  variantID,
-  uid,
-  barcode: variant?.Barcode || variantID,
-  name,
-  color,
-  size,
-  price: Number(salePrice),
-  mrp: Number(mrp),
-  qty
-});
+      variantID,
+      uid,
+      barcode: variant?.Barcode || variantID,
+      name,
+      color,
+      size,
+      price: Number(salePrice),
+      mrp: Number(mrp),
+      qty
+    });
+
+  }
+
   updateTagQueueDisplay();
 }
-
 // Removes ONE tag at a time (decrements qty by 1). Only drops the row once qty hits 0,
 // so printing 6-8 copies of a tag no longer disappears all at once when you click Remove.
 function removeFromTagQueue(index) {
