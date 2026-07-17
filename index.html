@@ -151,7 +151,12 @@
       .no-print { display: none !important; }
     }
     
-    .bill-3-5 { width: 3.5in; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 11px; }
+   .bill-3-5 {
+  width: 3in;
+  margin: 0 auto;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
     .bill-a4 { width: 8.5in; margin: 0 auto; font-family: 'Courier New', monospace; font-size: 12px; }
     
     .bill-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
@@ -824,9 +829,9 @@ function isDuplicateScan(code) {
 
   const now = Date.now();
   // Housekeeping: drop anything older than a minute so this map never grows unbounded
-  Object.keys(recent).forEach(k => { if (now - recent[k] > 60000) delete recent[k]; });
+  Object.keys(recent).forEach(k => { if (now - recent[k] > 5000) delete recent[k]; });
 
-  const isDup = recent[code] && (now - recent[code] < 60000);
+  const isDup = recent[code] && (now - recent[code] < 5000);
   recent[code] = now;
   localStorage.setItem('recentScans', JSON.stringify(recent));
   return isDup;
@@ -1278,100 +1283,87 @@ function refreshDashboard() {
 // ============================================================================
 // BILLING / POS
 // ============================================================================
-function addToCart(uid) {
-  const product = APP_STATE.data.products.find(p => p.UID === uid);
-  if (!product) {
-    showToast('Product not found: ' + uid, true);
+function addToCart(code) {
+
+  let foundProduct = null;
+  let foundVariant = null;
+
+  APP_STATE.data.products.forEach(product => {
+
+    if(product.variants){
+
+      product.variants.forEach(variant => {
+
+        if(
+          product.UID === code ||
+          variant.Barcode === code ||
+          variant.VariantBarcode === code ||
+          variant.VariantID === code
+        ){
+          foundProduct = product;
+          foundVariant = variant;
+        }
+
+      });
+
+    }
+
+  });
+
+  if (!foundProduct || !foundVariant) {
+    showToast('Product not found: ' + code, true);
     return;
   }
 
-  const variant = product.variants && product.variants[0];
-  if (!variant) {
-    showToast('No variants available for ' + product.Name, true);
-    return;
-  }
+  const stock = Number(foundVariant.Stock) || 0;
 
-  const stock = Number(variant.Stock) || 0;
   if (stock <= 0) {
-    showToast('Out of Stock: ' + product.Name, true);
+    showToast('Out of Stock: ' + foundProduct.Name, true);
     return;
   }
 
-  const existingItem = APP_STATE.cart.find(item => item.variantID === variant.VariantID);
+  const existingItem = APP_STATE.cart.find(
+    item => item.variantID === foundVariant.VariantID
+  );
+
   if (existingItem) {
+
     if (existingItem.quantity + 1 > stock) {
-      showToast('Only ' + stock + ' in stock: ' + product.Name, true);
+      showToast('Only ' + stock + ' in stock', true);
       return;
     }
+
     existingItem.quantity++;
+
   } else {
+
     APP_STATE.cart.push({
-      productID: product.ProductID,
-      variantID: variant.VariantID,
-      uid: product.UID,
-      name: product.Name,
-      color: variant.Color,
-      size: variant.Size,
+      productID: foundProduct.ProductID,
+      variantID: foundVariant.VariantID,
+      uid: foundProduct.UID,
+      barcode: foundVariant.Barcode || '',
+      name: foundProduct.Name,
+      color: foundVariant.Color,
+      size: foundVariant.Size,
       quantity: 1,
-      salePrice: Number(product.SalePrice) || 0
+      salePrice: Number(foundVariant.SalePrice || foundProduct.SalePrice || 0)
     });
+
   }
 
-  showToast('✓ Added: ' + product.Name + ' (' + variant.Color + '/' + variant.Size + ')');
+  showToast(
+    '✓ Added: ' +
+    foundProduct.Name +
+    ' (' +
+    foundVariant.Color +
+    '/' +
+    foundVariant.Size +
+    ')'
+  );
+
   renderCart();
   updateBillTotals();
 }
-
-function renderCart() {
-  localStorage.setItem('activeCart', JSON.stringify(APP_STATE.cart));
-
-  const cartEl = document.getElementById('billItems');
-  if (APP_STATE.cart.length === 0) {
-    cartEl.innerHTML = '<div style="text-align: center; color: var(--neutral-500); padding: 20px;">Empty cart — scan a product</div>';
-    return;
-  }
-
-  cartEl.innerHTML = APP_STATE.cart.map((item, i) => `
-    <div class="cart-item">
-      <div class="cart-item-header">
-        <div>
-          <div class="cart-item-name">${item.name}</div>
-          <div style="font-size: 11px; color: var(--neutral-500);">${item.color} / ${item.size}</div>
-        </div>
-        <div class="cart-item-remove" onclick="removeFromCart(${i})">✕</div>
-      </div>
-      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
-        <div class="cart-item-qty">
-          Qty: <input type="number" value="${item.quantity}" min="1" onchange="updateCartQty(${i}, this.value)">
-        </div>
-        <div style="font-weight: 600;">₹${(item.quantity * item.salePrice).toLocaleString('en-IN')}</div>
-      </div>
-    </div>
-  `).join('');
-}
-
-function updateCartQty(index, qty) {
-  APP_STATE.cart[index].quantity = Math.max(1, Number(qty));
-  renderCart();
-  updateBillTotals();
-}
-
-function removeFromCart(index) {
-  APP_STATE.cart.splice(index, 1);
-  renderCart();
-  updateBillTotals();
-}
-
-function updateBillTotals() {
-  const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
-  const discount = Math.min(subtotal, Number(document.getElementById('billDiscountAmount').value) || 0);
-  const total = subtotal - discount;
-
-  document.getElementById('billSubtotal').textContent = '₹' + subtotal.toLocaleString('en-IN');
-  document.getElementById('billDiscount').textContent = '-₹' + Math.round(discount).toLocaleString('en-IN');
-  document.getElementById('billTotal').textContent = '₹' + Math.round(total).toLocaleString('en-IN');
-}
-
 let billSubmitting = false;
 
 async function completeBill() {
@@ -1651,10 +1643,10 @@ function printViaIframe(bodyHTML, extraCSS) {
   `);
   doc.close();
 
-  setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-  }, 300);
+  iframe.onload = () => {
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
+};
 }
 
 function printBill() {
@@ -1665,7 +1657,13 @@ function printBill() {
 
   const billHTML = buildBillHTML();
   printViaIframe(billHTML, `
-    .bill-thermal { width: 3.5in; font-size: 11px; }
+    .bill-thermal {
+  width: 3in;
+  min-height: auto;
+  height: auto;
+  overflow: visible;
+  font-size: 11px;
+}
     .bill-a4 { width: 8.5in; font-size: 12px; }
     .bill-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
     .bill-logo { height: 40px; margin-bottom: 4px; object-fit: contain; }
@@ -1969,12 +1967,29 @@ function collectVariantRows(existingVariants) {
     const vid = row.dataset.vid;
     const existing = vid && byId[vid];
     variants.push({
-      VariantID: (existing && existing.VariantID) || ('var_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)),
-      Color: color, Size: size, Stock: stock,
-      Floor: (existing && existing.Floor) || row.dataset.floor || '',
-      Rack: (existing && existing.Rack) || row.dataset.rack || '',
-      Shelf: (existing && existing.Shelf) || row.dataset.shelf || ''
-    });
+  VariantID: (existing && existing.VariantID) || ('var_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)),
+
+  Barcode:
+    (
+      (existing && existing.Barcode)
+      ||
+      (
+        color.replace(/\s+/g,'').toUpperCase()
+        + '-' +
+        size.replace(/\s+/g,'').toUpperCase()
+        + '-' +
+        Date.now().toString().slice(-6)
+      )
+    ),
+
+  Color: color,
+  Size: size,
+  Stock: stock,
+
+  Floor: (existing && existing.Floor) || row.dataset.floor || '',
+  Rack: (existing && existing.Rack) || row.dataset.rack || '',
+  Shelf: (existing && existing.Shelf) || row.dataset.shelf || ''
+});
   });
   return variants;
 }
@@ -2445,15 +2460,26 @@ function renderTagPicker() {
 }
 
 function addToTagQueue(variantID, uid, name, color, size, salePrice, mrp) {
+  const variant = APP_STATE.data.variants?.find(
+  v => v.VariantID === variantID
+);
   const qty = Number(document.getElementById('qty_' + variantID).value) || 1;
   const existing = tagQueue.find(i => i.variantID === variantID);
 
   if (existing) {
     existing.qty += qty;
   } else {
-    tagQueue.push({ variantID, uid, name, color, size, price: Number(salePrice), mrp: Number(mrp), qty });
-  }
-
+    tagQueue.push({
+  variantID,
+  uid,
+  barcode: variant?.Barcode || variantID,
+  name,
+  color,
+  size,
+  price: Number(salePrice),
+  mrp: Number(mrp),
+  qty
+});
   updateTagQueueDisplay();
 }
 
@@ -2548,8 +2574,8 @@ function renderBarcodeDataURI(text) {
 function buildLabelSheetsHTML() {
   const tagSize = document.getElementById('tagSize').value;
   const colsPerSheet = tagSize === '2x3' ? 3 : 2;
-  const width = tagSize === '2x3' ? '2in' : '3in';
-  const height = tagSize === '2x3' ? '3in' : '4.2in';
+  const width = tagSize === '2x3' ? '1.9in' : '1.9in';
+const height = tagSize === '2x3' ? '2.9in' : '2.9in';
 
   return labelSheets.map((sheet, si) => `
     <div class="tag-sheet" style="page-break-after: always; margin-bottom: 20px; border: 2px solid #ddd; padding: 12px; background: white;">
@@ -2557,9 +2583,11 @@ function buildLabelSheetsHTML() {
       <div style="display: grid; grid-template-columns: repeat(${colsPerSheet}, 1fr); gap: 8px;">
         ${sheet.slots.map(tag => {
           if (!tag) {
-            return `<div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box;"></div>`;
-          }
-          const barcodeImg = CONFIG.TAG_TEMPLATE.showBarcode ? renderBarcodeDataURI(tag.uid) : '';
+  return '';
+}
+         const barcodeImg = CONFIG.TAG_TEMPLATE.showBarcode
+ ? renderBarcodeDataURI(tag.barcode || tag.uid)
+ : '';
           return `
             <div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
               ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
