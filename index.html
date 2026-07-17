@@ -161,11 +161,17 @@
     .bill-item { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; }
     .bill-total { font-weight: bold; font-size: 12px; text-align: right; margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; }
     
+    /* ========== MOBILE MENU TOGGLE ========== */
+    .mobile-menu-btn { display: none; font-size: 16px; padding: 8px 12px; }
+    .sidebar-backdrop { display: none; }
+
     /* ========== RESPONSIVE ========== */
     @media (max-width: 768px) {
       .app-shell.active { grid-template-columns: 1fr; }
       .sidebar { position: fixed; left: -260px; top: 0; height: 100vh; z-index: 999; transition: left 0.3s; }
       .sidebar.open { left: 0; }
+      .mobile-menu-btn { display: inline-flex; }
+      .sidebar-backdrop.open { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 998; }
       .topbar { grid-column: 1; }
       .content { grid-column: 1; }
       .grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
@@ -202,8 +208,11 @@
 
 <!-- APP SHELL -->
 <div class="app-shell" id="appShell">
+  <!-- SIDEBAR BACKDROP (mobile only) -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <img id="sidebarLogoImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Ctext x='5' y='40' font-size='40' font-weight='bold' fill='%23fff'%3Ea%3C/text%3E%3C/svg%3E" class="sidebar-logo-img" alt="Logo">
       <span class="sidebar-text" id="sidebarNameText">AK HUB</span>
@@ -229,6 +238,7 @@
   <!-- TOPBAR -->
   <div class="topbar">
     <div class="topbar-left">
+      <button class="btn btn-secondary btn-small mobile-menu-btn" id="mobileMenuBtn" onclick="toggleSidebar()">☰</button>
       <h2 class="topbar-title" id="screenTitle">Dashboard</h2>
     </div>
     <div class="topbar-right">
@@ -281,7 +291,7 @@
           </div>
           <div class="form-group" style="display:flex; gap:8px;">
             <input type="text" class="form-input" id="billingScan" placeholder="🔍 Scan barcode / UID" autofocus style="flex:1;">
-            <button type="button" class="btn btn-secondary" onclick="openCameraScanner(addToCart)">📷 Scan</button>
+            <button type="button" class="btn btn-secondary" onclick="openCameraScanner(addToCart, true)">📷 Scan</button>
           </div>
           <div id="billItems" style="min-height: 250px; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; background: var(--neutral-50);"><div style="text-align: center; color: var(--neutral-500);">Empty cart - scan a product</div></div>
         </div>
@@ -298,8 +308,8 @@
             <input type="text" class="form-input" id="billCustomerName" placeholder="Name">
           </div>
           <div class="form-group">
-            <label class="form-label">Discount %</label>
-            <input type="number" class="form-input" id="billDiscountPct" value="0" min="0" max="100" oninput="updateBillTotals()">
+            <label class="form-label">Discount (₹)</label>
+            <input type="number" class="form-input" id="billDiscountAmount" value="0" min="0" oninput="updateBillTotals()">
           </div>
           <div class="form-group">
             <label class="form-label">Payment Mode</label>
@@ -678,10 +688,11 @@
     <div class="modal-body">
       <div id="scannerReader" style="width: 100%;"></div>
       <div id="scannerError" style="color: var(--danger); font-size: 12px; text-align: center; margin-top: 10px;"></div>
-      <p style="font-size: 11px; color: var(--neutral-500); text-align: center; margin-top: 10px;">Camera ko barcode/QR ke saamne rakhein — scan hote hi apne aap band ho jayega.</p>
+      <p id="scannerHint" style="font-size: 11px; color: var(--neutral-500); text-align: center; margin-top: 10px;">Camera ko barcode/QR ke saamne rakhein — scan hote hi apne aap band ho jayega.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeCameraScanner()">Cancel</button>
+      <button class="btn btn-primary" id="scannerDoneBtn" style="display:none;" onclick="closeCameraScanner()">✓ Done</button>
     </div>
   </div>
 </div>
@@ -733,10 +744,19 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupBarcodeScanning() {
+  // USB/handheld barcode scanners act like a keyboard — they type the code fast and
+  // send Enter. This same path also handles manual typing, so both work identically.
   document.getElementById('billingScan')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      addToCart(e.target.value);
+      const code = e.target.value.trim();
       e.target.value = '';
+      if (!code) return;
+      if (isDuplicateScan(code)) {
+        showToast('Barcode already scanned recently.', true);
+        return;
+      }
+      playBeep();
+      addToCart(code);
     }
   });
 
@@ -758,19 +778,84 @@ function setupBarcodeScanning() {
 }
 
 // ============================================================================
+// TOAST / BEEP — lightweight, non-blocking feedback (alert() would freeze
+// continuous scanning, since it pauses JS until manually dismissed)
+// ============================================================================
+function showToast(message, isError = false) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:3000; display:flex; flex-direction:column; gap:8px; align-items:center;';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = `padding:10px 18px; border-radius:6px; font-size:13px; font-weight:600; color:#fff; box-shadow:var(--shadow-lg); background:${isError ? '#EF4444' : '#10B981'}; animation: fadeIn 0.2s;`;
+  container.appendChild(toast);
+
+  setTimeout(() => toast.remove(), 2200);
+}
+
+let audioCtx = null;
+function playBeep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 1300;
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.12);
+  } catch (e) { /* audio not available — silently skip, scanning still works */ }
+}
+
+// ============================================================================
+// DUPLICATE SCAN PROTECTION — same barcode within 60s is ignored
+// ============================================================================
+function isDuplicateScan(code) {
+  let recent;
+  try { recent = JSON.parse(localStorage.getItem('recentScans') || '{}'); } catch (e) { recent = {}; }
+
+  const now = Date.now();
+  // Housekeeping: drop anything older than a minute so this map never grows unbounded
+  Object.keys(recent).forEach(k => { if (now - recent[k] > 60000) delete recent[k]; });
+
+  const isDup = recent[code] && (now - recent[code] < 60000);
+  recent[code] = now;
+  localStorage.setItem('recentScans', JSON.stringify(recent));
+  return isDup;
+}
+
+// ============================================================================
 // CAMERA BARCODE / QR SCANNER (mobile camera or laptop webcam — no external service)
+// Supports EAN-13, UPC, Code128, QR and other common formats via html5-qrcode/ZXing.
 // ============================================================================
 let activeScanner = null;
 let scannerResultCallback = null;
+let scannerContinuous = false;
 
-function openCameraScanner(onResult) {
+// continuous=true keeps the camera running and calls onResult for every new
+// (non-duplicate) code — used for billing, so dozens of items can be scanned
+// one after another without reopening the camera each time.
+function openCameraScanner(onResult, continuous = false) {
   if (typeof Html5Qrcode === 'undefined') {
     alert('Camera scanner library load nahi hui — internet connection check karein.');
     return;
   }
   scannerResultCallback = onResult;
+  scannerContinuous = continuous;
   document.getElementById('scannerError').textContent = '';
   document.getElementById('scannerModal').classList.add('active');
+  document.getElementById('scannerDoneBtn').style.display = continuous ? 'inline-flex' : 'none';
+  document.getElementById('scannerHint').textContent = continuous
+    ? 'Camera chalu rahega — ek ke baad ek jitne chahiye scan karte jaayein, phir "Done" dabayein.'
+    : 'Camera ko barcode/QR ke saamne rakhein — scan hote hi apne aap band ho jayega.';
 
   activeScanner = new Html5Qrcode('scannerReader');
   const config = { fps: 10, qrbox: { width: 250, height: 150 } };
@@ -786,8 +871,19 @@ function openCameraScanner(onResult) {
       backCam.id,
       config,
       (decodedText) => {
-        closeCameraScanner();
-        if (scannerResultCallback) scannerResultCallback(decodedText);
+        if (isDuplicateScan(decodedText)) {
+          showToast('Barcode already scanned recently.', true);
+          return;
+        }
+        playBeep();
+
+        if (scannerContinuous) {
+          if (scannerResultCallback) scannerResultCallback(decodedText);
+          // camera keeps running for the next item — don't close
+        } else {
+          closeCameraScanner();
+          if (scannerResultCallback) scannerResultCallback(decodedText);
+        }
       },
       () => { /* ignore per-frame scan errors */ }
     ).catch(err => {
@@ -958,6 +1054,8 @@ function successfulLogin() {
   document.getElementById('userName').textContent = APP_STATE.currentUser.name;
   
   loadDataFromSheet();
+  restoreActiveCart();
+  syncPendingBills();
   navigateToScreen('dashboard');
 }
 
@@ -981,8 +1079,24 @@ function checkSession() {
     document.getElementById('appShell').classList.add('active');
     document.getElementById('userName').textContent = APP_STATE.currentUser.name;
     loadDataFromSheet();
+    restoreActiveCart();
+    syncPendingBills();
     navigateToScreen('dashboard');
   }
+}
+
+// If the page reloaded (connection drop, accidental refresh) while items were
+// still scanned but not yet billed, bring them back instead of losing the cart.
+function restoreActiveCart() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('activeCart') || '[]');
+    if (Array.isArray(saved) && saved.length) {
+      APP_STATE.cart = saved;
+      renderCart();
+      updateBillTotals();
+      showToast('Pichla cart restore ho gaya (' + saved.length + ' items)');
+    }
+  } catch (e) { /* corrupt/missing cache — just start fresh */ }
 }
 
 // Loads all data fresh from the Google Sheet. Falls back to whatever was cached
@@ -1107,8 +1221,22 @@ function navigateToScreen(screenName) {
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     navigateToScreen(item.dataset.screen);
+    closeSidebar(); // on mobile, picking a screen should close the menu automatically
   });
 });
+
+// ============================================================================
+// MOBILE SIDEBAR MENU
+// ============================================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarBackdrop').classList.toggle('open');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarBackdrop').classList.remove('open');
+}
 
 // ============================================================================
 // DASHBOARD
@@ -1153,23 +1281,28 @@ function refreshDashboard() {
 function addToCart(uid) {
   const product = APP_STATE.data.products.find(p => p.UID === uid);
   if (!product) {
-    alert('Product not found: ' + uid);
+    showToast('Product not found: ' + uid, true);
     return;
   }
 
   const variant = product.variants && product.variants[0];
   if (!variant) {
-    alert('No variants available');
+    showToast('No variants available for ' + product.Name, true);
     return;
   }
 
-  if (Number(variant.Stock) <= 0) {
-    alert('Out of stock');
+  const stock = Number(variant.Stock) || 0;
+  if (stock <= 0) {
+    showToast('Out of Stock: ' + product.Name, true);
     return;
   }
 
   const existingItem = APP_STATE.cart.find(item => item.variantID === variant.VariantID);
   if (existingItem) {
+    if (existingItem.quantity + 1 > stock) {
+      showToast('Only ' + stock + ' in stock: ' + product.Name, true);
+      return;
+    }
     existingItem.quantity++;
   } else {
     APP_STATE.cart.push({
@@ -1184,11 +1317,14 @@ function addToCart(uid) {
     });
   }
 
+  showToast('✓ Added: ' + product.Name + ' (' + variant.Color + '/' + variant.Size + ')');
   renderCart();
   updateBillTotals();
 }
 
 function renderCart() {
+  localStorage.setItem('activeCart', JSON.stringify(APP_STATE.cart));
+
   const cartEl = document.getElementById('billItems');
   if (APP_STATE.cart.length === 0) {
     cartEl.innerHTML = '<div style="text-align: center; color: var(--neutral-500); padding: 20px;">Empty cart — scan a product</div>';
@@ -1228,8 +1364,7 @@ function removeFromCart(index) {
 
 function updateBillTotals() {
   const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
-  const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
-  const discount = subtotal * (discountPct / 100);
+  const discount = Math.min(subtotal, Number(document.getElementById('billDiscountAmount').value) || 0);
   const total = subtotal - discount;
 
   document.getElementById('billSubtotal').textContent = '₹' + subtotal.toLocaleString('en-IN');
@@ -1252,8 +1387,7 @@ async function completeBill() {
     const customerName = document.getElementById('billCustomerName').value.trim() || 'Walk-in';
 
     const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
-    const discountPct = Number(document.getElementById('billDiscountPct').value) || 0;
-    const discountAmount = subtotal * (discountPct / 100);
+    const discountAmount = Math.min(subtotal, Number(document.getElementById('billDiscountAmount').value) || 0);
     const totalAmount = subtotal - discountAmount;
     const paymentMode = document.getElementById('billPaymentMode').value;
 
@@ -1262,16 +1396,16 @@ async function completeBill() {
         alert('Razorpay not configured. Use Cash payment.');
         return;
       }
-      initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct);
+      initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount);
     } else {
-      await createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode);
+      await createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode);
     }
   } finally {
     billSubmitting = false;
   }
 }
 
-function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct) {
+function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount) {
   const options = {
     key: CONFIG.RAZORPAY_KEY,
     amount: Math.round(totalAmount * 100),
@@ -1284,7 +1418,7 @@ function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subt
     },
     theme: { color: '#000000' },
     handler: function(response) {
-      createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, document.getElementById('billPaymentMode').value, response.razorpay_payment_id);
+      createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, document.getElementById('billPaymentMode').value, response.razorpay_payment_id);
     }
   };
 
@@ -1292,38 +1426,59 @@ function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subt
   rzp.open();
 }
 
-async function createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, discountPct, paymentMode, paymentID = null) {
+async function createBillDirectly(customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID = null) {
   const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
 
   const completeBtn = document.querySelector('.btn-primary.btn-block');
   if (completeBtn) { completeBtn.disabled = true; completeBtn.textContent = 'Saving...'; }
 
-  const result = await backendCall('addBill', {
+  const payload = {
     customerID: customerMobile ? 'cust_' + customerMobile : 'walk-in',
     customerName, customerMobile,
     staffID, staffName: APP_STATE.currentUser.name,
-    subtotal, discountPercent: discountPct, discountAmount: Math.round(discountAmount),
+    subtotal, discountPercent: 0, discountAmount: Math.round(discountAmount),
     taxAmount: 0, totalAmount: Math.round(totalAmount), paymentMode,
     items: APP_STATE.cart.map(item => ({
       variantID: item.variantID, productID: item.productID, uid: item.uid,
       color: item.color, size: item.size, quantity: item.quantity, salePrice: item.salePrice
     }))
-  });
+  };
+
+  // Weak/no internet — don't lose the sale. Queue it locally and finish the
+  // checkout as normal; it auto-syncs to the Sheet the moment we're back online.
+  if (!navigator.onLine) {
+    if (completeBtn) { completeBtn.disabled = false; completeBtn.textContent = '✓ Complete Sale'; }
+    finishBillLocally('local_' + Date.now(), 'BILL-OFFLINE-' + Date.now(), customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID, payload, true);
+    return;
+  }
+
+  const result = await backendCall('addBill', payload);
 
   if (completeBtn) { completeBtn.disabled = false; completeBtn.textContent = '✓ Complete Sale'; }
 
   if (!result.success) {
+    // A genuine network failure mid-request — same safety net as being offline.
+    if (/fetch|network|failed/i.test(result.error || '')) {
+      finishBillLocally('local_' + Date.now(), 'BILL-OFFLINE-' + Date.now(), customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID, payload, true);
+      return;
+    }
     alert('❌ Bill Google Sheet me save nahi hua: ' + result.error + '\n\nDobara try karein — koi partial/duplicate bill nahi bana.');
     return;
   }
 
   const { billID, billNumber } = result.data;
+  finishBillLocally(billID, billNumber, customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID, null, false);
+}
 
+// Shared by both the normal (online) and offline-queued paths — updates local
+// bill/stock records and resets the cart the same way either way.
+function finishBillLocally(billID, billNumber, customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID, queuedPayload, isOffline) {
   const bill = {
     BillID: billID, BillNumber: billNumber, CustomerName: customerName, CustomerMobile: customerMobile,
-    StaffName: APP_STATE.currentUser.name, Subtotal: subtotal, DiscountPercent: discountPct,
+    StaffName: APP_STATE.currentUser.name, Subtotal: subtotal, DiscountPercent: 0,
     DiscountAmount: Math.round(discountAmount), TotalAmount: Math.round(totalAmount),
-    PaymentMode: paymentMode, PaymentID: paymentID || '', Status: 'Completed', CreatedDate: new Date().toISOString()
+    PaymentMode: paymentMode, PaymentID: paymentID || '',
+    Status: isOffline ? 'Pending Sync' : 'Completed', CreatedDate: new Date().toISOString()
   };
   APP_STATE.data.bills.push(bill);
 
@@ -1333,8 +1488,8 @@ async function createBillDirectly(customerName, customerMobile, totalAmount, sub
       Size: item.size, Quantity: item.quantity, SalePrice: item.salePrice
     });
 
-    // Backend already reduced the Sheet's stock (addBill calls updateStock server-side);
-    // mirror the same change locally so the UI doesn't need a full reload to stay in sync.
+    // Deduct stock locally right away (whether synced yet or not) so the UI/Cart
+    // reflects reality immediately; the Sheet gets the same deduction once synced.
     APP_STATE.data.products.forEach(p => {
       const v = p.variants?.find(v => v.VariantID === item.variantID);
       if (v) {
@@ -1344,9 +1499,17 @@ async function createBillDirectly(customerName, customerMobile, totalAmount, sub
     });
   });
 
-  alert('✓ Bill #' + billNumber + ' Google Sheet me save ho gaya\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
+  if (isOffline && queuedPayload) {
+    const pending = JSON.parse(localStorage.getItem('pendingBills') || '[]');
+    pending.push({ localBillID: billID, payload: queuedPayload });
+    localStorage.setItem('pendingBills', JSON.stringify(pending));
+    showToast('⚠️ Internet nahi hai — bill local me save ho gaya, connection wapas aate hi Sheet me chala jaayega', true);
+  } else {
+    alert('✓ Bill #' + billNumber + ' Google Sheet me save ho gaya\nAmount: ₹' + totalAmount.toLocaleString('en-IN'));
+  }
 
   APP_STATE.cart = [];
+  document.getElementById('billDiscountAmount').value = 0;
   renderCart();
   updateBillTotals();
   document.getElementById('billCustomerMobile').value = '';
@@ -1358,13 +1521,53 @@ async function createBillDirectly(customerName, customerMobile, totalAmount, sub
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }
 
+// ============================================================================
+// OFFLINE BILL SYNC — retries any bills that were saved locally while offline
+// ============================================================================
+async function syncPendingBills() {
+  let pending;
+  try { pending = JSON.parse(localStorage.getItem('pendingBills') || '[]'); } catch (e) { pending = []; }
+  if (!pending.length || !navigator.onLine) return;
+
+  const stillPending = [];
+  let syncedCount = 0;
+
+  for (const entry of pending) {
+    const result = await backendCall('addBill', entry.payload);
+    if (result.success) {
+      syncedCount++;
+      // Update the local bill record so it stops showing as "Pending Sync"
+      const localBill = APP_STATE.data.bills.find(b => b.BillID === entry.localBillID);
+      if (localBill) {
+        localBill.BillID = result.data.billID;
+        localBill.BillNumber = result.data.billNumber;
+        localBill.Status = 'Completed';
+      }
+      APP_STATE.data.billItems.forEach(bi => { if (bi.BillID === entry.localBillID) bi.BillID = result.data.billID; });
+    } else {
+      stillPending.push(entry); // leave it queued, try again next time
+    }
+  }
+
+  localStorage.setItem('pendingBills', JSON.stringify(stillPending));
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+
+  if (syncedCount > 0) {
+    showToast('✓ ' + syncedCount + ' offline bill(s) ab Google Sheet me sync ho gaye');
+    refreshDashboard();
+  }
+}
+
+window.addEventListener('online', syncPendingBills);
+setInterval(syncPendingBills, 30000); // safety-net retry every 30s in case the 'online' event is missed
+
 function buildBillHTML() {
   const templateType = CONFIG.BILL_TEMPLATE.type || 'thermal';
   const headerText = CONFIG.BILL_TEMPLATE.headerText || 'AK FASHION HUB';
   const footerText = CONFIG.BILL_TEMPLATE.footerText || 'Thank You!';
 
   const subtotal = APP_STATE.cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
-  const discount = subtotal * ((Number(document.getElementById('billDiscountPct').value) || 0) / 100);
+  const discount = Math.min(subtotal, Number(document.getElementById('billDiscountAmount').value) || 0);
   const total = subtotal - discount;
 
   return `
@@ -1420,6 +1623,40 @@ function buildBillHTML() {
   `;
 }
 
+// Prints through a hidden iframe rather than window.open('', '_blank') — mobile
+// browsers (and some in-app webviews) block that popup silently, which was the
+// reason printing wasn't working. An iframe isn't a popup, so it can't be blocked.
+function printViaIframe(bodyHTML, extraCSS) {
+  let iframe = document.getElementById('hiddenPrintFrame');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'hiddenPrintFrame';
+    iframe.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0;';
+    document.body.appendChild(iframe);
+  }
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; }
+        ${extraCSS || ''}
+      </style>
+    </head>
+    <body>${bodyHTML}</body>
+    </html>
+  `);
+  doc.close();
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 300);
+}
+
 function printBill() {
   if (APP_STATE.cart.length === 0) {
     alert('No items to print');
@@ -1427,25 +1664,15 @@ function printBill() {
   }
 
   const billHTML = buildBillHTML();
-
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { margin: 0; padding: 0; font-family: 'Courier New', monospace; }
-        @media print {
-          .bill-thermal { width: 3.5in; }
-          .bill-a4 { width: 8.5in; }
-        }
-      </style>
-    </head>
-    <body>${billHTML}</body>
-    </html>
+  printViaIframe(billHTML, `
+    .bill-thermal { width: 3.5in; font-size: 11px; }
+    .bill-a4 { width: 8.5in; font-size: 12px; }
+    .bill-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+    .bill-logo { height: 40px; margin-bottom: 4px; object-fit: contain; }
+    .bill-title { font-weight: bold; font-size: 13px; margin: 4px 0; }
+    .bill-items { margin: 12px 0; }
+    .bill-total { font-weight: bold; font-size: 12px; text-align: right; margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; }
   `);
-  printWindow.document.close();
-  setTimeout(() => printWindow.print(), 500);
 }
 
 // Renders the bill as a PNG image (via html2canvas — free, no paid API) and shares it
@@ -2303,60 +2530,65 @@ function generateLabelSheets() {
   previewLabelSheets();
 }
 
-function previewLabelSheets() {
+// Renders a barcode to a standalone PNG data-URI (via an offscreen canvas) instead of
+// an on-page <svg>. This lets the exact same markup be reused for the on-screen preview
+// AND for the print iframe — a live SVG + JsBarcode(selector) only ever worked in the
+// main page's DOM, so printing (a separate document) rendered with no barcodes at all.
+function renderBarcodeDataURI(text) {
+  try {
+    const canvas = document.createElement('canvas');
+    JsBarcode(canvas, text, { format: 'CODE128', height: 40, displayValue: false, margin: 0 });
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('Barcode render error:', e);
+    return '';
+  }
+}
+
+function buildLabelSheetsHTML() {
   const tagSize = document.getElementById('tagSize').value;
   const colsPerSheet = tagSize === '2x3' ? 3 : 2;
-  
+  const width = tagSize === '2x3' ? '2in' : '3in';
+  const height = tagSize === '2x3' ? '3in' : '4.2in';
+
+  return labelSheets.map((sheet, si) => `
+    <div class="tag-sheet" style="page-break-after: always; margin-bottom: 20px; border: 2px solid #ddd; padding: 12px; background: white;">
+      <div style="text-align: center; font-size: 10px; color: #888; margin-bottom: 8px;" class="no-print">Sheet ${si + 1} of ${labelSheets.length}</div>
+      <div style="display: grid; grid-template-columns: repeat(${colsPerSheet}, 1fr); gap: 8px;">
+        ${sheet.slots.map(tag => {
+          if (!tag) {
+            return `<div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box;"></div>`;
+          }
+          const barcodeImg = CONFIG.TAG_TEMPLATE.showBarcode ? renderBarcodeDataURI(tag.uid) : '';
+          return `
+            <div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
+              ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
+              <div style="color: #888; margin-bottom: 4px; font-size: 8px;">${tag.color}/${tag.size}</div>
+              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 25px; width: 70px;">` : ''}
+              <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top: 4px;">
+                ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 11px; color: #888;">₹${tag.mrp}</span>` : ''}
+                <span style="font-size: 16px; font-weight: 800; color: #000;">₹${tag.price}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function previewLabelSheets() {
+  const tagSize = document.getElementById('tagSize').value;
   const preview = document.getElementById('sheetPreview');
-  
+
   preview.innerHTML = `
     <div style="margin-top: 20px;">
       <h3 style="margin-bottom: 12px;">Sheet Preview (${labelSheets.length} sheets × ${tagSize})</h3>
-      ${labelSheets.map((sheet, si) => `
-        <div style="page-break-after: always; margin-bottom: 20px; border: 2px solid var(--neutral-300); padding: 12px; background: white;">
-          <div style="text-align: center; font-size: 10px; color: var(--neutral-500); margin-bottom: 8px;">Sheet ${si + 1} of ${labelSheets.length}</div>
-          <div style="display: grid; grid-template-columns: repeat(${colsPerSheet}, 1fr); gap: 8px;">
-            ${sheet.slots.map((tag, idx) => {
-              const width = tagSize === '2x3' ? '2in' : '3in';
-              const height = tagSize === '2x3' ? '3in' : '4.2in';
-              return `
-                <div style="border: 1px dashed var(--neutral-300); padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
-                  ${tag ? `
-                    ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
-                    <div style="color: var(--neutral-500); margin-bottom: 4px; font-size: 8px;">${tag.color}/${tag.size}</div>
-                    ${CONFIG.TAG_TEMPLATE.showBarcode ? `<svg id="tagbarcode_${si}_${idx}" style="height: 25px; width: 70px;"></svg>` : ''}
-                    <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top: 4px;">
-                      ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 11px; color: #888;">₹${tag.mrp}</span>` : ''}
-                      <span style="font-size: 16px; font-weight: 800; color: #000;">₹${tag.price}</span>
-                    </div>
-                  ` : `<div style="color: var(--neutral-500); font-size: 10px;">Empty</div>`}
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      `).join('')}
+      ${buildLabelSheetsHTML()}
       <button class="btn btn-primary" style="margin-right: 8px;" onclick="printLabelSheets()">🖨️ Print All</button>
       <button class="btn btn-secondary" onclick="clearTagQueue(); labelSheets = []; document.getElementById('sheetPreview').innerHTML = '';">Clear</button>
     </div>
   `;
-
-  // Render barcodes
-  labelSheets.forEach((sheet, si) => {
-    sheet.slots.forEach((tag, idx) => {
-      if (tag) {
-        try {
-          JsBarcode('#tagbarcode_' + si + '_' + idx, tag.uid, {
-            format: 'CODE128',
-            height: 25,
-            displayValue: false
-          });
-        } catch (e) {
-          console.error('Barcode error:', e);
-        }
-      }
-    });
-  });
 }
 
 function updateTagSize() {
@@ -2364,7 +2596,15 @@ function updateTagSize() {
 }
 
 function printLabelSheets() {
-  window.print();
+  if (!labelSheets.length) {
+    alert('Koi tag print ke liye nahi hai — pehle "Preview & Print" dabakar sheet banayein.');
+    return;
+  }
+  // Print via the hidden iframe (not window.print() on the live page, which was
+  // printing the whole app/menu since the tag preview wasn't scoped for printing).
+  printViaIframe(buildLabelSheetsHTML(), `
+    @media print { .tag-sheet { page-break-after: always; } .no-print { display: none !important; } }
+  `);
 }
 
 function clearTagQueue() {
