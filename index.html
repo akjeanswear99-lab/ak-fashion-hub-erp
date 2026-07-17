@@ -3248,17 +3248,20 @@ function saveRazorpayKey() {
   saveConfig();
   alert('✓ Razorpay key saved');
 }
-
 function downloadBackup() {
   const backup = {
     exportDate: new Date().toISOString(),
     data: APP_STATE.data
   };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
+
+  const blob = new Blob(
+    [JSON.stringify(backup, null, 2)],
+    { type: 'application/json' }
+  );
+
   const a = document.createElement('a');
-  a.href = url;
-  a.download = 'ak-fashion-hub-backup-' + new Date().toISOString().split('T')[0] + '.json';
+  a.href = URL.createObjectURL(blob);
+  a.download = 'backup.json';
   a.click();
 }
 
