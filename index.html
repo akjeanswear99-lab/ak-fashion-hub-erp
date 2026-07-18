@@ -1300,27 +1300,39 @@ function addToCart(code) {
   let foundProduct = null;
   let foundVariant = null;
 
-  APP_STATE.data.products.forEach(product => {
-
-    if(product.variants){
-
-      product.variants.forEach(variant => {
-
-        if(
-          product.UID === code ||
-          variant.Barcode === code ||
-          variant.VariantBarcode === code ||
-          variant.VariantID === code
-        ){
-          foundProduct = product;
-          foundVariant = variant;
-        }
-
-      });
-
+  // Match on variant-specific identifiers FIRST, and stop at the first hit. This
+  // guarantees that scanning any one variant's own barcode always adds THAT exact
+  // variant — previously this kept looping through every product/variant and let
+  // a later match silently overwrite an earlier correct one (or a shared product-level
+  // UID match could win over the actual scanned variant), which made it look like
+  // only one particular item ever got added no matter which tag was scanned.
+  outer:
+  for (const product of APP_STATE.data.products) {
+    for (const variant of (product.variants || [])) {
+      if (
+        variant.Barcode === code ||
+        variant.VariantBarcode === code ||
+        variant.VariantID === code
+      ) {
+        foundProduct = product;
+        foundVariant = variant;
+        break outer;
+      }
     }
+  }
 
-  });
+  // Only fall back to the product-level UID when no variant-specific barcode matched,
+  // and only if that product has a single variant — so it can never guess between
+  // multiple colors/sizes of the same product.
+  if (!foundVariant) {
+    for (const product of APP_STATE.data.products) {
+      if (product.UID === code && product.variants && product.variants.length === 1) {
+        foundProduct = product;
+        foundVariant = product.variants[0];
+        break;
+      }
+    }
+  }
 
   if (!foundProduct || !foundVariant) {
     showToast('Product not found: ' + code, true);
@@ -1863,7 +1875,7 @@ async function saveProduct() {
       staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
     });
     if (vResult.success) {
-      savedVariants.push({ VariantID: vResult.data.variantID, Color: v.Color, Size: v.Size, Stock: v.Stock, Floor: v.Floor, Rack: v.Rack, Shelf: v.Shelf });
+      savedVariants.push({ VariantID: vResult.data.variantID, Color: v.Color, Size: v.Size, Stock: v.Stock, Floor: v.Floor, Rack: v.Rack, Shelf: v.Shelf, Barcode: (vResult.data.barcode || v.Barcode) });
     }
   }
 
@@ -1991,6 +2003,8 @@ function collectVariantRows(existingVariants) {
         size.replace(/\s+/g,'').toUpperCase()
         + '-' +
         Date.now().toString().slice(-6)
+        + '-' +
+        Math.random().toString(36).slice(2, 6).toUpperCase()
       )
     ),
 
@@ -2049,7 +2063,10 @@ async function updateProduct(id) {
         productID: id, uid: p.UID, color: v.Color, size: v.Size, stock: v.Stock,
         floor: v.Floor, rack: v.Rack, shelf: v.Shelf, staffID
       });
-      if (vResult.success) v.VariantID = vResult.data.variantID;
+      if (vResult.success) {
+        v.VariantID = vResult.data.variantID;
+        if (vResult.data.barcode) v.Barcode = vResult.data.barcode;
+      }
     } else {
       const stockDiff = Number(v.Stock) - Number(old.Stock);
       if (stockDiff !== 0) {
@@ -2473,9 +2490,18 @@ function renderTagPicker() {
 
 function addToTagQueue(variantID, uid, name, color, size, salePrice, mrp) {
 
-  const variant = APP_STATE.data.variants?.find(
-    v => v.VariantID === variantID
-  );
+  // Look up this variant's OWN stored barcode from its actual product record.
+  // Previously this read from APP_STATE.data.variants — an array that is never
+  // populated anywhere in the app — so the lookup always failed and every printed
+  // tag silently fell back to a generic value instead of that specific variant's
+  // real barcode. Now each variant's tag encodes its own unique, correct barcode,
+  // so scanning any one variant's tag at billing always resolves to that exact
+  // color/size, not a fixed/first one.
+  let variant = null;
+  (APP_STATE.data.products || []).forEach(p => {
+    const v = (p.variants || []).find(v => v.VariantID === variantID);
+    if (v) variant = v;
+  });
 
   const qty = Number(document.getElementById('qty_' + variantID).value) || 1;
   const existing = tagQueue.find(i => i.variantID === variantID);
@@ -2489,7 +2515,7 @@ function addToTagQueue(variantID, uid, name, color, size, salePrice, mrp) {
     tagQueue.push({
       variantID,
       uid,
-      barcode: variant?.Barcode || variantID,
+      barcode: (variant && variant.Barcode) || variantID,
       name,
       color,
       size,
@@ -2579,10 +2605,12 @@ function generateLabelSheets() {
 // an on-page <svg>. This lets the exact same markup be reused for the on-screen preview
 // AND for the print iframe — a live SVG + JsBarcode(selector) only ever worked in the
 // main page's DOM, so printing (a separate document) rendered with no barcodes at all.
+// Rendered at a taller height + thicker bar width than before so it scans cleanly and
+// stays sharp even when printed larger on the tag.
 function renderBarcodeDataURI(text) {
   try {
     const canvas = document.createElement('canvas');
-    JsBarcode(canvas, text, { format: 'CODE128', height: 40, displayValue: false, margin: 0 });
+    JsBarcode(canvas, text, { format: 'CODE128', height: 70, width: 2.4, displayValue: false, margin: 0 });
     return canvas.toDataURL('image/png');
   } catch (e) {
     console.error('Barcode render error:', e);
@@ -2593,8 +2621,11 @@ function renderBarcodeDataURI(text) {
 function buildLabelSheetsHTML() {
   const tagSize = document.getElementById('tagSize').value;
   const colsPerSheet = tagSize === '2x3' ? 3 : 2;
-  const width = tagSize === '2x3' ? '1.9in' : '1.9in';
-const height = tagSize === '2x3' ? '2.9in' : '2.9in';
+  // 2x3 = one 2in x 3in label per slot. 4x6 = one bigger 4in x 6in label per slot
+  // (previously both sizes used the exact same width/height, so picking "4×6" printed
+  // tags the same small size as "2×3" — now each option actually prints at its own size).
+  const width = tagSize === '2x3' ? '1.9in' : '3.9in';
+  const height = tagSize === '2x3' ? '2.9in' : '5.9in';
 
   return labelSheets.map((sheet, si) => `
     <div class="tag-sheet" style="page-break-after: always; margin-bottom: 20px; border: 2px solid #ddd; padding: 12px; background: white;">
@@ -2611,10 +2642,10 @@ const height = tagSize === '2x3' ? '2.9in' : '2.9in';
             <div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
               ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
               <div style="color: #888; margin-bottom: 4px; font-size: 8px;">${tag.color}/${tag.size}</div>
-              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 25px; width: 70px;">` : ''}
-              <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top: 4px;">
-                ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 11px; color: #888;">₹${tag.mrp}</span>` : ''}
-                <span style="font-size: 16px; font-weight: 800; color: #000;">₹${tag.price}</span>
+              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 44px; width: 90%; max-width: 130px;">` : ''}
+              <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top: 6px;">
+                ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 15px; color: #888;">₹${tag.mrp}</span>` : ''}
+                <span style="font-size: 26px; font-weight: 800; color: #000;">₹${tag.price}</span>
               </div>
             </div>
           `;
@@ -3187,10 +3218,10 @@ function updateTagPreview() {
     <div class="template-preview" style="width: 300px; border: 2px solid var(--neutral-300); padding: 16px; text-align: center;">
       ${CONFIG.TAG_TEMPLATE.showName ? '<div style="font-weight: 700; margin-bottom: 6px; font-size: 12px;">Sample Shirt</div>' : ''}
       <div style="font-size: 10px; color: var(--neutral-600); margin-bottom: 6px;">Black / M</div>
-      ${CONFIG.TAG_TEMPLATE.showBarcode ? '<svg id="previewBarcode" style="height: 30px; margin: 8px 0;"></svg>' : ''}
+      ${CONFIG.TAG_TEMPLATE.showBarcode ? '<svg id="previewBarcode" style="height: 44px; margin: 8px 0;"></svg>' : ''}
       <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0;">
-        ${CONFIG.TAG_TEMPLATE.showMRP ? '<span style="text-decoration: line-through; font-size: 12px; color: #999;">₹399</span>' : ''}
-        <span style="font-size: 16px; font-weight: 700;">₹299</span>
+        ${CONFIG.TAG_TEMPLATE.showMRP ? '<span style="text-decoration: line-through; font-size: 15px; color: #999;">₹399</span>' : ''}
+        <span style="font-size: 26px; font-weight: 700;">₹299</span>
       </div>
     </div>
   `;
@@ -3199,7 +3230,7 @@ function updateTagPreview() {
 
   if (CONFIG.TAG_TEMPLATE.showBarcode) {
     try {
-      JsBarcode('#previewBarcode', 'AKFH000001', { format: 'CODE128', displayValue: false });
+      JsBarcode('#previewBarcode', 'AKFH000001', { format: 'CODE128', height: 44, width: 2.2, displayValue: false });
     } catch (e) {}
   }
 }
