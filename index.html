@@ -318,11 +318,16 @@
           </div>
           <div class="form-group">
             <label class="form-label">Payment Mode</label>
-            <select class="form-input" id="billPaymentMode">
+            <select class="form-input" id="billPaymentMode" onchange="toggleBillQrDisplay()">
               <option value="Cash">Cash</option>
-              <option value="UPI">UPI</option>
+              <option value="UPI_QR">UPI (Scan QR)</option>
+              <option value="UPI">UPI (Razorpay)</option>
               <option value="Card">Card</option>
             </select>
+          </div>
+          <div id="billQrDisplay" style="display:none; text-align:center; margin-bottom: 12px; padding: 10px; border: 1px solid var(--neutral-200); border-radius: 6px; background: var(--neutral-50);">
+            <img id="billQrImg" src="" alt="UPI QR" style="max-width: 160px; width: 100%; height: auto;">
+            <div style="font-size: 11px; color: var(--neutral-500); margin-top: 6px;">Customer ko yeh QR scan karwayein</div>
           </div>
           <div style="background: var(--neutral-100); padding: 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -592,6 +597,10 @@
             <input type="text" class="form-input" id="shopNameInput" placeholder="AK FASHION HUB">
           </div>
           <div class="form-group">
+            <label class="form-label">Shop Mobile Number (bill par print hoga)</label>
+            <input type="text" class="form-input" id="shopMobileInput" placeholder="9599497909">
+          </div>
+          <div class="form-group">
             <label class="form-label">Logo</label>
             <div style="display:flex; align-items:center; gap:12px; margin-bottom: 8px;">
               <div id="logoPreviewBox" style="width:70px; height:70px; border:1px dashed var(--neutral-300); border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff;">
@@ -626,6 +635,22 @@
           <button class="btn btn-primary btn-small btn-block" onclick="downloadBackup()" style="margin-bottom: 8px;">⬇ Download Backup</button>
           <input type="file" id="restoreFile" accept=".json" style="display: none;">
           <button class="btn btn-secondary btn-small btn-block" onclick="document.getElementById('restoreFile').click()">⬆ Restore Backup</button>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">UPI QR Code (Scan to Pay)</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Apna UPI QR code (GPay/PhonePe/Paytm se) yahan upload karein — billing screen me "UPI (Scan QR)" chunte hi yeh dikhega aur bill par bhi print hoga</p>
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom: 8px;">
+            <div id="upiQrPreviewBox" style="width:90px; height:90px; border:1px dashed var(--neutral-300); border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#fff;">
+              <img id="upiQrPreviewImg" src="" alt="UPI QR preview" style="max-width:100%; max-height:100%; object-fit:contain; display:none;">
+              <span id="upiQrPreviewPlaceholder" style="font-size:10px; color:var(--neutral-500);">No QR</span>
+            </div>
+            <div>
+              <input type="file" id="upiQrFileInput" accept="image/*" style="display:none;" onchange="handleUpiQrUpload(event)">
+              <button class="btn btn-secondary btn-small" type="button" onclick="document.getElementById('upiQrFileInput').click()">⬆ Upload QR</button>
+              <button class="btn btn-danger btn-small" type="button" onclick="removeUpiQr()">Remove</button>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -714,7 +739,9 @@ const CONFIG = {
   RAZORPAY_KEY: '',
   SHOP_NAME: 'AK FASHION HUB',
   SHOP_LOGO: '',
-  BILL_TEMPLATE: { type: 'thermal', headerText: 'AK FASHION HUB', footerText: '9599497909 Thank You!' },
+  SHOP_MOBILE: '9599497909',
+  UPI_QR: '',
+  BILL_TEMPLATE: { type: 'thermal', headerText: 'AK FASHION HUB', footerText: 'Thank You! Visit Again' },
   TAG_TEMPLATE: { showMRP: true, showName: true, showBarcode: true }
 };
 
@@ -917,6 +944,7 @@ function loadConfig() {
     if (document.getElementById('razorpayKeyId')) document.getElementById('razorpayKeyId').value = CONFIG.RAZORPAY_KEY || '';
   }
   applyShopProfile();
+  applyUpiQrPreview();
 }
 
 function saveConfig() {
@@ -947,6 +975,8 @@ function applyShopProfile() {
   // Reflect into settings screen inputs/preview if present
   const nameInput = document.getElementById('shopNameInput');
   if (nameInput && !nameInput.value) nameInput.value = name;
+  const mobileInput = document.getElementById('shopMobileInput');
+  if (mobileInput && !mobileInput.value) mobileInput.value = CONFIG.SHOP_MOBILE || '';
   const previewImg = document.getElementById('logoPreviewImg');
   const previewPlaceholder = document.getElementById('logoPreviewPlaceholder');
   if (previewImg && previewPlaceholder) {
@@ -999,8 +1029,49 @@ function removeShopLogo() {
   applyShopProfile();
 }
 
+// ============================================================================
+// UPI QR CODE (for "UPI (Scan QR)" payment mode) — stored as-is, NOT forced onto
+// a square canvas like the logo, since distorting a QR code can break its scannability.
+// ============================================================================
+function applyUpiQrPreview() {
+  const previewImg = document.getElementById('upiQrPreviewImg');
+  const previewPlaceholder = document.getElementById('upiQrPreviewPlaceholder');
+  if (!previewImg || !previewPlaceholder) return;
+  if (CONFIG.UPI_QR) {
+    previewImg.src = CONFIG.UPI_QR;
+    previewImg.style.display = 'block';
+    previewPlaceholder.style.display = 'none';
+  } else {
+    previewImg.style.display = 'none';
+    previewPlaceholder.style.display = 'block';
+  }
+}
+
+function handleUpiQrUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { alert('Please choose an image file'); return; }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    CONFIG.UPI_QR = e.target.result;
+    localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+    applyUpiQrPreview();
+    showToast('✓ UPI QR saved');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeUpiQr() {
+  CONFIG.UPI_QR = '';
+  document.getElementById('upiQrFileInput').value = '';
+  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+  applyUpiQrPreview();
+}
+
 function saveShopProfile() {
   CONFIG.SHOP_NAME = document.getElementById('shopNameInput').value.trim() || 'AK FASHION HUB';
+  CONFIG.SHOP_MOBILE = document.getElementById('shopMobileInput').value.trim() || CONFIG.SHOP_MOBILE || '9599497909';
   CONFIG.BILL_TEMPLATE.headerText = CONFIG.SHOP_NAME;
   localStorage.setItem('appConfig', JSON.stringify(CONFIG));
   applyShopProfile();
@@ -1232,6 +1303,7 @@ function navigateToScreen(screenName) {
     if (screenName === 'staff') refreshStaff();
     if (screenName === 'pricetags') renderTagPicker();
     if (screenName === 'preorders') refreshPreorders();
+    if (screenName === 'billing') toggleBillQrDisplay();
   }, 100);
 }
 
@@ -1421,6 +1493,17 @@ async function completeBill() {
   }
 }
 
+function toggleBillQrDisplay() {
+  const mode = document.getElementById('billPaymentMode').value;
+  const box = document.getElementById('billQrDisplay');
+  if (mode === 'UPI_QR' && CONFIG.UPI_QR) {
+    document.getElementById('billQrImg').src = CONFIG.UPI_QR;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
 function initiateRazorpayPayment(customerName, customerMobile, totalAmount, subtotal, discountAmount) {
   const options = {
     key: CONFIG.RAZORPAY_KEY,
@@ -1591,7 +1674,7 @@ function buildBillHTML() {
       <div class="bill-header" style="text-align:center;">
         ${CONFIG.SHOP_LOGO ? `<img src="${CONFIG.SHOP_LOGO}" class="bill-logo" alt="Logo">` : ''}
         <div class="bill-title">${headerText}</div>
-        
+        <div style="font-size: 10px; margin-top: 2px;">📞 ${CONFIG.SHOP_MOBILE || '9599497909'}</div>
       </div>
       
       <div style="font-size: 11px; margin: 8px 0; text-align: center; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 0;">
@@ -1633,10 +1716,21 @@ function buildBillHTML() {
 
       <div style="text-align: center; font-size: 11px; margin-top: 8px; border-top: 1px solid #000; padding-top: 4px;">
         ${footerText}
-        <div style="margin-top: 4px; font-size: 9px; color: #666;">Payment: ${document.getElementById('billPaymentMode').value}</div>
+        <div style="margin-top: 4px; font-size: 9px; color: #666;">Payment: ${paymentModeLabel(document.getElementById('billPaymentMode').value)}</div>
+        ${(document.getElementById('billPaymentMode').value === 'UPI_QR' && CONFIG.UPI_QR) ? `
+          <div style="margin-top: 8px;">
+            <img src="${CONFIG.UPI_QR}" style="height: 90px; width: 90px; object-fit: contain;">
+            <div style="font-size: 9px; color: #666;">Scan to Pay</div>
+          </div>
+        ` : ''}
       </div>
     </div>
   `;
+}
+
+function paymentModeLabel(mode) {
+  if (mode === 'UPI_QR') return 'UPI (QR)';
+  return mode;
 }
 
 // Prints through a hidden iframe rather than window.open('', '_blank') — mobile
@@ -2613,7 +2707,10 @@ function renderBarcodeDataURI(text) {
     // Rendered at a high source resolution (tall + thick bars) so that when the
     // browser scales it DOWN to fit the tag, it stays sharp — scaling an image up
     // from a small source is what causes blur, scaling a high-res image down never does.
-    JsBarcode(canvas, text, { format: 'CODE128', height: 100, width: 3, displayValue: false, margin: 0 });
+    // width bumped 3→5 and height 100→160: thermal/label printers are low-DPI, and thin
+    // bars (width 3) were falling below their minimum printable line thickness and
+    // smearing together. Thicker source bars survive that print-resolution loss.
+    JsBarcode(canvas, text, { format: 'CODE128', height: 160, width: 5, displayValue: false, margin: 10 });
     return canvas.toDataURL('image/png');
   } catch (e) {
     console.error('Barcode render error:', e);
@@ -2645,7 +2742,7 @@ function buildLabelSheetsHTML() {
             <div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
               ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
               <div style="color: #888; margin-bottom: 4px; font-size: 8px;">${tag.color}/${tag.size}</div>
-              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 44px; width: 90%; max-width: 130px;">` : ''}
+              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 50px; width: auto; max-width: 95%; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">` : ''}
               <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top: 6px;">
                 ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 15px; color: #888;">₹${tag.mrp}</span>` : ''}
                 <span style="font-size: 26px; font-weight: 800; color: #000;">₹${tag.price}</span>
