@@ -1407,6 +1407,8 @@ function addToCart(code) {
   }
 
   if (!foundProduct || !foundVariant) {
+    console.log("SCAN =", code);
+console.log(APP_STATE.data.products);
     showToast('Product not found: ' + code, true);
     return;
   }
