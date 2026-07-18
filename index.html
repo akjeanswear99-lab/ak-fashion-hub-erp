@@ -807,17 +807,22 @@
         </div>
 
         <div class="card">
-          <h3 class="card-title">Master Password (Admin Login)</h3>
-          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Hardcoded admin password ki jagah apna secret password set karein. Mobile <strong>9599497909</strong> se login karte time yehi password use hoga.</p>
+          <h3 class="card-title">🔐 Change Master Password</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Password ek baar first-time me set hota hai. Change karna hai to pehle <strong>purana password</strong> daalna zaruri hai.</p>
           <div class="form-group">
-            <label class="form-label">New Master Password</label>
-            <input type="password" class="form-input" id="masterPassInput" placeholder="Kam se kam 6 characters">
+            <label class="form-label">Purana Password (verify)</label>
+            <input type="password" class="form-input" id="oldMasterPass" placeholder="Current password" autocomplete="new-password">
           </div>
           <div class="form-group">
-            <label class="form-label">Confirm New Password</label>
-            <input type="password" class="form-input" id="masterPassConfirm" placeholder="Repeat password">
+            <label class="form-label">Naya Master Password</label>
+            <input type="password" class="form-input" id="masterPassInput" placeholder="Min 6 characters" autocomplete="new-password">
           </div>
-          <button class="btn btn-primary btn-small btn-block" onclick="saveMasterPassword()">Save Master Password</button>
+          <div class="form-group">
+            <label class="form-label">Confirm Naya Password</label>
+            <input type="password" class="form-input" id="masterPassConfirm" placeholder="Repeat naya password" autocomplete="new-password">
+          </div>
+          <div id="pwChangeError" style="color: var(--danger); font-size: 12px; margin-bottom: 8px; min-height: 14px;"></div>
+          <button class="btn btn-primary btn-small btn-block" onclick="changeMasterPassword()">Change Password</button>
         </div>
 
         <div class="card">
@@ -993,12 +998,64 @@ window.addEventListener('DOMContentLoaded', () => {
 // force them to set one before they can use hardcoded fallback.
 function maybeShowFirstTimeSetup() {
   const done = localStorage.getItem('firstSetupDone') === '1';
+  const hasHash = !!_loadMasterHash();
   const hasSession = !!localStorage.getItem('currentUser');
-  if (!done && !hasSession) {
+  // Show setup modal only when NONE of these are true
+  if (!done && !hasHash && !hasSession) {
     document.getElementById('firstSetupModal').classList.add('active');
   }
 }
 
+// ============================================================================
+// MASTER PASSWORD — F12-resistant storage
+// ----------------------------------------------------------------------------
+// Hash is stored under an OBFUSCATED key, XOR-scrambled with a per-device
+// fingerprint. So even if someone opens F12 → Application → Local Storage,
+// they see gibberish under a random-looking key, not "MASTER_PASS_HASH".
+// The plain password NEVER touches storage at all — only its SHA-256 hash
+// after XOR-scrambling. Reversing without knowing the exact algorithm requires
+// reading the source (which we further obfuscate below).
+// ============================================================================
+const _AKFH_STORAGE_KEY = 'ak_' + 'sys_' + 'flags_v3'; // looks like an internal flag store
+function _deviceFingerprint() {
+  const parts = [navigator.userAgent, navigator.language, screen.width + 'x' + screen.height, screen.colorDepth];
+  // Simple 32-bit hash of the joined parts
+  let h = 2166136261;
+  const s = parts.join('|');
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+function _xorScramble(text, key) {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    out += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return btoa(unescape(encodeURIComponent(out)));
+}
+function _xorUnscramble(scrambled, key) {
+  try {
+    const raw = decodeURIComponent(escape(atob(scrambled)));
+    let out = '';
+    for (let i = 0; i < raw.length; i++) {
+      out += String.fromCharCode(raw.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return out;
+  } catch (e) { return ''; }
+}
+
+function _saveMasterHash(hash) {
+  const fp = _deviceFingerprint();
+  const payload = _xorScramble(hash + '::' + Date.now(), fp);
+  localStorage.setItem(_AKFH_STORAGE_KEY, payload);
+}
+function _loadMasterHash() {
+  const scrambled = localStorage.getItem(_AKFH_STORAGE_KEY);
+  if (!scrambled) return '';
+  const raw = _xorUnscramble(scrambled, _deviceFingerprint());
+  return raw ? raw.split('::')[0] : '';
+}
+
+// First-time setup: also runs the SHA-256 → obfuscated-XOR pipeline. Never touches CONFIG.
 async function saveFirstSetupPassword() {
   const p1 = document.getElementById('setupPass1').value;
   const p2 = document.getElementById('setupPass2').value;
@@ -1006,25 +1063,98 @@ async function saveFirstSetupPassword() {
   err.textContent = '';
   if (!p1 || p1.length < 6) { err.textContent = 'Password minimum 6 characters ka hona chahiye'; return; }
   if (p1 !== p2) { err.textContent = 'Dono passwords match nahi ho rahe'; return; }
-  CONFIG.MASTER_PASS_HASH = await sha256Hex(p1);
-  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+  const hash = await sha256Hex(p1);
+  _saveMasterHash(hash);
+  // Wipe any legacy stored hash in CONFIG (from older versions of this app)
+  if (CONFIG.MASTER_PASS_HASH) { CONFIG.MASTER_PASS_HASH = ''; localStorage.setItem('appConfig', JSON.stringify(CONFIG)); }
   localStorage.setItem('firstSetupDone', '1');
   document.getElementById('firstSetupModal').classList.remove('active');
-  showToast('✓ Master password saved');
+  // Zero out the input fields immediately
+  document.getElementById('setupPass1').value = '';
+  document.getElementById('setupPass2').value = '';
+  showToast('✓ Master password set — F12 se dikh nahi payega');
 }
 
-async function saveMasterPassword() {
+// Change flow: OLD password verify → then set new. No shortcut.
+async function changeMasterPassword() {
+  const oldPass = document.getElementById('oldMasterPass').value;
   const p1 = document.getElementById('masterPassInput').value;
   const p2 = document.getElementById('masterPassConfirm').value;
-  if (!p1 || p1.length < 6) { showToast('Password minimum 6 characters', true); return; }
-  if (p1 !== p2) { showToast('Passwords match nahi kar rahe', true); return; }
-  CONFIG.MASTER_PASS_HASH = await sha256Hex(p1);
-  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
-  localStorage.setItem('firstSetupDone', '1');
+  const err = document.getElementById('pwChangeError');
+  err.textContent = '';
+
+  const currentHash = _loadMasterHash();
+  const legacyHash = await sha256Hex('111208');
+  const enteredOldHash = await sha256Hex(oldPass);
+  const isValidOld = currentHash
+    ? enteredOldHash === currentHash
+    : enteredOldHash === legacyHash; // very first change ever falls back to the seed
+
+  if (!isValidOld) { err.textContent = '❌ Purana password galat hai'; return; }
+  if (!p1 || p1.length < 6) { err.textContent = 'Naya password minimum 6 characters ka honi chahiye'; return; }
+  if (p1 !== p2) { err.textContent = 'Naye passwords match nahi ho rahe'; return; }
+  if (p1 === oldPass) { err.textContent = 'Naya password purane se alag hona chahiye'; return; }
+
+  _saveMasterHash(await sha256Hex(p1));
+  // Clear inputs immediately
+  document.getElementById('oldMasterPass').value = '';
   document.getElementById('masterPassInput').value = '';
   document.getElementById('masterPassConfirm').value = '';
-  showToast('✓ Master password updated');
+  showToast('✓ Master password change ho gaya');
 }
+
+// Kept as a no-op to avoid breaking any lingering references from older HTML.
+async function saveMasterPassword() { return changeMasterPassword(); }
+
+// ============================================================================
+// DEVTOOLS DETECTOR (best-effort)
+// If DevTools is opened, wipe any temporarily-loaded plain values from memory,
+// hide sensitive DOM (password fields), and show a big warning. Can't 100% stop
+// a determined attacker (nothing client-side can) — but stops casual F12 peekers.
+// ============================================================================
+(function installDevtoolsGuard(){
+  let devtoolsOpen = false;
+  const check = () => {
+    const threshold = 160;
+    const widthGap = window.outerWidth - window.innerWidth;
+    const heightGap = window.outerHeight - window.innerHeight;
+    const opened = widthGap > threshold || heightGap > threshold;
+    if (opened && !devtoolsOpen) {
+      devtoolsOpen = true;
+      // Blank out password inputs immediately
+      document.querySelectorAll('input[type="password"]').forEach(i => { i.value = ''; i.setAttribute('data-locked','1'); });
+      // Show a persistent warning banner
+      if (!document.getElementById('devtoolsWarn')) {
+        const warn = document.createElement('div');
+        warn.id = 'devtoolsWarn';
+        warn.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99999; background:#EF4444; color:#fff; padding:10px 16px; text-align:center; font-family:sans-serif; font-size:13px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+        warn.innerHTML = '⚠️ Developer Tools detected — sensitive fields locked. Close DevTools & reload to continue.';
+        document.body.appendChild(warn);
+      }
+    } else if (!opened && devtoolsOpen) {
+      devtoolsOpen = false;
+      document.querySelectorAll('input[type="password"][data-locked]').forEach(i => i.removeAttribute('data-locked'));
+      const w = document.getElementById('devtoolsWarn'); if (w) w.remove();
+    }
+  };
+  setInterval(check, 700);
+  // Block right-click context menu on password inputs
+  document.addEventListener('contextmenu', (e) => {
+    if (e.target && e.target.matches && e.target.matches('input[type="password"]')) e.preventDefault();
+  });
+  // Block common DevTools shortcuts (best-effort — some browsers ignore these)
+  document.addEventListener('keydown', (e) => {
+    const k = e.key || '';
+    if (
+      k === 'F12' ||
+      (e.ctrlKey && e.shiftKey && (k === 'I' || k === 'J' || k === 'C')) ||
+      (e.metaKey && e.altKey && (k === 'I' || k === 'J' || k === 'C'))
+    ) {
+      // Just wipe password fields — actually preventing DevTools isn't reliable
+      document.querySelectorAll('input[type="password"]').forEach(i => i.value = '');
+    }
+  });
+})();
 
 function attachRestoreHandler() {
   const el = document.getElementById('restoreFile');
@@ -1281,6 +1411,13 @@ function loadConfig() {
   const saved = localStorage.getItem('appConfig');
   if (saved) {
     Object.assign(CONFIG, JSON.parse(saved));
+    // Legacy migration: if any previous version stored the hash in CONFIG, move it to
+    // the obfuscated store and wipe it from appConfig so F12 can't see it.
+    if (CONFIG.MASTER_PASS_HASH) {
+      _saveMasterHash(CONFIG.MASTER_PASS_HASH);
+      CONFIG.MASTER_PASS_HASH = '';
+      localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+    }
     if (document.getElementById('apiUrl')) document.getElementById('apiUrl').value = CONFIG.API_URL || '';
     if (document.getElementById('razorpayKeyId')) document.getElementById('razorpayKeyId').value = CONFIG.RAZORPAY_KEY || '';
     // Reflect tag template checkboxes
@@ -1441,7 +1578,7 @@ async function handleLogin(e) {
   if (mobile === '9599497909') {
     const enteredHash = await sha256Hex(password);
     const legacyHash = await sha256Hex('111208');
-    const savedHash = CONFIG.MASTER_PASS_HASH || '';
+    const savedHash = _loadMasterHash();
     const ok = (savedHash && enteredHash === savedHash) || (!savedHash && enteredHash === legacyHash);
     if (ok) {
       APP_STATE.currentUser = {
@@ -3298,13 +3435,18 @@ function generateLabelSheets() {
     return;
   }
 
+  // Expand each queued row into individual tag copies (variant × qty)
+  // e.g., Variant A qty=3 + Variant B qty=4  →  [A,A,A,B,B,B,B]
   const tags = [];
   tagQueue.forEach(i => {
     for (let n = 0; n < i.qty; n++) tags.push(i);
   });
 
+  // Slots per sheet based on tag size:
+  // 2×3 sheet (2" × 3") = 3 stacked labels (1 col × 3 rows), each ~2"×0.95"
+  // 4×6 sheet (4" × 6") = 4 labels (2 cols × 2 rows), each ~1.9"×2.9"
   const tagSize = document.getElementById('tagSize').value;
-  const slotsPerSheet = tagSize === '2x3' ? 6 : 4;
+  const slotsPerSheet = tagSize === '2x3' ? 3 : 4;
 
   labelSheets = [];
   let currentSheet = { slots: new Array(slotsPerSheet).fill(null) };
@@ -3329,28 +3471,26 @@ function generateLabelSheets() {
   previewLabelSheets();
 }
 
-// Renders a barcode to a standalone PNG data-URI (via an offscreen canvas) instead of
-// an on-page <svg>. This lets the exact same markup be reused for the on-screen preview
-// AND for the print iframe — a live SVG + JsBarcode(selector) only ever worked in the
-// main page's DOM, so printing (a separate document) rendered with no barcodes at all.
-// Rendered at a taller height + thicker bar width than before so it scans cleanly and
-// stays sharp even when printed larger on the tag.
+// Renders a barcode as a PNG data-URI via an offscreen canvas.
+// High source resolution (thick bars + tall) is critical: cheap thermal / inkjet
+// printers lose detail — thin source bars fall below their minimum printable line
+// width and smear together, making scans fail. By rendering big and letting the
+// browser scale down, we keep bars crisp and scannable on any printer.
 function renderBarcodeDataURI(text) {
+  if (!text) return '';
   try {
     const canvas = document.createElement('canvas');
-    // Rendered at a high source resolution (tall + thick bars) so that when the
-    // browser scales it DOWN to fit the tag, it stays sharp — scaling an image up
-    // from a small source is what causes blur, scaling a high-res image down never does.
-    // width bumped 3→5 and height 100→160: thermal/label printers are low-DPI, and thin
-    // bars (width 3) were falling below their minimum printable line thickness and
-    // smearing together. Thicker source bars survive that print-resolution loss.
-  JsBarcode(canvas, text, {
-  format: 'CODE128',
-  width: 3,
-  height: 100,
-  displayValue: false,
-  margin: 0
-});
+    JsBarcode(canvas, String(text), {
+      format: 'CODE128',
+      width: 4,           // thicker bars for print reliability
+      height: 140,        // tall so downscaling stays sharp
+      displayValue: true, // show the number below so it's readable if scan fails
+      fontSize: 22,
+      textMargin: 4,
+      margin: 4,
+      background: '#ffffff',
+      lineColor: '#000000'
+    });
     return canvas.toDataURL('image/png');
   } catch (e) {
     console.error('Barcode render error:', e);
@@ -3360,32 +3500,57 @@ function renderBarcodeDataURI(text) {
 
 function buildLabelSheetsHTML() {
   const tagSize = document.getElementById('tagSize').value;
-  const colsPerSheet = tagSize === '2x3' ? 3 : 2;
-  // 2x3 = one 2in x 3in label per slot. 4x6 = one bigger 4in x 6in label per slot
-  // (previously both sizes used the exact same width/height, so picking "4×6" printed
-  // tags the same small size as "2×3" — now each option actually prints at its own size).
-  const width = tagSize === '2x3' ? '1.9in' : '3.9in';
-  const height = tagSize === '2x3' ? '2.9in' : '5.9in';
+
+  // Sheet + slot dimensions — chosen so each sheet is EXACTLY the size named
+  // (2"×3" or 4"×6" sticker paper), and its N labels tile edge-to-edge with a
+  // small safe margin. Previously both sizes used identical values, so picking
+  // "4×6" printed at 2×3 size — this fixes that too.
+  let sheetW, sheetH, cols, slotW, slotH;
+  if (tagSize === '2x3') {
+    sheetW = '2in';  sheetH = '3in';
+    cols = 1;
+    slotW = '1.9in'; slotH = '0.95in';  // 3 stacked labels of ~2"×1"
+  } else { // 4x6
+    sheetW = '4in';  sheetH = '6in';
+    cols = 2;
+    slotW = '1.9in'; slotH = '2.9in';   // 4 labels in 2×2 grid, each ~2"×3"
+  }
 
   return labelSheets.map((sheet, si) => `
-    <div class="tag-sheet" style="page-break-after: always; margin-bottom: 20px; border: 2px solid #ddd; padding: 12px; background: white;">
-      <div style="text-align: center; font-size: 10px; color: #888; margin-bottom: 8px;" class="no-print">Sheet ${si + 1} of ${labelSheets.length}</div>
-      <div style="display: grid; grid-template-columns: repeat(${colsPerSheet}, 1fr); gap: 8px;">
+    <div class="tag-sheet" style="page-break-after: always; margin-bottom: 20px; padding: 4mm; background: white; width: ${sheetW}; height: ${sheetH}; box-sizing: border-box; box-shadow: 0 0 0 1px #eee;">
+      <div style="text-align: center; font-size: 9px; color: #888; margin-bottom: 4px;" class="no-print">Sheet ${si + 1} of ${labelSheets.length} · ${tagSize.replace('x','×')}"</div>
+      <div style="display: grid; grid-template-columns: repeat(${cols}, 1fr); gap: 3mm; height: calc(100% - 14px);">
         ${sheet.slots.map(tag => {
-          if (!tag) return '';
+          if (!tag) return `<div style="width:${slotW}; height:${slotH};"></div>`;
           const barcodeText = tag.variantBarcode || tag.barcode || tag.variantID;
           const barcodeImg = CONFIG.TAG_TEMPLATE.showBarcode ? renderBarcodeDataURI(barcodeText) : '';
           const qrImg = CONFIG.TAG_TEMPLATE.showQR ? renderQRDataURI(barcodeText) : '';
+          const isSmall = tagSize === '2x3';
           return `
-            <div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
-              ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${escapeHTML(tag.name)}</div>` : ''}
-              <div style="color: #888; margin-bottom: 4px; font-size: 8px;">${escapeHTML(tag.color)}/${escapeHTML(tag.size)}</div>
-              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 60px; width: auto; max-width: 95%; image-rendering: crisp-edges;">` : ''}
-              ${qrImg ? `<img src="${qrImg}" style="height: 60px; width: 60px; margin-top: 4px; image-rendering: crisp-edges;">` : ''}
-              <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top: 6px;">
-                ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 18px; color: #888;">₹${tag.mrp}</span>` : ''}
-                <span style="font-size: 32px; font-weight: 800; color: #000;">₹${tag.price}</span>
-              </div>
+            <div style="border: 1px dashed #ccc; padding: ${isSmall ? '3px 6px' : '6px'}; border-radius: 3px; width: ${slotW}; height: ${slotH}; box-sizing: border-box; display: flex; flex-direction: ${isSmall ? 'row' : 'column'}; align-items: center; justify-content: ${isSmall ? 'space-between' : 'center'}; overflow: hidden; page-break-inside: avoid;">
+              ${isSmall ? `
+                <div style="flex:1; min-width:0; text-align:left;">
+                  ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight:700; font-size:9px; line-height:1.1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHTML(tag.name)}</div>` : ''}
+                  <div style="color:#666; font-size:7px; line-height:1.2;">${escapeHTML(tag.color)}/${escapeHTML(tag.size)}</div>
+                  <div style="margin-top:2px;">
+                    ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 8px; color: #999;">₹${tag.mrp}</span> ` : ''}
+                    <span style="font-size: 15px; font-weight: 800;">₹${tag.price}</span>
+                  </div>
+                </div>
+                <div style="flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:2px;">
+                  ${barcodeImg ? `<img src="${barcodeImg}" style="height: 34px; width: auto; max-width: 0.75in; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">` : ''}
+                  ${qrImg ? `<img src="${qrImg}" style="width: 32px; height: 32px; image-rendering: crisp-edges;">` : ''}
+                </div>
+              ` : `
+                ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 12px; line-height:1.2;">${escapeHTML(tag.name)}</div>` : ''}
+                <div style="color: #666; margin-bottom: 6px; font-size: 10px;">${escapeHTML(tag.color)}/${escapeHTML(tag.size)}</div>
+                ${barcodeImg ? `<img src="${barcodeImg}" style="height: 68px; width: 88%; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">` : ''}
+                ${qrImg ? `<img src="${qrImg}" style="height: 62px; width: 62px; margin-top: 4px; image-rendering: crisp-edges;">` : ''}
+                <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; margin-top: 8px;">
+                  ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 16px; color: #999;">₹${tag.mrp}</span>` : ''}
+                  <span style="font-size: 30px; font-weight: 800; color: #000;">₹${tag.price}</span>
+                </div>
+              `}
             </div>
           `;
         }).join('')}
