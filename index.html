@@ -2710,7 +2710,13 @@ function renderBarcodeDataURI(text) {
     // width bumped 3→5 and height 100→160: thermal/label printers are low-DPI, and thin
     // bars (width 3) were falling below their minimum printable line thickness and
     // smearing together. Thicker source bars survive that print-resolution loss.
-    JsBarcode(canvas, text, { format: 'CODE128', height: 160, width: 5, displayValue: false, margin: 10 });
+   JsBarcode(canvas, text, {
+  format: 'CODE128',
+  width: 2,
+  height: 70,
+  displayValue: false,
+  margin: 0
+});
     return canvas.toDataURL('image/png');
   } catch (e) {
     console.error('Barcode render error:', e);
