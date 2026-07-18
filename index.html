@@ -2246,13 +2246,40 @@ function refreshInventory() {
   `).join('');
 }
 
-function lookupStock(uid) {
-  const product = APP_STATE.data.products.find(p => p.UID === uid);
-  if (!product) {
+function lookupStock(code) {
+
+  let foundProduct = null;
+  let foundVariant = null;
+
+  outer:
+  for (const product of APP_STATE.data.products) {
+    for (const variant of (product.variants || [])) {
+
+      if (
+        variant.Barcode === code ||
+        variant.VariantBarcode === code ||
+        variant.VariantID === code ||
+        product.UID === code
+      ) {
+        foundProduct = product;
+        foundVariant = variant;
+        break outer;
+      }
+
+    }
+  }
+
+  if (!foundProduct) {
     alert('Product not found');
     return;
   }
-  alert('Product: ' + product.Name + '\nTotal Stock: ' + product.TotalStock);
+
+  alert(
+    'Product: ' + foundProduct.Name +
+    '\nColor: ' + (foundVariant?.Color || '-') +
+    '\nSize: ' + (foundVariant?.Size || '-') +
+    '\nStock: ' + (foundVariant?.Stock || 0)
+  );
 }
 
 function adjustStock(variantID) {
