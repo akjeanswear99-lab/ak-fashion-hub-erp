@@ -2610,7 +2610,10 @@ function generateLabelSheets() {
 function renderBarcodeDataURI(text) {
   try {
     const canvas = document.createElement('canvas');
-    JsBarcode(canvas, text, { format: 'CODE128', height: 70, width: 2.4, displayValue: false, margin: 0 });
+    // Rendered at a high source resolution (tall + thick bars) so that when the
+    // browser scales it DOWN to fit the tag, it stays sharp — scaling an image up
+    // from a small source is what causes blur, scaling a high-res image down never does.
+    JsBarcode(canvas, text, { format: 'CODE128', height: 100, width: 3, displayValue: false, margin: 0 });
     return canvas.toDataURL('image/png');
   } catch (e) {
     console.error('Barcode render error:', e);
