@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,6 +12,7 @@
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -205,6 +207,10 @@
         <label class="form-label">Password</label>
         <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" required>
       </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="rememberMe" style="width:auto;">
+        <label for="rememberMe" style="font-size:12px; color:var(--neutral-700); cursor:pointer;">Remember me on this device</label>
+      </div>
       <button type="submit" class="btn btn-primary btn-block">Sign In</button>
       <div id="loginError" class="form-error" style="margin-top: 12px;"></div>
     </form>
@@ -233,6 +239,7 @@
       <div data-screen="customers" class="nav-item">👤 Customers</div>
       <div data-screen="suppliers" class="nav-item">🚚 Suppliers</div>
       <div data-screen="expenses" class="nav-item">💰 Expenses</div>
+      <div data-screen="galla" class="nav-item">💵 Cash Drawer</div>
       <div data-screen="reports" class="nav-item">📈 Reports</div>
       <div data-screen="staff" class="nav-item">👥 Staff</div>
       <div data-screen="templates" class="nav-item">🎨 Templates</div>
@@ -279,6 +286,12 @@
       </div>
       <div class="card">
         <div class="card-header">
+          <h3 class="card-title">Sales Trend (Last 30 Days)</h3>
+        </div>
+        <div style="position:relative; height:220px;"><canvas id="salesChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
           <h3 class="card-title">Recent Bills</h3>
         </div>
         <div class="table-wrapper">
@@ -297,6 +310,10 @@
           <div class="form-group" style="display:flex; gap:8px;">
             <input type="text" class="form-input" id="billingScan" placeholder="🔍 Scan barcode / UID" autofocus style="flex:1;">
             <button type="button" class="btn btn-secondary" onclick="openCameraScanner(addToCart, true)">📷 Scan</button>
+          </div>
+          <div class="form-group" style="display:flex; gap:8px; position:relative;">
+            <input type="text" class="form-input" id="billingProductSearch" placeholder="Or search product by name…" oninput="renderBillingSearchDropdown()" onblur="setTimeout(()=>document.getElementById('billingSearchDropdown').style.display='none',200)" style="flex:1;">
+            <div id="billingSearchDropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--neutral-300); border-radius:6px; max-height:260px; overflow-y:auto; z-index:50; box-shadow:var(--shadow-lg);"></div>
           </div>
           <div id="billItems" style="min-height: 250px; border: 1px solid var(--neutral-200); border-radius: 6px; padding: 12px; background: var(--neutral-50);"><div style="text-align: center; color: var(--neutral-500);">Empty cart - scan a product</div></div>
         </div>
@@ -318,12 +335,36 @@
           </div>
           <div class="form-group">
             <label class="form-label">Payment Mode</label>
-            <select class="form-input" id="billPaymentMode" onchange="toggleBillQrDisplay()">
+            <select class="form-input" id="billPaymentMode" onchange="toggleBillQrDisplay(); toggleCashPanel();">
               <option value="Cash">Cash</option>
               <option value="UPI_QR">UPI (Scan QR)</option>
               <option value="UPI">UPI (Razorpay)</option>
               <option value="Card">Card</option>
             </select>
+          </div>
+
+          <!-- CASH PANEL — only visible for Cash payments. Yahan hi bill banate time
+               denomination-wise "kitne note aaye, kitne gaye" enter kar sakte ho -->
+          <div id="cashPanel" style="margin-bottom: 12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <label class="form-label" style="margin:0;">💵 Cash Entry (Notes IN)</label>
+              <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:10px;" onclick="clearCashEntry()">✕ Clear</button>
+            </div>
+            <div id="notesInGrid" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin-bottom:10px;"></div>
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--neutral-100); padding:8px 12px; border-radius:6px; margin-bottom:10px;">
+              <span style="font-size:12px; color:var(--neutral-700);">Customer Gave (auto-total):</span>
+              <input type="number" id="cashGiven" oninput="onCashGivenTyped()" style="width:110px; padding:6px 10px; border:1px solid var(--neutral-300); border-radius:4px; font-size:15px; font-weight:700; text-align:right;">
+            </div>
+
+            <div id="changeBox" style="background:#000; color:#fff; padding:14px; border-radius:8px; text-align:center; margin-bottom:10px;">
+              <div style="font-size: 11px; opacity:0.8; letter-spacing:1px;">RETURN TO CUSTOMER</div>
+              <div id="changeAmount" style="font-size: 32px; font-weight: 800; margin-top:4px;">₹0</div>
+              <div id="changeSuggestion" style="font-size: 11px; opacity:0.85; margin-top:6px;"></div>
+            </div>
+
+            <label class="form-label" style="margin-bottom:6px;">🔄 Notes OUT (jo change diya)</label>
+            <div id="notesOutGrid" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin-bottom:8px;"></div>
+            <button type="button" class="btn btn-secondary btn-small btn-block" onclick="autoFillNotesOut()" style="margin-bottom:4px;">✨ Auto-fill change breakdown</button>
           </div>
           <div id="billQrDisplay" style="display:none; text-align:center; margin-bottom: 12px; padding: 10px; border: 1px solid var(--neutral-200); border-radius: 6px; background: var(--neutral-50);">
             <img id="billQrImg" src="" alt="UPI QR" style="max-width: 160px; width: 100%; height: auto;">
@@ -487,7 +528,7 @@
             <label class="form-label">Quantity</label>
             <input type="number" class="form-input" id="purchaseQty" value="10">
           </div>
-          <button class="btn btn-primary btn-block">Add Purchase</button>
+          <button class="btn btn-primary btn-block" onclick="addPurchase()">Add Purchase</button>
         </div>
       </div>
     </div>
@@ -503,21 +544,119 @@
       </div>
     </div>
 
+    <!-- ========== CASH DRAWER / GALLA ========== -->
+    <div class="screen" id="gallaScreen">
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">💰 Opening Cash (Aaj shift ki shuruaat)</h3>
+          </div>
+          <p style="font-size:12px; color:var(--neutral-500); margin-bottom:12px;">Har denomination ki count daalein — system automatically opening cash calculate karega. Yeh sirf ek baar per din set karein.</p>
+          <div id="openingDenomList"></div>
+          <div style="background:var(--neutral-100); padding:12px; border-radius:6px; margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:600;">Opening Total:</span>
+            <span id="openingTotal" style="font-size:20px; font-weight:800;">₹0</span>
+          </div>
+          <button class="btn btn-primary btn-block" style="margin-top:10px;" onclick="saveOpeningCash()">Save Opening Cash</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📦 Live Galla Status</h3>
+          </div>
+          <div id="liveGallaList"></div>
+          <div style="background:#000; color:#fff; padding:14px; border-radius:8px; margin-top:12px; text-align:center;">
+            <div style="font-size:11px; opacity:0.8; letter-spacing:1px;">CURRENT DRAWER BALANCE</div>
+            <div id="drawerBalance" style="font-size:28px; font-weight:800; margin-top:4px;">₹0</div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button class="btn btn-warning btn-small" style="flex:1;" onclick="openCashInOut('IN')">➕ Cash In</button>
+            <button class="btn btn-danger btn-small" style="flex:1;" onclick="requirePin('Cash Out').then(ok=>{ if(ok) openCashInOut('OUT'); })">➖ Cash Out</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">🌙 Closing Cash (Shift end)</h3>
+          <button class="btn btn-primary btn-small" onclick="startClosingCount()">Start Closing Count</button>
+        </div>
+        <div id="closingArea"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">📜 Cash History (Aaj ke transactions)</h3>
+          <button class="btn btn-secondary btn-small" onclick="refreshGalla()">Refresh</button>
+        </div>
+        <div class="table-wrapper">
+          <table id="cashTxnTable"><thead><tr><th>Time</th><th>Type</th><th>Ref</th><th>Notes In</th><th>Notes Out</th><th>Amount</th><th>Drawer</th><th>Staff</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
     <!-- ========== REPORTS ========== -->
     <div class="screen" id="reportsScreen">
       <div class="grid">
         <div class="card">
-          <h3 class="card-title">Sales Summary</h3>
-          <div style="font-size: 24px; font-weight: 700; color: #000; margin: 16px 0;">₹<span id="totalSales">0</span></div>
+          <h3 class="card-title">Today's Sales</h3>
+          <div style="font-size: 22px; font-weight: 700; color: #000; margin: 12px 0;">₹<span id="reportTodaySales">0</span></div>
+          <div style="font-size: 12px; color: var(--neutral-500);">Bills: <span id="reportTodayBills">0</span></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">This Month</h3>
+          <div style="font-size: 22px; font-weight: 700; color: #000; margin: 12px 0;">₹<span id="reportMonthSales">0</span></div>
+          <div style="font-size: 12px; color: var(--neutral-500);">Bills: <span id="reportMonthBills">0</span></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Sales Summary (All-time)</h3>
+          <div style="font-size: 22px; font-weight: 700; color: #000; margin: 12px 0;">₹<span id="totalSales">0</span></div>
           <div style="font-size: 12px; color: var(--neutral-500);">Total bills: <span id="totalBills">0</span></div>
         </div>
         <div class="card">
+          <h3 class="card-title">Profit Estimate (30%)</h3>
+          <div style="font-size: 22px; font-weight: 700; color: var(--success); margin: 12px 0;">₹<span id="reportProfit">0</span></div>
+          <div style="font-size: 12px; color: var(--neutral-500);">Based on today's sales</div>
+        </div>
+        <div class="card">
           <h3 class="card-title">Inventory Value</h3>
-          <div style="font-size: 24px; font-weight: 700; color: var(--success); margin: 16px 0;">₹<span id="inventoryValue">0</span></div>
+          <div style="font-size: 22px; font-weight: 700; color: var(--success); margin: 12px 0;">₹<span id="inventoryValue">0</span></div>
           <div style="font-size: 12px; color: var(--neutral-500);">Total units: <span id="totalUnits">0</span></div>
         </div>
         <div class="card">
-          <h3 class="card-title">Staff Performance</h3>
+          <h3 class="card-title">Cash Drawer</h3>
+          <div style="font-size: 22px; font-weight: 700; color: #000; margin: 12px 0;">₹<span id="reportDrawerBalance">0</span></div>
+          <div style="font-size: 12px; color: var(--neutral-500);">Today's IN: ₹<span id="reportCashIn">0</span> · OUT: ₹<span id="reportCashOut">0</span></div>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom:12px;">🔥 Top Selling Products</h3>
+          <div class="table-wrapper">
+            <table id="topSellingTable"><thead><tr><th>Product</th><th>Variant</th><th>Qty Sold</th><th>Revenue</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom:12px;">⚠️ Low Stock (≤5)</h3>
+          <div class="table-wrapper">
+            <table id="lowStockTable"><thead><tr><th>UID</th><th>Product</th><th>Variant</th><th>Stock</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom:12px;">💀 Dead Stock (No sale in 90 days)</h3>
+          <div class="table-wrapper">
+            <table id="deadStockTable"><thead><tr><th>UID</th><th>Product</th><th>Variant</th><th>Stock</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom:12px;">↩️ Returns/Refunds (Last 30 days)</h3>
+          <div class="table-wrapper">
+            <table id="returnsReportTable"><thead><tr><th>Date</th><th>Bill#</th><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="card-title" style="margin-bottom:12px;">👥 Staff Performance</h3>
           <div class="table-wrapper">
             <table id="staffPerformanceTable"><thead><tr><th>Staff</th><th>Bills</th><th>Revenue</th></tr></thead><tbody></tbody></table>
           </div>
@@ -576,6 +715,10 @@
           <div class="form-group">
             <label class="form-label">Show Barcode?</label>
             <input type="checkbox" id="tagShowBarcode" checked oninput="updateTagPreview()"> Print barcode
+          </div>
+          <div class="form-group">
+            <label class="form-label">Show QR Code?</label>
+            <input type="checkbox" id="tagShowQR" oninput="updateTagPreview()"> Print QR code (scannable by phone camera)
           </div>
           <button class="btn btn-primary btn-block" onclick="savePriceTagTemplate()">Save Template</button>
         </div>
@@ -664,6 +807,20 @@
         </div>
 
         <div class="card">
+          <h3 class="card-title">Master Password (Admin Login)</h3>
+          <p style="font-size: 12px; color: var(--neutral-500); margin-bottom: 12px;">Hardcoded admin password ki jagah apna secret password set karein. Mobile <strong>9599497909</strong> se login karte time yehi password use hoga.</p>
+          <div class="form-group">
+            <label class="form-label">New Master Password</label>
+            <input type="password" class="form-input" id="masterPassInput" placeholder="Kam se kam 6 characters">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm New Password</label>
+            <input type="password" class="form-input" id="masterPassConfirm" placeholder="Repeat password">
+          </div>
+          <button class="btn btn-primary btn-small btn-block" onclick="saveMasterPassword()">Save Master Password</button>
+        </div>
+
+        <div class="card">
           <h3 class="card-title">Session</h3>
           <button class="btn btn-danger btn-block" onclick="logout()">🚪 Logout</button>
         </div>
@@ -722,7 +879,32 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeCameraScanner()">Cancel</button>
+      <button class="btn btn-warning" id="scannerTorchBtn" style="display:none;" onclick="toggleScannerTorch()">🔦 Torch</button>
       <button class="btn btn-primary" id="scannerDoneBtn" style="display:none;" onclick="closeCameraScanner()">✓ Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- FIRST-TIME MASTER PASSWORD SETUP MODAL -->
+<div class="modal-overlay" id="firstSetupModal" style="z-index: 5000;">
+  <div class="modal" style="width: 420px;">
+    <div class="modal-header">
+      <h3 class="modal-title">🔒 Welcome — Set Master Password</h3>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 13px; color: var(--neutral-700); margin-bottom: 14px;">Pehli baar app use karne se pehle ek <strong>Master Password</strong> set karein. Mobile <strong>9599497909</strong> ke saath yehi password admin login ke liye kaam karega.</p>
+      <div class="form-group">
+        <label class="form-label">New Master Password (min 6 characters)</label>
+        <input type="password" class="form-input" id="setupPass1" placeholder="Password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" class="form-input" id="setupPass2" placeholder="Repeat password">
+      </div>
+      <div id="setupError" style="color: var(--danger); font-size: 12px; margin-bottom: 10px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-block" onclick="saveFirstSetupPassword()">Save & Continue</button>
     </div>
   </div>
 </div>
@@ -741,9 +923,38 @@ const CONFIG = {
   SHOP_LOGO: '',
   SHOP_MOBILE: '9599497909',
   UPI_QR: '',
+  MASTER_PASS_HASH: '', // set via first-time setup or Settings; falls back to '111208' if empty
   BILL_TEMPLATE: { type: 'thermal', headerText: 'AK FASHION HUB', footerText: 'Thank You! Visit Again' },
-  TAG_TEMPLATE: { showMRP: true, showName: true, showBarcode: true }
+  TAG_TEMPLATE: { showMRP: true, showName: true, showBarcode: true, showQR: false }
 };
+
+// SHA-256 hex (crypto.subtle) — lightweight, no library needed
+async function sha256Hex(text) {
+  const buf = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Basic HTML injection guard for text interpolated into onclick="foo('...')" etc.
+function escapeHTML(str) {
+  if (str === undefined || str === null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;');
+}
+
+// Standardized loading state for any async button click.
+function setBusy(btn, busyText) {
+  if (!btn) return () => {};
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = busyText || 'Saving…';
+  return () => { btn.disabled = false; btn.innerHTML = original; };
+}
 
 let APP_STATE = {
   currentUser: null,
@@ -771,9 +982,96 @@ let APP_STATE = {
 // ============================================================================
 window.addEventListener('DOMContentLoaded', () => {
   loadConfig();
+  attachRestoreHandler();
+  attachPinAutoSubmit();
+  maybeShowFirstTimeSetup();
   checkSession();
   setupBarcodeScanning();
 });
+
+// If the user hasn't set a master password yet AND no saved session exists,
+// force them to set one before they can use hardcoded fallback.
+function maybeShowFirstTimeSetup() {
+  const done = localStorage.getItem('firstSetupDone') === '1';
+  const hasSession = !!localStorage.getItem('currentUser');
+  if (!done && !hasSession) {
+    document.getElementById('firstSetupModal').classList.add('active');
+  }
+}
+
+async function saveFirstSetupPassword() {
+  const p1 = document.getElementById('setupPass1').value;
+  const p2 = document.getElementById('setupPass2').value;
+  const err = document.getElementById('setupError');
+  err.textContent = '';
+  if (!p1 || p1.length < 6) { err.textContent = 'Password minimum 6 characters ka hona chahiye'; return; }
+  if (p1 !== p2) { err.textContent = 'Dono passwords match nahi ho rahe'; return; }
+  CONFIG.MASTER_PASS_HASH = await sha256Hex(p1);
+  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+  localStorage.setItem('firstSetupDone', '1');
+  document.getElementById('firstSetupModal').classList.remove('active');
+  showToast('✓ Master password saved');
+}
+
+async function saveMasterPassword() {
+  const p1 = document.getElementById('masterPassInput').value;
+  const p2 = document.getElementById('masterPassConfirm').value;
+  if (!p1 || p1.length < 6) { showToast('Password minimum 6 characters', true); return; }
+  if (p1 !== p2) { showToast('Passwords match nahi kar rahe', true); return; }
+  CONFIG.MASTER_PASS_HASH = await sha256Hex(p1);
+  localStorage.setItem('appConfig', JSON.stringify(CONFIG));
+  localStorage.setItem('firstSetupDone', '1');
+  document.getElementById('masterPassInput').value = '';
+  document.getElementById('masterPassConfirm').value = '';
+  showToast('✓ Master password updated');
+}
+
+function attachRestoreHandler() {
+  const el = document.getElementById('restoreFile');
+  if (!el) return;
+  el.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!confirm('Restore backup? Yeh current data ko REPLACE kar dega. Aap sure ho?')) {
+      el.value = '';
+      return;
+    }
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+      const data = backup && backup.data ? backup.data : backup;
+      if (!data || typeof data !== 'object') throw new Error('Invalid backup file format');
+      APP_STATE.data = Object.assign({
+        products: [], variants: [], customers: [], bills: [], billItems: [],
+        suppliers: [], purchases: [], staff: [], preorders: [], expenses: [], activityLog: []
+      }, data);
+      localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+      refreshDashboard(); refreshProducts(); refreshInventory(); refreshCustomers();
+      refreshSuppliers(); refreshExpenses(); refreshStaff(); refreshPreorders(); refreshReports();
+      showToast('✓ Backup restore ho gaya');
+    } catch (err) {
+      alert('❌ Backup file kharaab hai ya format galat hai: ' + err.message);
+    } finally {
+      el.value = '';
+    }
+  });
+}
+
+function attachPinAutoSubmit() {
+  const p4 = document.getElementById('pinInput4');
+  if (!p4) return;
+  p4.addEventListener('input', () => {
+    if (p4.value && /^\d$/.test(p4.value)) {
+      setTimeout(() => verifyPin(), 60);
+    }
+  });
+  // Enter on any PIN input triggers verify
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('pinInput' + i)?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') verifyPin();
+    });
+  }
+}
 
 function setupBarcodeScanning() {
   // USB/handheld barcode scanners act like a keyboard — they type the code fast and
@@ -848,17 +1146,18 @@ function playBeep() {
 }
 
 // ============================================================================
-// DUPLICATE SCAN PROTECTION — same barcode within 60s is ignored
+// DUPLICATE SCAN PROTECTION — same barcode within 3 seconds is ignored
+// (short enough that a real re-scan of a genuine second unit still goes through)
 // ============================================================================
+const DUPLICATE_SCAN_WINDOW_MS = 3000;
 function isDuplicateScan(code) {
   let recent;
   try { recent = JSON.parse(localStorage.getItem('recentScans') || '{}'); } catch (e) { recent = {}; }
 
   const now = Date.now();
-  // Housekeeping: drop anything older than a minute so this map never grows unbounded
-  Object.keys(recent).forEach(k => { if (now - recent[k] > 5000) delete recent[k]; });
+  Object.keys(recent).forEach(k => { if (now - recent[k] > DUPLICATE_SCAN_WINDOW_MS) delete recent[k]; });
 
-  const isDup = recent[code] && (now - recent[code] < 5000);
+  const isDup = recent[code] && (now - recent[code] < DUPLICATE_SCAN_WINDOW_MS);
   recent[code] = now;
   localStorage.setItem('recentScans', JSON.stringify(recent));
   return isDup;
@@ -871,20 +1170,25 @@ function isDuplicateScan(code) {
 let activeScanner = null;
 let scannerResultCallback = null;
 let scannerContinuous = false;
+let scannerTorchOn = false;
+let scannerActiveTrack = null;
 
 // continuous=true keeps the camera running and calls onResult for every new
 // (non-duplicate) code — used for billing, so dozens of items can be scanned
 // one after another without reopening the camera each time.
 function openCameraScanner(onResult, continuous = false) {
   if (typeof Html5Qrcode === 'undefined') {
-    alert('Camera scanner library load nahi hui — internet connection check karein.');
+    showToast('Camera scanner library load nahi hui — internet check karein', true);
     return;
   }
   scannerResultCallback = onResult;
   scannerContinuous = continuous;
+  scannerTorchOn = false;
+  scannerActiveTrack = null;
   document.getElementById('scannerError').textContent = '';
   document.getElementById('scannerModal').classList.add('active');
   document.getElementById('scannerDoneBtn').style.display = continuous ? 'inline-flex' : 'none';
+  document.getElementById('scannerTorchBtn').style.display = 'none';
   document.getElementById('scannerHint').textContent = continuous
     ? 'Camera chalu rahega — ek ke baad ek jitne chahiye scan karte jaayein, phir "Done" dabayein.'
     : 'Camera ko barcode/QR ke saamne rakhein — scan hote hi apne aap band ho jayega.';
@@ -894,7 +1198,7 @@ function openCameraScanner(onResult, continuous = false) {
 
   Html5Qrcode.getCameras().then(cameras => {
     if (!cameras || !cameras.length) {
-      document.getElementById('scannerError').textContent = 'Koi camera nahi mila.';
+      document.getElementById('scannerError').textContent = 'Is device par koi camera nahi mila. USB webcam ya mobile browser use karein.';
       return;
     }
     // Prefer the back/rear camera on phones
@@ -904,7 +1208,7 @@ function openCameraScanner(onResult, continuous = false) {
       config,
       (decodedText) => {
         if (isDuplicateScan(decodedText)) {
-          showToast('Barcode already scanned recently.', true);
+          showToast('Yeh barcode abhi-abhi scan ho chuka hai (3 sec me duplicate skip)', true);
           return;
         }
         playBeep();
@@ -918,16 +1222,53 @@ function openCameraScanner(onResult, continuous = false) {
         }
       },
       () => { /* ignore per-frame scan errors */ }
-    ).catch(err => {
-      document.getElementById('scannerError').textContent = 'Camera access fail hua: ' + err;
+    ).then(() => {
+      // Enable torch toggle if the browser + camera supports it
+      try {
+        const video = document.querySelector('#scannerReader video');
+        const stream = video && video.srcObject;
+        const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+        const capabilities = track && track.getCapabilities && track.getCapabilities();
+        if (capabilities && capabilities.torch) {
+          scannerActiveTrack = track;
+          document.getElementById('scannerTorchBtn').style.display = 'inline-flex';
+        }
+      } catch (e) { /* torch not supported — silently skip */ }
+    }).catch(err => {
+      const msg = String(err && err.message || err || '');
+      let friendly;
+      if (/permission|denied|NotAllowed/i.test(msg)) {
+        friendly = '❌ Camera permission deny kar diya gaya. Browser ke address bar me 🔒 icon dabakar "Camera" ko "Allow" karein, phir dobara try karein.';
+      } else if (/NotFound|NotReadable|OverconstrainedError/i.test(msg)) {
+        friendly = '❌ Camera use nahi ho pa raha — koi doosra app camera use kar raha ho sakta hai, ya driver problem hai. Baaki apps band karke retry karein.';
+      } else if (/secure|https/i.test(msg)) {
+        friendly = '❌ Camera sirf HTTPS ya localhost par kaam karta hai. Site ko HTTPS par kholein.';
+      } else {
+        friendly = '❌ Camera start nahi hua: ' + msg;
+      }
+      document.getElementById('scannerError').textContent = friendly;
     });
   }).catch(err => {
-    document.getElementById('scannerError').textContent = 'Camera permission chahiye. Browser settings check karein.';
+    document.getElementById('scannerError').textContent = '❌ Camera permission chahiye. Browser me site ke liye Camera "Allow" karein.';
   });
+}
+
+function toggleScannerTorch() {
+  if (!scannerActiveTrack) return;
+  scannerTorchOn = !scannerTorchOn;
+  try {
+    scannerActiveTrack.applyConstraints({ advanced: [{ torch: scannerTorchOn }] });
+    document.getElementById('scannerTorchBtn').textContent = scannerTorchOn ? '🔦 Torch (ON)' : '🔦 Torch';
+  } catch (e) {
+    showToast('Torch is device par support nahi karta', true);
+  }
 }
 
 function closeCameraScanner() {
   document.getElementById('scannerModal').classList.remove('active');
+  document.getElementById('scannerTorchBtn').style.display = 'none';
+  scannerActiveTrack = null;
+  scannerTorchOn = false;
   if (activeScanner) {
     activeScanner.stop().then(() => {
       activeScanner.clear();
@@ -942,6 +1283,12 @@ function loadConfig() {
     Object.assign(CONFIG, JSON.parse(saved));
     if (document.getElementById('apiUrl')) document.getElementById('apiUrl').value = CONFIG.API_URL || '';
     if (document.getElementById('razorpayKeyId')) document.getElementById('razorpayKeyId').value = CONFIG.RAZORPAY_KEY || '';
+    // Reflect tag template checkboxes
+    const ck = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    ck('tagShowMRP', CONFIG.TAG_TEMPLATE?.showMRP);
+    ck('tagShowName', CONFIG.TAG_TEMPLATE?.showName);
+    ck('tagShowBarcode', CONFIG.TAG_TEMPLATE?.showBarcode);
+    ck('tagShowQR', CONFIG.TAG_TEMPLATE?.showQR);
   }
   applyShopProfile();
   applyUpiQrPreview();
@@ -1085,21 +1432,33 @@ async function handleLogin(e) {
   e.preventDefault();
   const mobile = document.getElementById('loginMobile').value.trim();
   const password = document.getElementById('loginPassword').value;
+  const rememberMe = document.getElementById('rememberMe') && document.getElementById('rememberMe').checked;
   const errorEl = document.getElementById('loginError');
   errorEl.textContent = '';
-if (mobile === '9599497909' && password === '111208') {
 
-  APP_STATE.currentUser = {
-    staffID: 'ADMIN001',
-    name: 'ABHISHEK KUMAR',
-    mobile: '9599497909',
-    role: 'admin',
-    permissions: ['all']
-  };
+  // Master admin path: mobile 9599497909 + user-set master password (SHA-256 hash),
+  // OR legacy '111208' if no master password has been set yet.
+  if (mobile === '9599497909') {
+    const enteredHash = await sha256Hex(password);
+    const legacyHash = await sha256Hex('111208');
+    const savedHash = CONFIG.MASTER_PASS_HASH || '';
+    const ok = (savedHash && enteredHash === savedHash) || (!savedHash && enteredHash === legacyHash);
+    if (ok) {
+      APP_STATE.currentUser = {
+        staffID: 'ADMIN001',
+        name: 'ABHISHEK KUMAR',
+        mobile: '9599497909',
+        role: 'admin',
+        permissions: ['all']
+      };
+      if (rememberMe) localStorage.setItem('rememberMe', '1'); else localStorage.removeItem('rememberMe');
+      successfulLogin();
+      return;
+    }
+    errorEl.textContent = 'Master password galat hai';
+    return;
+  }
 
-  successfulLogin();
-  return;
-}
   if (!CONFIG.API_URL) {
     errorEl.textContent = 'Google Sheet API URL set nahi hai — Settings me set karein.';
     return;
@@ -1122,11 +1481,12 @@ if (mobile === '9599497909' && password === '111208') {
         role: loginResult.user.role,
         permissions: loginResult.user.permissions
       };
+      if (rememberMe) localStorage.setItem('rememberMe', '1'); else localStorage.removeItem('rememberMe');
       successfulLogin();
       return;
     }
 
-    errorEl.textContent = (loginResult && loginResult.error) || 'Login fail hua';
+    errorEl.textContent = (loginResult && loginResult.error) || 'Login fail hua — mobile ya password galat hai';
   } catch (err) {
     console.error('Login request failed:', err);
     errorEl.textContent = 'Google Sheet se connect nahi ho paya. Internet ya API URL check karein.';
@@ -1148,9 +1508,10 @@ function successfulLogin() {
 }
 
 function logout() {
-  if (confirm('Are you sure?')) {
+  if (confirm('Aap logout karna chahte ho?')) {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('loginTime');
+    localStorage.removeItem('rememberMe');
     APP_STATE.currentUser = null;
     document.getElementById('appShell').classList.remove('active');
     document.getElementById('loginContainer').style.display = 'flex';
@@ -1161,7 +1522,8 @@ function logout() {
 
 function checkSession() {
   const user = localStorage.getItem('currentUser');
-  if (user) {
+  const remember = localStorage.getItem('rememberMe') === '1';
+  if (user && remember) {
     APP_STATE.currentUser = JSON.parse(user);
     document.getElementById('loginContainer').style.display = 'none';
     document.getElementById('appShell').classList.add('active');
@@ -1170,6 +1532,9 @@ function checkSession() {
     restoreActiveCart();
     syncPendingBills();
     navigateToScreen('dashboard');
+  } else if (user && !remember) {
+    // Session existed but user did not tick Remember me — clear it so they re-login
+    localStorage.removeItem('currentUser');
   }
 }
 
@@ -1284,6 +1649,7 @@ function navigateToScreen(screenName) {
     customers: '👤 Customers',
     suppliers: '🚚 Suppliers',
     expenses: '💰 Expenses',
+    galla: '💵 Cash Drawer / Galla',
     reports: '📈 Reports',
     staff: '👥 Staff Management',
     templates: '🎨 Bill & Tag Templates',
@@ -1299,11 +1665,12 @@ function navigateToScreen(screenName) {
     if (screenName === 'customers') refreshCustomers();
     if (screenName === 'suppliers') refreshSuppliers();
     if (screenName === 'expenses') refreshExpenses();
+    if (screenName === 'galla') refreshGalla();
     if (screenName === 'reports') refreshReports();
     if (screenName === 'staff') refreshStaff();
     if (screenName === 'pricetags') renderTagPicker();
     if (screenName === 'preorders') refreshPreorders();
-    if (screenName === 'billing') toggleBillQrDisplay();
+    if (screenName === 'billing') { toggleBillQrDisplay(); toggleCashPanel(); }
   }, 100);
 }
 
@@ -1362,6 +1729,8 @@ function refreshDashboard() {
       <td>${b.CreatedDate ? new Date(b.CreatedDate).toLocaleDateString() : '—'}</td>
     </tr>
   `).join('') || '<tr><td colspan="5" style="text-align: center; color: #999;">No bills</td></tr>';
+
+  renderSalesChart();
 }
 
 // ============================================================================
@@ -1461,13 +1830,161 @@ console.log(APP_STATE.data.products);
 
   renderCart();
   updateBillTotals();
+  saveActiveCart();
+}
+
+// ============================================================================
+// CART RENDER / TOTALS / PERSISTENCE  (previously missing — cart was invisible
+// and totals never updated on the billing screen)
+// ============================================================================
+function saveActiveCart() {
+  try { localStorage.setItem('activeCart', JSON.stringify(APP_STATE.cart || [])); } catch (e) {}
+}
+
+function renderCart() {
+  const container = document.getElementById('billItems');
+  if (!container) return;
+
+  if (!APP_STATE.cart || APP_STATE.cart.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--neutral-500); padding: 40px 12px;">Empty cart — scan a product ya "search product" me se add karein</div>';
+    return;
+  }
+
+  container.innerHTML = APP_STATE.cart.map((item, idx) => {
+    const line = item.quantity * item.salePrice;
+    return `
+      <div class="cart-item">
+        <div class="cart-item-header">
+          <div style="flex:1;">
+            <div class="cart-item-name">${escapeHTML(item.name)}</div>
+            <div style="font-size:11px; color:var(--neutral-500); margin-top:2px;">${escapeHTML(item.color || '')}/${escapeHTML(item.size || '')} · UID: ${escapeHTML(item.uid || '')}</div>
+          </div>
+          <div class="cart-item-remove" title="Remove item" onclick="removeCartItem(${idx})">✕</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <div class="cart-item-qty">
+            <button type="button" class="btn btn-secondary btn-small" style="padding:2px 8px;" onclick="changeCartQty(${idx}, -1)">−</button>
+            <input type="number" min="1" value="${item.quantity}" onchange="setCartQty(${idx}, this.value)" onclick="this.select()">
+            <button type="button" class="btn btn-secondary btn-small" style="padding:2px 8px;" onclick="changeCartQty(${idx}, 1)">+</button>
+            <span style="color:var(--neutral-500);">× ₹${Number(item.salePrice).toLocaleString('en-IN')}</span>
+          </div>
+          <div style="font-weight:700;">₹${line.toLocaleString('en-IN')}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateBillTotals() {
+  const cart = APP_STATE.cart || [];
+  const subtotal = cart.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+  const discountInput = document.getElementById('billDiscountAmount');
+  const discount = Math.min(subtotal, Number(discountInput && discountInput.value) || 0);
+  const total = subtotal - discount;
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('billSubtotal', '₹' + subtotal.toLocaleString('en-IN'));
+  set('billDiscount', '-₹' + Math.round(discount).toLocaleString('en-IN'));
+  set('billTotal', '₹' + Math.round(total).toLocaleString('en-IN'));
+}
+
+function changeCartQty(idx, delta) {
+  const item = APP_STATE.cart[idx];
+  if (!item) return;
+
+  // Look up available stock so we never go above what's in inventory
+  let maxStock = Infinity;
+  (APP_STATE.data.products || []).forEach(p => {
+    const v = (p.variants || []).find(v => v.VariantID === item.variantID);
+    if (v) maxStock = Number(v.Stock) || 0;
+  });
+
+  const next = item.quantity + delta;
+  if (next < 1) return removeCartItem(idx);
+  if (next > maxStock) {
+    showToast('Only ' + maxStock + ' in stock', true);
+    return;
+  }
+  item.quantity = next;
+  renderCart();
+  updateBillTotals();
+  saveActiveCart();
+}
+
+function setCartQty(idx, value) {
+  const item = APP_STATE.cart[idx];
+  if (!item) return;
+  const n = Math.max(1, Math.floor(Number(value) || 1));
+
+  let maxStock = Infinity;
+  (APP_STATE.data.products || []).forEach(p => {
+    const v = (p.variants || []).find(v => v.VariantID === item.variantID);
+    if (v) maxStock = Number(v.Stock) || 0;
+  });
+
+  if (n > maxStock) {
+    showToast('Only ' + maxStock + ' in stock', true);
+    item.quantity = maxStock;
+  } else {
+    item.quantity = n;
+  }
+  renderCart();
+  updateBillTotals();
+  saveActiveCart();
+}
+
+function removeCartItem(idx) {
+  APP_STATE.cart.splice(idx, 1);
+  renderCart();
+  updateBillTotals();
+  saveActiveCart();
+}
+
+// Billing "search product by name" — dropdown of matching variants; click to add.
+function renderBillingSearchDropdown() {
+  const q = (document.getElementById('billingProductSearch').value || '').trim().toLowerCase();
+  const dd = document.getElementById('billingSearchDropdown');
+  if (!q) { dd.style.display = 'none'; dd.innerHTML = ''; return; }
+
+  const rows = [];
+  (APP_STATE.data.products || []).forEach(p => {
+    if (!p.Name.toLowerCase().includes(q) && !(p.UID || '').toLowerCase().includes(q)) return;
+    (p.variants || []).forEach(v => {
+      if ((Number(v.Stock) || 0) <= 0) return;
+      rows.push({ p, v });
+    });
+  });
+
+  if (!rows.length) {
+    dd.innerHTML = '<div style="padding:10px; font-size:12px; color:var(--neutral-500);">Koi product nahi mila (ya sab out of stock hain)</div>';
+    dd.style.display = 'block';
+    return;
+  }
+
+  dd.innerHTML = rows.slice(0, 30).map(({ p, v }) => `
+    <div style="padding:10px; border-bottom:1px solid var(--neutral-100); cursor:pointer; font-size:12px;"
+         onmousedown="pickBillingSearchResult('${escapeHTML(v.VariantID)}')"
+         onmouseover="this.style.background='var(--neutral-100)'"
+         onmouseout="this.style.background='transparent'">
+      <div style="font-weight:600;">${escapeHTML(p.Name)}</div>
+      <div style="color:var(--neutral-500);">${escapeHTML(v.Color)}/${escapeHTML(v.Size)} · ₹${Number(v.SalePrice || p.SalePrice || 0).toLocaleString('en-IN')} · Stock: ${v.Stock}</div>
+    </div>
+  `).join('');
+  dd.style.display = 'block';
+}
+
+function pickBillingSearchResult(variantID) {
+  // Route through addToCart so all stock/duplicate logic still applies
+  addToCart(variantID);
+  document.getElementById('billingProductSearch').value = '';
+  document.getElementById('billingSearchDropdown').style.display = 'none';
 }
 let billSubmitting = false;
 
 async function completeBill() {
   if (billSubmitting) return; // block double-clicks from creating duplicate bills
   if (APP_STATE.cart.length === 0) {
-    alert('Cart is empty');
+    showToast('Cart empty hai — pehle koi product scan ya search karke add karein', true);
     return;
   }
 
@@ -1610,6 +2127,7 @@ function finishBillLocally(billID, billNumber, customerName, customerMobile, tot
   }
 
   APP_STATE.cart = [];
+  saveActiveCart();
   document.getElementById('billDiscountAmount').value = 0;
   renderCart();
   updateBillTotals();
@@ -1739,13 +2257,30 @@ function paymentModeLabel(mode) {
 // browsers (and some in-app webviews) block that popup silently, which was the
 // reason printing wasn't working. An iframe isn't a popup, so it can't be blocked.
 function printViaIframe(bodyHTML, extraCSS) {
-  let iframe = document.getElementById('hiddenPrintFrame');
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.id = 'hiddenPrintFrame';
-    iframe.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0;';
-    document.body.appendChild(iframe);
-  }
+  // Replace any previous iframe cleanly so onload/setTimeout fallback don't stack
+  const oldFrame = document.getElementById('hiddenPrintFrame');
+  if (oldFrame) oldFrame.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'hiddenPrintFrame';
+  iframe.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0;';
+  document.body.appendChild(iframe);
+
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      alert('Print open nahi ho paya: ' + e.message);
+    }
+  };
+
+  // Wire up onload BEFORE calling doc.open — otherwise some browsers fire load
+  // synchronously during write() and we miss the event entirely.
+  iframe.onload = doPrint;
 
   const doc = iframe.contentWindow.document;
   doc.open();
@@ -1755,6 +2290,7 @@ function printViaIframe(bodyHTML, extraCSS) {
     <head>
       <style>
         body { margin: 0; padding: 0; font-family: 'Courier New', monospace; }
+        @page { margin: 4mm; }
         ${extraCSS || ''}
       </style>
     </head>
@@ -1763,34 +2299,38 @@ function printViaIframe(bodyHTML, extraCSS) {
   `);
   doc.close();
 
-  iframe.onload = () => {
-  iframe.contentWindow.focus();
-  iframe.contentWindow.print();
-};
+  // Fallback in case onload never fires (older webviews, certain image-load races)
+  setTimeout(doPrint, 700);
 }
 
 function printBill() {
   if (APP_STATE.cart.length === 0) {
-    alert('No items to print');
+    showToast('No items to print', true);
     return;
   }
 
   const billHTML = buildBillHTML();
-  printViaIframe(billHTML, `
-    .bill-thermal {
-  width: 3in;
-  min-height: auto;
-  height: auto;
-  overflow: visible;
-  font-size: 11px;
-}
-    .bill-a4 { width: 8.5in; font-size: 12px; }
-    .bill-header { text-align: center; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+  const isThermal = (CONFIG.BILL_TEMPLATE.type || 'thermal') === 'thermal';
+  const extraCSS = isThermal ? `
+    @page { size: 80mm auto; margin: 3mm; }
+    body { width: 76mm; }
+    .bill-thermal, .bill-3-5 { width: 100%; font-size: 11px; font-family: 'Courier New', monospace; }
+    .bill-header { text-align: center; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 6px; }
     .bill-logo { height: 40px; margin-bottom: 4px; object-fit: contain; }
     .bill-title { font-weight: bold; font-size: 13px; margin: 4px 0; }
-    .bill-items { margin: 12px 0; }
-    .bill-total { font-weight: bold; font-size: 12px; text-align: right; margin-top: 8px; padding-top: 8px; border-top: 2px solid #000; }
-  `);
+    .bill-items { margin: 8px 0; }
+    .bill-total { font-weight: bold; font-size: 12px; text-align: right; margin-top: 8px; padding-top: 6px; border-top: 2px solid #000; }
+  ` : `
+    @page { size: A4; margin: 12mm; }
+    body { font-size: 12px; }
+    .bill-a4 { width: 100%; font-size: 12px; font-family: 'Segoe UI', Arial, sans-serif; }
+    .bill-header { text-align: center; margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+    .bill-logo { height: 60px; margin-bottom: 6px; object-fit: contain; }
+    .bill-title { font-weight: bold; font-size: 18px; margin: 4px 0; }
+    .bill-items { margin: 16px 0; }
+    .bill-total { font-weight: bold; font-size: 14px; text-align: right; margin-top: 12px; padding-top: 10px; border-top: 2px solid #000; }
+  `;
+  printViaIframe(billHTML, extraCSS);
 }
 
 // Renders the bill as a PNG image (via html2canvas — free, no paid API) and shares it
@@ -1799,7 +2339,7 @@ function printBill() {
 // paid WhatsApp Business API — there's no way to auto-attach a file to a wa.me link.
 async function shareBillToWhatsApp() {
   if (APP_STATE.cart.length === 0) {
-    alert('No items to share');
+    showToast('Bill me koi item nahi hai', true);
     return;
   }
   if (typeof html2canvas === 'undefined') {
@@ -1938,6 +2478,16 @@ async function saveProduct() {
   if (!name) { alert('Product name is required'); return; }
 
   const variants = collectVariantRows([]);
+  // Duplicate barcode guard — refuse to save if any typed-in barcode collides with existing
+  for (const v of variants) {
+    if (v.Barcode) {
+      const dup = findDuplicateBarcode(v.Barcode, v.VariantID);
+      if (dup) {
+        alert('❌ Duplicate barcode "' + v.Barcode + '" already exists on:\n\n' + dup.product.Name + ' (' + dup.variant.Color + '/' + dup.variant.Size + ')\n\nProduct save nahi hoga — kripya different barcode dein.');
+        return;
+      }
+    }
+  }
   const gender = document.getElementById('modalGender').value;
   const brand = document.getElementById('modalBrand').value;
   const costPrice = Number(document.getElementById('modalCP').value) || 0;
@@ -1964,6 +2514,7 @@ async function saveProduct() {
 
   // Save each variant to the Variants sheet too, using the real ProductID/UID
   const savedVariants = [];
+  const failedVariants = [];
   for (const v of variants) {
     const vResult = await backendCall('addVariant', {
       productID, uid, color: v.Color, size: v.Size, stock: v.Stock,
@@ -1972,7 +2523,15 @@ async function saveProduct() {
     });
     if (vResult.success) {
       savedVariants.push({ VariantID: vResult.data.variantID, Color: v.Color, Size: v.Size, Stock: v.Stock, Floor: v.Floor, Rack: v.Rack, Shelf: v.Shelf, Barcode: (vResult.data.barcode || v.Barcode) });
+    } else {
+      failedVariants.push({ v, error: vResult.error });
     }
+  }
+
+  if (failedVariants.length) {
+    alert('⚠️ ' + failedVariants.length + ' variant(s) Google Sheet me save nahi hue:\n\n' +
+      failedVariants.map(f => `• ${f.v.Color}/${f.v.Size} — ${f.error}`).join('\n') +
+      '\n\nProduct save ho gaya hai, lekin ye variant edit karke dobara try karein.');
   }
 
   const product = {
@@ -2237,8 +2796,8 @@ function refreshInventory() {
       <td>${row.stock}</td>
       <td>${row.floor} · ${row.rack} · ${row.shelf}</td>
       <td>
-        ${row.stock === 0 ? '<span class="badge badge-danger">Out of Stock</span>' :
-          row.stock <= 5 ? '<span class="badge badge-warning">Low Stock</span>' :
+        ${row.stock === 0 || Number(row.stock) === 0 ? '<span class="badge badge-danger">Out of Stock</span>' :
+          Number(row.stock) <= 5 ? '<span class="badge badge-warning">Low Stock</span>' :
           '<span class="badge badge-success">In Stock</span>'}
       </td>
       <td>
@@ -2507,12 +3066,25 @@ function searchBillForReturn() {
   }
 
   const billItems = (APP_STATE.data.billItems || []).filter(bi => bi.BillID === bill.BillID);
-  
+  const soldDate = new Date(bill.CreatedDate);
+  const daysPassed = Math.floor((Date.now() - soldDate.getTime()) / (1000*60*60*24));
+  const daysRemaining = 3 - daysPassed;
+  const eligible = daysRemaining >= 0;
+
   const html = `
     <div class="card">
       <div style="margin-bottom: 16px;">
-        <h3 style="margin: 0 0 4px 0;">Bill #${bill.BillNumber}</h3>
-        <p style="margin: 0; font-size: 12px; color: var(--neutral-500);">${bill.CustomerName} | ${bill.CustomerMobile}</p>
+        <h3 style="margin: 0 0 4px 0;">Bill #${escapeHTML(bill.BillNumber)}</h3>
+        <p style="margin: 0; font-size: 12px; color: var(--neutral-500);">${escapeHTML(bill.CustomerName)} | ${escapeHTML(bill.CustomerMobile)}</p>
+      </div>
+      <div style="background:${eligible ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; padding:12px; border-radius:6px; margin-bottom:14px;">
+        <div style="font-weight:700; color:${eligible ? 'var(--success)' : 'var(--danger)'};">
+          ${eligible ? '✅ Refund Eligible' : '❌ Refund Expired'}
+        </div>
+        <div style="font-size:12px; margin-top:4px;">
+          Sold: ${soldDate.toLocaleDateString()} · Today: ${new Date().toLocaleDateString()} · Days passed: ${daysPassed}
+          · ${eligible ? `Days remaining: ${daysRemaining + 1}` : 'Return window expired (3 din policy)'}
+        </div>
       </div>
       <div class="table-wrapper">
         <table>
@@ -2520,12 +3092,15 @@ function searchBillForReturn() {
           <tbody>
             ${billItems.map((item, idx) => `
               <tr>
-                <td>${item.UID}</td>
-                <td>${item.Color}/${item.Size}</td>
+                <td>${escapeHTML(item.UID)}</td>
+                <td>${escapeHTML(item.Color)}/${escapeHTML(item.Size)}</td>
                 <td>${item.Quantity}</td>
                 <td>₹${Number(item.SalePrice).toLocaleString('en-IN')}</td>
                 <td>
-                  <button class="btn btn-danger btn-small" onclick="requirePin('Return').then(ok => { if(ok) processReturn('${bill.BillID}', '${item.VariantID}', ${item.Quantity}); })">Return</button>
+                  ${eligible
+                    ? `<button class="btn btn-danger btn-small" onclick="requirePin('Return').then(ok => { if(ok) processReturn('${escapeHTML(bill.BillID)}', '${escapeHTML(item.VariantID)}', ${item.Quantity}); })">Return</button>`
+                    : `<button class="btn btn-secondary btn-small" disabled title="3-din exceed">Expired</button>`
+                  }
                 </td>
               </tr>
             `).join('')}
@@ -2539,6 +3114,17 @@ function searchBillForReturn() {
 }
 
 async function processReturn(billID, variantID, qty) {
+  // 3-day return window policy — enforce before backend call
+  const bill = (APP_STATE.data.bills || []).find(b => b.BillID === billID);
+  if (bill && bill.CreatedDate) {
+    const soldDate = new Date(bill.CreatedDate);
+    const daysPassed = Math.floor((Date.now() - soldDate.getTime()) / (1000*60*60*24));
+    if (daysPassed > 3) {
+      alert('❌ Return Expired\n\nSold: ' + soldDate.toLocaleDateString() + '\nToday: ' + new Date().toLocaleDateString() + '\nDays passed: ' + daysPassed + '\n\n3-din ki return policy exceed ho gayi hai. Manager approval ke bina return process nahi hoga.');
+      return;
+    }
+  }
+
   const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
   const result = await backendCall('returnBill', { billID, variantID, quantity: qty, staffID });
   if (!result.success) {
@@ -2554,7 +3140,25 @@ async function processReturn(billID, variantID, qty) {
     }
   });
 
-  alert('✓ Return processed. Stock restored by ' + qty + ' units');
+  // Log to local returns table (used by Reports)
+  APP_STATE.data.returns = APP_STATE.data.returns || [];
+  const item = (APP_STATE.data.billItems || []).find(bi => bi.BillID === billID && bi.VariantID === variantID) || {};
+  APP_STATE.data.returns.push({
+    Date: new Date().toISOString(),
+    BillNumber: bill?.BillNumber || billID,
+    Item: (item.UID || '—') + ' ' + (item.Color || '') + '/' + (item.Size || ''),
+    Quantity: qty,
+    Amount: qty * (Number(item.SalePrice) || 0)
+  });
+
+  // Log refund as cash-out to drawer
+  const refundAmount = qty * (Number(item.SalePrice) || 0);
+  if (refundAmount > 0) {
+    const notesOut = suggestChangeBreakdown(refundAmount);
+    logCashTxn({ type: 'REFUND', ref: 'Bill ' + (bill?.BillNumber || billID), notesOut, note: 'Return ' + qty + ' unit(s)' });
+  }
+
+  showToast('✓ Return processed — stock restored by ' + qty + ', refund ₹' + refundAmount);
   refreshInventory();
   refreshProducts();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
@@ -2768,21 +3372,19 @@ function buildLabelSheetsHTML() {
       <div style="text-align: center; font-size: 10px; color: #888; margin-bottom: 8px;" class="no-print">Sheet ${si + 1} of ${labelSheets.length}</div>
       <div style="display: grid; grid-template-columns: repeat(${colsPerSheet}, 1fr); gap: 8px;">
         ${sheet.slots.map(tag => {
-          if (!tag) {
-  return '';
-}
-         const barcodeImg = CONFIG.TAG_TEMPLATE.showBarcode
- ?renderBarcodeDataURI(tag.variantBarcode || tag.variantID)
- : '';
+          if (!tag) return '';
+          const barcodeText = tag.variantBarcode || tag.barcode || tag.variantID;
+          const barcodeImg = CONFIG.TAG_TEMPLATE.showBarcode ? renderBarcodeDataURI(barcodeText) : '';
+          const qrImg = CONFIG.TAG_TEMPLATE.showQR ? renderQRDataURI(barcodeText) : '';
           return `
             <div style="border: 1px dashed #ccc; padding: 8px; border-radius: 4px; width: ${width}; height: ${height}; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; overflow: hidden;">
-              ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${tag.name}</div>` : ''}
-              <div style="color: #888; margin-bottom: 4px; font-size: 8px;">${tag.color}/${tag.size}</div>
-            <img src="${barcodeImg}" style="height: 60px; width: auto; max-width: 95%; image-rendering: crisp-edges;">
+              ${CONFIG.TAG_TEMPLATE.showName ? `<div style="font-weight: 700; text-align: center; margin-bottom: 4px; font-size: 10px;">${escapeHTML(tag.name)}</div>` : ''}
+              <div style="color: #888; margin-bottom: 4px; font-size: 8px;">${escapeHTML(tag.color)}/${escapeHTML(tag.size)}</div>
+              ${barcodeImg ? `<img src="${barcodeImg}" style="height: 60px; width: auto; max-width: 95%; image-rendering: crisp-edges;">` : ''}
+              ${qrImg ? `<img src="${qrImg}" style="height: 60px; width: 60px; margin-top: 4px; image-rendering: crisp-edges;">` : ''}
               <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top: 6px;">
-               ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 18px; color: #888;">₹${tag.mrp}</span>` : ''}
-<span style="font-size: 32px; font-weight: 800; color: #000;">₹${tag.price}</span>
-              
+                ${(CONFIG.TAG_TEMPLATE.showMRP && tag.mrp > tag.price) ? `<span style="text-decoration: line-through; font-size: 18px; color: #888;">₹${tag.mrp}</span>` : ''}
+                <span style="font-size: 32px; font-weight: 800; color: #000;">₹${tag.price}</span>
               </div>
             </div>
           `;
@@ -2790,6 +3392,27 @@ function buildLabelSheetsHTML() {
       </div>
     </div>
   `).join('');
+}
+
+// QR rendering via qrcodejs — into an offscreen div, then grab as PNG data-URI.
+function renderQRDataURI(text) {
+  if (typeof QRCode === 'undefined') return '';
+  try {
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:absolute; left:-9999px;';
+    document.body.appendChild(holder);
+    new QRCode(holder, { text: String(text || ''), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+    const img = holder.querySelector('img');
+    const canvas = holder.querySelector('canvas');
+    let uri = '';
+    if (img && img.src) uri = img.src;
+    else if (canvas) uri = canvas.toDataURL('image/png');
+    document.body.removeChild(holder);
+    return uri;
+  } catch (e) {
+    console.error('QR render error:', e);
+    return '';
+  }
 }
 
 function previewLabelSheets() {
@@ -3005,6 +3628,123 @@ async function saveSupplier() {
   closeModal();
   refreshSuppliers();
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+}
+
+// ============================================================================
+// SUPPLIERS — Add Purchase (was a dead button before)
+// ============================================================================
+async function addPurchase() {
+  const supplierID = document.getElementById('purchaseSupplier').value;
+  const productUID = document.getElementById('purchaseProductUID').value.trim();
+  const qty = Number(document.getElementById('purchaseQty').value) || 0;
+  const staffID = APP_STATE.currentUser && APP_STATE.currentUser.staffID;
+
+  if (!supplierID) { showToast('Pehle supplier select karein', true); return; }
+  if (!productUID) { showToast('Product UID daalein', true); return; }
+  if (qty <= 0) { showToast('Quantity 0 se zyada honi chahiye', true); return; }
+
+  // Match product + primary variant by UID (Google Sheet ProductPurchase expects variantID/qty typically)
+  let matchedProduct = null;
+  let matchedVariant = null;
+  (APP_STATE.data.products || []).forEach(p => {
+    if (p.UID === productUID) {
+      matchedProduct = p;
+      matchedVariant = (p.variants || [])[0] || null;
+    }
+  });
+  if (!matchedProduct) { showToast('UID ' + productUID + ' ke naam koi product nahi mila', true); return; }
+  if (!matchedVariant) { showToast('Is product me koi variant nahi hai — pehle Product edit karke Color/Size add karein', true); return; }
+
+  const btn = document.querySelector('#suppliersScreen .btn-primary.btn-block');
+  const restore = setBusy(btn, 'Saving…');
+
+  const result = await backendCall('addPurchase', {
+    supplierID, productID: matchedProduct.ProductID, uid: productUID,
+    variantID: matchedVariant.VariantID, quantity: qty, staffID
+  });
+
+  restore();
+
+  if (!result.success) {
+    alert('❌ Google Sheet me purchase save nahi hua: ' + result.error);
+    return;
+  }
+
+  // Increment local stock so UI immediately reflects the purchase
+  matchedVariant.Stock = (Number(matchedVariant.Stock) || 0) + qty;
+  matchedProduct.TotalStock = (matchedProduct.variants || []).reduce((s, v) => s + Number(v.Stock || 0), 0);
+
+  APP_STATE.data.purchases = APP_STATE.data.purchases || [];
+  APP_STATE.data.purchases.push({
+    PurchaseID: (result.data && result.data.purchaseID) || ('pur_' + Date.now()),
+    SupplierID: supplierID, ProductID: matchedProduct.ProductID, UID: productUID,
+    VariantID: matchedVariant.VariantID, Quantity: qty, Date: new Date().toISOString()
+  });
+
+  localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
+  refreshInventory();
+  refreshProducts();
+
+  document.getElementById('purchaseProductUID').value = '';
+  document.getElementById('purchaseQty').value = 10;
+  showToast('✓ Purchase saved — stock ' + qty + ' units badha diya');
+}
+
+// ============================================================================
+// DASHBOARD SALES CHART (Chart.js — last 30 days)
+// ============================================================================
+let _salesChartInstance = null;
+function renderSalesChart() {
+  const canvas = document.getElementById('salesChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  const bills = APP_STATE.data.bills || [];
+  const days = [];
+  const totals = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split('T')[0];
+    days.push(d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+    let total = 0;
+    bills.forEach(b => {
+      if (b.CreatedDate && b.CreatedDate.indexOf(key) === 0) {
+        total += Number(b.TotalAmount) || 0;
+      }
+    });
+    totals.push(total);
+  }
+
+  if (_salesChartInstance) _salesChartInstance.destroy();
+  _salesChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{
+        label: 'Daily Sales (₹)',
+        data: totals,
+        borderColor: '#000000',
+        backgroundColor: 'rgba(212, 175, 55, 0.15)',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: true,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { callback: v => '₹' + Number(v).toLocaleString('en-IN'), font: { size: 10 } } }
+      }
+    }
+  });
 }
 
 // ============================================================================
@@ -3350,12 +4090,17 @@ function updateTagPreview() {
   CONFIG.TAG_TEMPLATE.showMRP = document.getElementById('tagShowMRP').checked;
   CONFIG.TAG_TEMPLATE.showName = document.getElementById('tagShowName').checked;
   CONFIG.TAG_TEMPLATE.showBarcode = document.getElementById('tagShowBarcode').checked;
+  const qrCk = document.getElementById('tagShowQR');
+  CONFIG.TAG_TEMPLATE.showQR = qrCk ? qrCk.checked : false;
+
+  const qrPreviewImg = CONFIG.TAG_TEMPLATE.showQR ? renderQRDataURI('AKFH000001') : '';
 
   const preview = `
     <div class="template-preview" style="width: 300px; border: 2px solid var(--neutral-300); padding: 16px; text-align: center;">
       ${CONFIG.TAG_TEMPLATE.showName ? '<div style="font-weight: 700; margin-bottom: 6px; font-size: 12px;">Sample Shirt</div>' : ''}
       <div style="font-size: 10px; color: var(--neutral-600); margin-bottom: 6px;">Black / M</div>
       ${CONFIG.TAG_TEMPLATE.showBarcode ? '<svg id="previewBarcode" style="height: 44px; margin: 8px 0;"></svg>' : ''}
+      ${qrPreviewImg ? `<img src="${qrPreviewImg}" style="width:70px; height:70px; margin: 6px 0;">` : ''}
       <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0;">
         ${CONFIG.TAG_TEMPLATE.showMRP ? '<span style="text-decoration: line-through; font-size: 15px; color: #999;">₹399</span>' : ''}
         <span style="font-size: 26px; font-weight: 700;">₹299</span>
@@ -3517,11 +4262,819 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ============================================================================
+// ============================================================================
+// CASH DRAWER / GALLA  — denomination-wise opening, note in/out tracking,
+// live drawer balance, closing count with shortage/excess, transaction log.
+// All persisted locally in `cashDrawer` + `cashTransactions`; optionally synced
+// to Google Sheet if backend implements 'saveCashSnapshot' / 'addCashTxn'.
+// ============================================================================
+const DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1];
+const DENOM_LABELS = { 500: '₹500', 200: '₹200', 100: '₹100', 50: '₹50', 20: '₹20', 10: '₹10', 5: '₹5 Coin', 2: '₹2 Coin', 1: '₹1 Coin' };
+
+function todayKey() { return new Date().toISOString().split('T')[0]; }
+
+function getCashState() {
+  const key = 'cashDrawer_' + todayKey();
+  try { return JSON.parse(localStorage.getItem(key) || 'null') || null; } catch (e) { return null; }
+}
+function saveCashState(state) {
+  localStorage.setItem('cashDrawer_' + todayKey(), JSON.stringify(state));
+}
+function getCashTxns() {
+  const key = 'cashTxns_' + todayKey();
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { return []; }
+}
+function saveCashTxns(txns) {
+  localStorage.setItem('cashTxns_' + todayKey(), JSON.stringify(txns));
+}
+function denomTotal(counts) {
+  return DENOMS.reduce((s, d) => s + d * (Number(counts[d]) || 0), 0);
+}
+
+function ensureCashState() {
+  let state = getCashState();
+  if (!state) {
+    const empty = {}; DENOMS.forEach(d => empty[d] = 0);
+    state = { openingSet: false, opening: {...empty}, current: {...empty}, closing: null };
+    saveCashState(state);
+  }
+  return state;
+}
+
+function refreshGalla() {
+  ensureCashState();
+  renderOpeningDenomList();
+  renderLiveGalla();
+  renderCashTxnTable();
+}
+
+function renderOpeningDenomList() {
+  const state = getCashState();
+  const list = document.getElementById('openingDenomList');
+  if (!list) return;
+  list.innerHTML = DENOMS.map(d => `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <div style="width:70px; font-weight:600; font-size:12px;">${DENOM_LABELS[d]}</div>
+      <input type="number" min="0" value="${(state && state.opening[d]) || 0}" ${state && state.openingSet ? 'disabled' : ''}
+             oninput="onOpeningInput(${d}, this.value)" style="flex:1; padding:6px 10px; border:1px solid var(--neutral-300); border-radius:4px;">
+      <div style="width:70px; text-align:right; font-size:12px; color:var(--neutral-500);">₹${(d * (Number((state && state.opening[d]) || 0))).toLocaleString('en-IN')}</div>
+    </div>
+  `).join('');
+  updateOpeningTotal();
+}
+
+function onOpeningInput(denom, val) {
+  const state = getCashState() || ensureCashState();
+  state.opening[denom] = Math.max(0, Math.floor(Number(val) || 0));
+  saveCashState(state);
+  updateOpeningTotal();
+}
+function updateOpeningTotal() {
+  const state = getCashState();
+  const t = state ? denomTotal(state.opening) : 0;
+  const el = document.getElementById('openingTotal'); if (el) el.textContent = '₹' + t.toLocaleString('en-IN');
+}
+
+function saveOpeningCash() {
+  const state = getCashState();
+  if (!state) return;
+  if (state.openingSet) { showToast('Opening cash aaj set ho chuka hai — closing pe reset karein', true); return; }
+  state.openingSet = true;
+  state.current = { ...state.opening };
+  saveCashState(state);
+  // Log the opening as a transaction
+  const txns = getCashTxns();
+  txns.push({
+    time: new Date().toISOString(), type: 'OPENING', ref: 'Shift start',
+    notesIn: { ...state.opening }, notesOut: {},
+    amount: denomTotal(state.opening),
+    drawer: denomTotal(state.current),
+    staff: (APP_STATE.currentUser && APP_STATE.currentUser.name) || 'Unknown'
+  });
+  saveCashTxns(txns);
+  refreshGalla();
+  showToast('✓ Opening cash saved — ₹' + denomTotal(state.opening));
+}
+
+function renderLiveGalla() {
+  const state = getCashState() || ensureCashState();
+  const list = document.getElementById('liveGallaList');
+  if (!list) return;
+  list.innerHTML = DENOMS.map(d => {
+    const c = Number(state.current[d] || 0);
+    return `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--neutral-100); font-size:12px;">
+      <span style="font-weight:600;">${DENOM_LABELS[d]}</span>
+      <span>× ${c} = ₹${(d*c).toLocaleString('en-IN')}</span>
+    </div>`;
+  }).join('');
+  const el = document.getElementById('drawerBalance');
+  if (el) el.textContent = '₹' + denomTotal(state.current).toLocaleString('en-IN');
+}
+
+function applyCashDelta(inMap, outMap) {
+  const state = getCashState() || ensureCashState();
+  DENOMS.forEach(d => {
+    state.current[d] = (Number(state.current[d]) || 0) + (Number(inMap[d]) || 0) - (Number(outMap[d]) || 0);
+    if (state.current[d] < 0) state.current[d] = 0;
+  });
+  saveCashState(state);
+}
+
+function logCashTxn({ type, ref, notesIn = {}, notesOut = {}, note = '' }) {
+  applyCashDelta(notesIn, notesOut);
+  const state = getCashState();
+  const txns = getCashTxns();
+  txns.push({
+    time: new Date().toISOString(), type, ref,
+    notesIn: { ...notesIn }, notesOut: { ...notesOut },
+    amount: denomTotal(notesIn) - denomTotal(notesOut),
+    drawer: denomTotal(state.current),
+    staff: (APP_STATE.currentUser && APP_STATE.currentUser.name) || 'Unknown',
+    note
+  });
+  saveCashTxns(txns);
+  // Best-effort backend sync — silent if action not implemented
+  backendCall('addCashTxn', {
+    date: todayKey(), type, ref, notesIn, notesOut,
+    amount: denomTotal(notesIn) - denomTotal(notesOut),
+    drawer: denomTotal(state.current),
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  }).catch(()=>{});
+}
+
+function renderCashTxnTable() {
+  const table = document.getElementById('cashTxnTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const txns = getCashTxns().slice().reverse();
+  tbody.innerHTML = txns.map(t => {
+    const time = new Date(t.time).toLocaleTimeString();
+    const notesStr = m => DENOMS.filter(d => (Number(m[d])||0) > 0).map(d => `${DENOM_LABELS[d]}×${m[d]}`).join(', ');
+    return `<tr>
+      <td>${time}</td>
+      <td><span class="badge ${t.type==='SALE'?'badge-success':t.type==='CASH_OUT'?'badge-danger':t.type==='REFUND'?'badge-warning':'badge-info'}">${t.type}</span></td>
+      <td>${escapeHTML(t.ref || '')}</td>
+      <td style="font-size:11px; color:var(--success);">${notesStr(t.notesIn) || '—'}</td>
+      <td style="font-size:11px; color:var(--danger);">${notesStr(t.notesOut) || '—'}</td>
+      <td>₹${Number(t.amount||0).toLocaleString('en-IN')}</td>
+      <td>₹${Number(t.drawer||0).toLocaleString('en-IN')}</td>
+      <td>${escapeHTML(t.staff||'')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" style="text-align:center; color:#999;">Aaj koi transaction nahi</td></tr>';
+}
+
+function openCashInOut(direction) {
+  const isIn = direction === 'IN';
+  const body = `
+    <p style="font-size:12px; color:var(--neutral-500); margin-bottom:10px;">${isIn ? 'Drawer me cash kitna daala?' : 'Drawer se cash kitna nikala?'} Denomination-wise count enter karein.</p>
+    <div id="cashIODenoms">
+      ${DENOMS.map(d => `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <div style="width:70px; font-size:12px;">${DENOM_LABELS[d]}</div>
+          <input type="number" min="0" value="0" data-denom="${d}" style="flex:1; padding:6px; border:1px solid var(--neutral-300); border-radius:4px;">
+        </div>
+      `).join('')}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Reason / Note</label>
+      <input type="text" class="form-input" id="cashIONote" placeholder="e.g. Petty expense, Bank deposit">
+    </div>
+  `;
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitCashInOut('${direction}')">Confirm ${isIn?'IN':'OUT'}</button>
+  `;
+  openModal(isIn ? '➕ Cash In' : '➖ Cash Out', body, footer);
+}
+
+function submitCashInOut(direction) {
+  const map = {};
+  document.querySelectorAll('#cashIODenoms input[data-denom]').forEach(i => {
+    map[i.dataset.denom] = Math.max(0, Math.floor(Number(i.value) || 0));
+  });
+  const note = document.getElementById('cashIONote').value.trim();
+  const total = denomTotal(map);
+  if (total <= 0) { showToast('Kuch to daalein — sab 0 hai', true); return; }
+  if (direction === 'OUT') {
+    // Ensure current drawer has enough of each denom
+    const state = getCashState();
+    for (const d of DENOMS) {
+      if ((map[d] || 0) > (state.current[d] || 0)) {
+        showToast(`Drawer me ${DENOM_LABELS[d]} sirf ${state.current[d]||0} hain, ${map[d]} nikal nahi sakte`, true);
+        return;
+      }
+    }
+    logCashTxn({ type: 'CASH_OUT', ref: note || 'Manual cash out', notesOut: map, note });
+  } else {
+    logCashTxn({ type: 'CASH_IN', ref: note || 'Manual cash in', notesIn: map, note });
+  }
+  closeModal();
+  refreshGalla();
+  showToast('✓ Cash ' + (direction === 'IN' ? 'added' : 'removed') + ': ₹' + total);
+}
+
+function startClosingCount() {
+  const state = getCashState();
+  if (!state || !state.openingSet) { showToast('Pehle opening cash set karein', true); return; }
+  const area = document.getElementById('closingArea');
+  const inputs = DENOMS.map(d => `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <div style="width:70px; font-weight:600; font-size:12px;">${DENOM_LABELS[d]}</div>
+      <input type="number" min="0" value="0" data-close-denom="${d}" oninput="updateClosingCompare()" style="flex:1; padding:6px 10px; border:1px solid var(--neutral-300); border-radius:4px;">
+      <div style="width:80px; text-align:right; font-size:11px; color:var(--neutral-500);" id="closeSub_${d}">₹0</div>
+    </div>
+  `).join('');
+  area.innerHTML = `
+    <p style="font-size:12px; color:var(--neutral-500); margin-bottom:12px;">Drawer se sabhi notes/coins count karke enter karein. System expected vs actual compare karega.</p>
+    ${inputs}
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:12px;">
+      <div style="background:var(--neutral-100); padding:10px; border-radius:6px; text-align:center;">
+        <div style="font-size:10px; color:var(--neutral-500);">EXPECTED</div>
+        <div style="font-weight:800; font-size:18px;" id="closeExpected">₹${denomTotal(state.current).toLocaleString('en-IN')}</div>
+      </div>
+      <div style="background:var(--neutral-100); padding:10px; border-radius:6px; text-align:center;">
+        <div style="font-size:10px; color:var(--neutral-500);">ACTUAL</div>
+        <div style="font-weight:800; font-size:18px;" id="closeActual">₹0</div>
+      </div>
+      <div style="background:#000; color:#fff; padding:10px; border-radius:6px; text-align:center;">
+        <div style="font-size:10px; opacity:0.8;">DIFFERENCE</div>
+        <div style="font-weight:800; font-size:18px;" id="closeDiff">₹0</div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="finalizeClosing()">🌙 Finalize Closing</button>
+  `;
+  updateClosingCompare();
+}
+
+function updateClosingCompare() {
+  const state = getCashState();
+  if (!state) return;
+  const map = {};
+  DENOMS.forEach(d => {
+    const el = document.querySelector(`#closingArea input[data-close-denom="${d}"]`);
+    map[d] = el ? Math.max(0, Math.floor(Number(el.value) || 0)) : 0;
+    const sub = document.getElementById('closeSub_' + d); if (sub) sub.textContent = '₹' + (d*map[d]).toLocaleString('en-IN');
+  });
+  const actual = denomTotal(map);
+  const expected = denomTotal(state.current);
+  const diff = actual - expected;
+  document.getElementById('closeExpected').textContent = '₹' + expected.toLocaleString('en-IN');
+  document.getElementById('closeActual').textContent = '₹' + actual.toLocaleString('en-IN');
+  const diffEl = document.getElementById('closeDiff');
+  diffEl.textContent = (diff >= 0 ? '+₹' : '-₹') + Math.abs(diff).toLocaleString('en-IN');
+  diffEl.parentElement.style.background = diff === 0 ? '#10B981' : (diff > 0 ? '#F59E0B' : '#EF4444');
+}
+
+function finalizeClosing() {
+  const state = getCashState();
+  if (!state) return;
+  const map = {};
+  DENOMS.forEach(d => {
+    const el = document.querySelector(`#closingArea input[data-close-denom="${d}"]`);
+    map[d] = el ? Math.max(0, Math.floor(Number(el.value) || 0)) : 0;
+  });
+  const actual = denomTotal(map);
+  const expected = denomTotal(state.current);
+  const diff = actual - expected;
+  state.closing = { at: new Date().toISOString(), counted: map, actual, expected, diff };
+  saveCashState(state);
+  logCashTxn({
+    type: 'CLOSING', ref: diff === 0 ? 'Match' : (diff > 0 ? 'Excess' : 'Shortage'),
+    notesOut: expected > actual ? { } : {}, notesIn: { },
+    note: `Expected ₹${expected}, Actual ₹${actual}, Diff ₹${diff}`
+  });
+  backendCall('saveCashSnapshot', {
+    date: todayKey(), opening: state.opening, closing: state.closing,
+    staffID: APP_STATE.currentUser && APP_STATE.currentUser.staffID
+  }).catch(()=>{});
+  refreshGalla();
+  const msg = diff === 0 ? '✅ Match!' : (diff > 0 ? '⚠️ Excess ₹' + diff : '❌ Shortage ₹' + Math.abs(diff));
+  alert('Closing saved.\n' + msg);
+}
+
+// ============================================================================
+// CASH BILLING — Inline denomination-wise Notes IN + Notes OUT (bill banate time hi)
+// Yahin pe customer gave + change diya wali sab entry hoti hai — alag Cash Drawer
+// screen ki zarurat nahi. Cash Drawer sirf history + opening/closing ke liye.
+// ============================================================================
+function toggleCashPanel() {
+  const panel = document.getElementById('cashPanel');
+  if (!panel) return;
+  const mode = document.getElementById('billPaymentMode').value;
+  panel.style.display = (mode === 'Cash') ? 'block' : 'none';
+  if (mode === 'Cash') {
+    renderNotesGrids();
+    updateChangeDue();
+  }
+}
+
+// Renders both IN and OUT denomination grids as compact inline rows
+function renderNotesGrids() {
+  const inGrid = document.getElementById('notesInGrid');
+  const outGrid = document.getElementById('notesOutGrid');
+  if (!inGrid || !outGrid) return;
+
+  const gridHtml = (side) => DENOMS.map(d => `
+    <div style="display:flex; align-items:center; gap:4px; background:var(--neutral-50); padding:5px 8px; border-radius:5px;">
+      <span style="width:38px; font-size:11px; font-weight:600;">${DENOM_LABELS[d].replace(' Coin','₵')}</span>
+      <button type="button" onclick="stepNote('${side}',${d},-1)" style="width:22px; height:22px; padding:0; border:1px solid var(--neutral-300); background:#fff; border-radius:3px; cursor:pointer;">−</button>
+      <input type="number" min="0" value="0" data-note-${side}="${d}" oninput="onNoteInput()" style="width:44px; padding:3px; border:1px solid var(--neutral-300); border-radius:3px; text-align:center; font-size:12px;">
+      <button type="button" onclick="stepNote('${side}',${d},1)" style="width:22px; height:22px; padding:0; border:1px solid var(--neutral-300); background:#fff; border-radius:3px; cursor:pointer;">+</button>
+      <span style="flex:1; text-align:right; font-size:11px; color:var(--neutral-500); font-weight:600;" id="sub-${side}-${d}">₹0</span>
+    </div>
+  `).join('');
+
+  inGrid.innerHTML = gridHtml('in');
+  outGrid.innerHTML = gridHtml('out');
+}
+
+function stepNote(side, denom, delta) {
+  const input = document.querySelector(`input[data-note-${side}="${denom}"]`);
+  if (!input) return;
+  const cur = Math.max(0, (Number(input.value) || 0) + delta);
+  input.value = cur;
+  onNoteInput();
+}
+
+// Read the denomination grid → return { denom: count } map
+function readNoteMap(side) {
+  const out = {};
+  document.querySelectorAll(`input[data-note-${side}]`).forEach(i => {
+    out[i.dataset[`note${side.charAt(0).toUpperCase()+side.slice(1)}`]] = Math.max(0, Math.floor(Number(i.value) || 0));
+  });
+  return out;
+}
+
+// Called whenever any denomination input changes — updates subtotals + total + change
+function onNoteInput() {
+  ['in','out'].forEach(side => {
+    DENOMS.forEach(d => {
+      const input = document.querySelector(`input[data-note-${side}="${d}"]`);
+      const sub = document.getElementById(`sub-${side}-${d}`);
+      if (input && sub) sub.textContent = '₹' + (d * (Number(input.value)||0)).toLocaleString('en-IN');
+    });
+  });
+  // Auto-sync Notes IN total → cashGiven field
+  const inMap = readNoteMap('in');
+  const inTotal = denomTotal(inMap);
+  const cashGiven = document.getElementById('cashGiven');
+  if (cashGiven && document.activeElement !== cashGiven) {
+    cashGiven.value = inTotal || '';
+  }
+  updateChangeDue();
+}
+
+// User can also directly type a total in Customer Gave → no denomination breakdown then
+function onCashGivenTyped() {
+  updateChangeDue();
+}
+
+function clearCashEntry() {
+  document.querySelectorAll('#notesInGrid input, #notesOutGrid input').forEach(i => i.value = 0);
+  document.getElementById('cashGiven').value = '';
+  onNoteInput();
+}
+
+function updateChangeDue() {
+  const cart = APP_STATE.cart || [];
+  const subtotal = cart.reduce((s, i) => s + (i.quantity * i.salePrice), 0);
+  const discount = Math.min(subtotal, Number(document.getElementById('billDiscountAmount').value) || 0);
+  const total = subtotal - discount;
+  const given = Number(document.getElementById('cashGiven').value) || 0;
+  const change = Math.max(0, given - total);
+  const box = document.getElementById('changeBox');
+  const amountEl = document.getElementById('changeAmount');
+  const sug = document.getElementById('changeSuggestion');
+  if (!amountEl) return;
+
+  amountEl.textContent = '₹' + change.toLocaleString('en-IN');
+
+  if (given > 0 && given < total) {
+    box.style.background = '#EF4444';
+    sug.innerHTML = `⚠ Kam hai — ₹${(total - given).toLocaleString('en-IN')} aur chahiye`;
+  } else if (change > 0) {
+    box.style.background = '#000';
+    const breakdown = suggestChangeBreakdown(change);
+    const hasBreakdown = DENOMS.some(d => breakdown[d]);
+    sug.innerHTML = hasBreakdown
+      ? 'Suggest: ' + DENOMS.filter(d => breakdown[d]).map(d => `${DENOM_LABELS[d].replace(' Coin','₵')}×${breakdown[d]}`).join(' + ')
+      : '';
+  } else {
+    box.style.background = '#10B981';
+    sug.textContent = given >= total && total > 0 ? '✓ Exact amount' : '';
+  }
+}
+
+// Fill the Notes OUT grid with the greedy suggested change breakdown
+function autoFillNotesOut() {
+  const cart = APP_STATE.cart || [];
+  const subtotal = cart.reduce((s, i) => s + (i.quantity * i.salePrice), 0);
+  const discount = Math.min(subtotal, Number(document.getElementById('billDiscountAmount').value) || 0);
+  const total = subtotal - discount;
+  const given = Number(document.getElementById('cashGiven').value) || 0;
+  const change = Math.max(0, given - total);
+  if (change <= 0) { showToast('Change ₹0 hai — kuch return nahi karna', true); return; }
+  const breakdown = suggestChangeBreakdown(change);
+  DENOMS.forEach(d => {
+    const input = document.querySelector(`input[data-note-out="${d}"]`);
+    if (input) input.value = breakdown[d] || 0;
+  });
+  onNoteInput();
+  showToast('✓ Change breakdown auto-fill ho gaya');
+}
+
+// Greedy denomination breakdown — prefers current drawer contents when possible
+function suggestChangeBreakdown(amount) {
+  const state = getCashState();
+  const available = state && state.current ? state.current : null;
+  const out = {};
+  let remain = amount;
+  for (const d of DENOMS) {
+    let want = Math.floor(remain / d);
+    if (want <= 0) continue;
+    if (available && Number(available[d]) >= 0) {
+      want = Math.min(want, Number(available[d]));
+    }
+    if (want > 0) {
+      out[d] = want;
+      remain -= want * d;
+    }
+  }
+  return out;
+}
+
+function openMultiNoteEntry() {
+  const body = `
+    <p style="font-size:12px; color:var(--neutral-500); margin-bottom:10px;">Customer ne kaunse notes diye? Har denomination ka count enter karein.</p>
+    <div id="multiNoteList">
+      ${DENOMS.map(d => `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <div style="width:70px; font-size:12px;">${DENOM_LABELS[d]}</div>
+          <input type="number" min="0" value="0" data-mn="${d}" oninput="updateMultiNoteTotal()" style="flex:1; padding:6px; border:1px solid var(--neutral-300); border-radius:4px;">
+          <div style="width:70px; text-align:right; font-size:11px; color:var(--neutral-500);" id="mnSub_${d}">₹0</div>
+        </div>
+      `).join('')}
+    </div>
+    <div style="background:var(--neutral-100); padding:10px; border-radius:6px; margin-top:10px; text-align:center;">
+      <div style="font-size:10px; color:var(--neutral-500);">TOTAL RECEIVED</div>
+      <div style="font-weight:800; font-size:22px;" id="mnTotal">₹0</div>
+    </div>
+  `;
+  const footer = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="applyMultiNote()">Apply</button>
+  `;
+  openModal('🧾 Multiple Note Entry', body, footer);
+}
+
+function updateMultiNoteTotal() {
+  const map = {};
+  document.querySelectorAll('#multiNoteList input[data-mn]').forEach(i => {
+    map[i.dataset.mn] = Math.max(0, Math.floor(Number(i.value)||0));
+    const sub = document.getElementById('mnSub_'+i.dataset.mn);
+    if (sub) sub.textContent = '₹' + (Number(i.dataset.mn) * map[i.dataset.mn]).toLocaleString('en-IN');
+  });
+  const total = denomTotal(map);
+  document.getElementById('mnTotal').textContent = '₹' + total.toLocaleString('en-IN');
+  window._multiNoteMap = map;
+  window._multiNoteTotal = total;
+}
+
+function applyMultiNote() {
+  const total = window._multiNoteTotal || 0;
+  window._pendingCashInNotes = window._multiNoteMap || {};
+  document.getElementById('cashGiven').value = total;
+  updateChangeDue();
+  closeModal();
+}
+
+// ============================================================================
+// INVENTORY SCANNER POPUP — full details + sales history + refund eligibility
+// + customer history for the scanned variant.
+// ============================================================================
+function lookupStock(code) {
+  let foundProduct = null;
+  let foundVariant = null;
+
+  outer:
+  for (const product of APP_STATE.data.products) {
+    for (const variant of (product.variants || [])) {
+      if (
+        variant.Barcode === code || variant.VariantBarcode === code ||
+        variant.VariantID === code || product.UID === code
+      ) {
+        foundProduct = product; foundVariant = variant; break outer;
+      }
+    }
+  }
+  if (!foundProduct || !foundVariant) { showToast('Product / variant not found: ' + code, true); return; }
+
+  // ---- Supplier lookup (via purchases table if available)
+  const purchases = APP_STATE.data.purchases || [];
+  const suppliers = APP_STATE.data.suppliers || [];
+  const productPurchases = purchases.filter(p => p.UID === foundProduct.UID || p.VariantID === foundVariant.VariantID);
+  const latestPurchase = productPurchases.sort((a,b) => new Date(b.Date||b.CreatedDate||0) - new Date(a.Date||a.CreatedDate||0))[0];
+  const supplier = latestPurchase ? suppliers.find(s => s.SupplierID === latestPurchase.SupplierID) : null;
+
+  // ---- Sales history — bill items matching this variant
+  const bills = APP_STATE.data.bills || [];
+  const billItems = APP_STATE.data.billItems || [];
+  const variantSales = billItems
+    .filter(bi => bi.VariantID === foundVariant.VariantID)
+    .map(bi => {
+      const bill = bills.find(b => b.BillID === bi.BillID);
+      return bill ? { bi, bill } : null;
+    })
+    .filter(Boolean)
+    .sort((a,b) => new Date(b.bill.CreatedDate||0) - new Date(a.bill.CreatedDate||0));
+
+  const totalSold = variantSales.reduce((s, x) => s + (Number(x.bi.Quantity) || 0), 0);
+  const totalTimes = variantSales.length;
+  const lastSale = variantSales[0] || null;
+
+  // ---- Refund eligibility (3-day policy)
+  const RETURN_WINDOW_DAYS = 3;
+  let refundBlock = '';
+  if (lastSale) {
+    const soldDate = new Date(lastSale.bill.CreatedDate);
+    const today = new Date();
+    const daysPassed = Math.floor((today - soldDate) / (1000*60*60*24));
+    const daysRemaining = RETURN_WINDOW_DAYS - daysPassed;
+    const eligible = daysRemaining >= 0;
+    refundBlock = `
+      <div style="background:${eligible ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; padding:10px; border-radius:6px; margin-top:10px;">
+        <div style="font-weight:700; color:${eligible ? 'var(--success)' : 'var(--danger)'};">${eligible ? '✅ Refund Eligible' : '❌ Refund Expired'}</div>
+        <div style="font-size:12px; margin-top:4px;">Sold: ${soldDate.toLocaleDateString()} · Today: ${today.toLocaleDateString()} · Days passed: ${daysPassed}</div>
+        <div style="font-size:12px; font-weight:600; margin-top:2px;">${eligible ? `Days remaining for return: ${daysRemaining + 1}` : 'Return window expired'}</div>
+      </div>
+    `;
+  } else {
+    refundBlock = '<div style="background:var(--neutral-100); padding:10px; border-radius:6px; margin-top:10px; font-size:12px; color:var(--neutral-500);">Yeh item abhi tak bika hi nahi hai — refund N/A</div>';
+  }
+
+  // ---- Customer history for last-sale buyer
+  let customerBlock = '';
+  if (lastSale && lastSale.bill.CustomerMobile) {
+    const cust = (APP_STATE.data.customers || []).find(c => c.Mobile === lastSale.bill.CustomerMobile);
+    const custBills = bills.filter(b => b.CustomerMobile === lastSale.bill.CustomerMobile);
+    const prevPurchaseCount = custBills.length;
+    const totalSpend = custBills.reduce((s, b) => s + (Number(b.TotalAmount) || 0), 0);
+    customerBlock = `
+      <div style="background:var(--neutral-50); border:1px solid var(--neutral-200); padding:12px; border-radius:6px; margin-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">👤 Last Buyer — Customer History</div>
+        <div style="font-size:12px;">Name: <strong>${escapeHTML(cust?.Name || lastSale.bill.CustomerName || '—')}</strong></div>
+        <div style="font-size:12px;">Mobile: <strong>${escapeHTML(lastSale.bill.CustomerMobile)}</strong></div>
+        <div style="font-size:12px;">Previous purchases: <strong>${prevPurchaseCount}</strong></div>
+        <div style="font-size:12px;">Total purchase amount: <strong>₹${totalSpend.toLocaleString('en-IN')}</strong></div>
+      </div>
+    `;
+  }
+
+  const salesTable = variantSales.slice(0, 8).map(x => `
+    <tr>
+      <td>${new Date(x.bill.CreatedDate).toLocaleDateString()}</td>
+      <td>${new Date(x.bill.CreatedDate).toLocaleTimeString()}</td>
+      <td>${escapeHTML(x.bill.BillNumber || x.bill.BillID)}</td>
+      <td>${escapeHTML(x.bill.CustomerName || '—')}</td>
+      <td>${escapeHTML(x.bill.CustomerMobile || '—')}</td>
+      <td>${x.bi.Quantity}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center; color:#999;">Koi sale record nahi</td></tr>';
+
+  const body = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div style="background:var(--neutral-50); padding:12px; border-radius:6px;">
+        <div style="font-weight:700; margin-bottom:8px;">📦 Product Details</div>
+        <div style="font-size:12px; line-height:1.7;">
+          <div><strong>Name:</strong> ${escapeHTML(foundProduct.Name)}</div>
+          <div><strong>Product UID:</strong> ${escapeHTML(foundProduct.UID)}</div>
+          <div><strong>Variant ID:</strong> ${escapeHTML(foundVariant.VariantID)}</div>
+          <div><strong>Variant Barcode:</strong> ${escapeHTML(foundVariant.Barcode || '—')}</div>
+          <div><strong>Color / Size:</strong> ${escapeHTML(foundVariant.Color)} / ${escapeHTML(foundVariant.Size)}</div>
+          <div><strong>MRP:</strong> ₹${Number(foundProduct.MRP||0).toLocaleString('en-IN')}</div>
+          <div><strong>Sale Price:</strong> ₹${Number(foundVariant.SalePrice || foundProduct.SalePrice || 0).toLocaleString('en-IN')}</div>
+          <div><strong>Current Stock:</strong> <span style="font-weight:700; color:${(Number(foundVariant.Stock)||0)<=5 ? 'var(--danger)' : 'var(--success)'};">${foundVariant.Stock || 0}</span></div>
+          <div><strong>Location:</strong> Floor ${escapeHTML(foundVariant.Floor||'—')} · Rack ${escapeHTML(foundVariant.Rack||'—')} · Shelf ${escapeHTML(foundVariant.Shelf||'—')}</div>
+          <div><strong>Supplier:</strong> ${escapeHTML(supplier?.Name || '—')}</div>
+          <div><strong>Purchase Date:</strong> ${latestPurchase ? new Date(latestPurchase.Date||latestPurchase.CreatedDate).toLocaleDateString() : '—'}</div>
+          <div><strong>Added on:</strong> ${foundProduct.CreatedDate ? new Date(foundProduct.CreatedDate).toLocaleDateString() : '—'}</div>
+        </div>
+      </div>
+      <div>
+        <div style="background:var(--neutral-50); padding:12px; border-radius:6px;">
+          <div style="font-weight:700; margin-bottom:8px;">📊 Sales Summary</div>
+          <div style="font-size:12px; line-height:1.7;">
+            <div>Total times sold: <strong>${totalTimes}</strong></div>
+            <div>Total quantity sold: <strong>${totalSold}</strong></div>
+            ${lastSale ? `
+              <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--neutral-200);">
+                <div><strong>Last Sale Date:</strong> ${new Date(lastSale.bill.CreatedDate).toLocaleDateString()}</div>
+                <div><strong>Last Sale Time:</strong> ${new Date(lastSale.bill.CreatedDate).toLocaleTimeString()}</div>
+                <div><strong>Last Bill:</strong> ${escapeHTML(lastSale.bill.BillNumber||'—')}</div>
+                <div><strong>Customer:</strong> ${escapeHTML(lastSale.bill.CustomerName||'—')} (${escapeHTML(lastSale.bill.CustomerMobile||'—')})</div>
+              </div>
+            ` : '<div style="color:var(--neutral-500);">Yeh item abhi tak bika nahi hai</div>'}
+          </div>
+        </div>
+        ${refundBlock}
+        ${customerBlock}
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-weight:700; margin-bottom:6px;">📜 Recent Sales (Last 8)</div>
+      <div class="table-wrapper">
+        <table><thead><tr><th>Date</th><th>Time</th><th>Bill#</th><th>Customer</th><th>Mobile</th><th>Qty</th></tr></thead>
+          <tbody>${salesTable}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  const footer = `<button class="btn btn-primary" onclick="closeModal()">Close</button>`;
+  openModal('🔍 Inventory Scanner — ' + foundProduct.Name, body, footer);
+}
+
+// ============================================================================
+// DUPLICATE BARCODE CHECK — used at product/variant save time
+// ============================================================================
+function findDuplicateBarcode(barcode, excludeVariantID) {
+  if (!barcode) return null;
+  for (const p of APP_STATE.data.products || []) {
+    for (const v of (p.variants || [])) {
+      if (excludeVariantID && v.VariantID === excludeVariantID) continue;
+      if (v.Barcode === barcode || v.VariantBarcode === barcode) {
+        return { product: p, variant: v };
+      }
+    }
+  }
+  return null;
+}
+
+// ============================================================================
+// REPORTS — extended: today/month sales, profit, top selling, low/dead stock,
+// returns, drawer summary.
+// ============================================================================
+const _origRefreshReports = window._origRefreshReports || refreshReports;
+window.refreshReports = function() {
+  const bills = APP_STATE.data.bills || [];
+  const billItems = APP_STATE.data.billItems || [];
+
+  const todayStr = todayKey();
+  const monthPrefix = todayStr.slice(0, 7);
+  const todaysBills = bills.filter(b => b.CreatedDate && b.CreatedDate.indexOf(todayStr) === 0);
+  const monthBills = bills.filter(b => b.CreatedDate && b.CreatedDate.indexOf(monthPrefix) === 0);
+
+  const totalSales = bills.reduce((s, b) => s + (Number(b.TotalAmount)||0), 0);
+  const todaySales = todaysBills.reduce((s, b) => s + (Number(b.TotalAmount)||0), 0);
+  const monthSales = monthBills.reduce((s, b) => s + (Number(b.TotalAmount)||0), 0);
+
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('totalSales', totalSales.toLocaleString('en-IN'));
+  setText('totalBills', bills.length);
+  setText('reportTodaySales', todaySales.toLocaleString('en-IN'));
+  setText('reportTodayBills', todaysBills.length);
+  setText('reportMonthSales', monthSales.toLocaleString('en-IN'));
+  setText('reportMonthBills', monthBills.length);
+  setText('reportProfit', Math.round(todaySales * 0.3).toLocaleString('en-IN'));
+
+  let inventoryValue = 0, totalUnits = 0;
+  (APP_STATE.data.products || []).forEach(p => (p.variants || []).forEach(v => {
+    inventoryValue += (Number(p.CostPrice)||0) * (Number(v.Stock)||0);
+    totalUnits += Number(v.Stock)||0;
+  }));
+  setText('inventoryValue', inventoryValue.toLocaleString('en-IN'));
+  setText('totalUnits', totalUnits);
+
+  // Cash drawer summary
+  const cashState = getCashState();
+  const txns = getCashTxns();
+  const cashIn = txns.filter(t => ['SALE','CASH_IN','OPENING'].includes(t.type)).reduce((s,t)=>s+Math.max(0,denomTotal(t.notesIn||{})), 0);
+  const cashOut = txns.filter(t => ['CASH_OUT','REFUND'].includes(t.type)).reduce((s,t)=>s+Math.max(0,denomTotal(t.notesOut||{})), 0);
+  setText('reportDrawerBalance', (cashState ? denomTotal(cashState.current) : 0).toLocaleString('en-IN'));
+  setText('reportCashIn', cashIn.toLocaleString('en-IN'));
+  setText('reportCashOut', cashOut.toLocaleString('en-IN'));
+
+  // Top selling
+  const soldMap = {};
+  billItems.forEach(bi => {
+    const key = bi.VariantID || (bi.UID + '|' + bi.Color + '|' + bi.Size);
+    if (!soldMap[key]) soldMap[key] = { key, uid: bi.UID, color: bi.Color, size: bi.Size, qty: 0, revenue: 0, name: '' };
+    soldMap[key].qty += Number(bi.Quantity)||0;
+    soldMap[key].revenue += (Number(bi.Quantity)||0) * (Number(bi.SalePrice)||0);
+  });
+  // Fill names
+  Object.values(soldMap).forEach(rec => {
+    const p = (APP_STATE.data.products||[]).find(p => p.UID === rec.uid);
+    if (p) rec.name = p.Name;
+  });
+  const top = Object.values(soldMap).sort((a,b) => b.qty - a.qty).slice(0, 10);
+  const topTbody = document.querySelector('#topSellingTable tbody');
+  if (topTbody) topTbody.innerHTML = top.map(t => `
+    <tr><td>${escapeHTML(t.name||t.uid)}</td><td>${escapeHTML(t.color||'—')}/${escapeHTML(t.size||'—')}</td><td>${t.qty}</td><td>₹${t.revenue.toLocaleString('en-IN')}</td></tr>
+  `).join('') || '<tr><td colspan="4" style="text-align:center;color:#999;">Koi sale abhi tak nahi</td></tr>';
+
+  // Low stock
+  const low = [];
+  (APP_STATE.data.products || []).forEach(p => (p.variants || []).forEach(v => {
+    const st = Number(v.Stock)||0;
+    if (st <= 5) low.push({ uid: p.UID, name: p.Name, color: v.Color, size: v.Size, stock: st });
+  }));
+  low.sort((a,b) => a.stock - b.stock);
+  const lowTbody = document.querySelector('#lowStockTable tbody');
+  if (lowTbody) lowTbody.innerHTML = low.slice(0, 20).map(r => `
+    <tr><td>${escapeHTML(r.uid)}</td><td>${escapeHTML(r.name)}</td><td>${escapeHTML(r.color)}/${escapeHTML(r.size)}</td><td><span class="badge ${r.stock===0?'badge-danger':'badge-warning'}">${r.stock}</span></td></tr>
+  `).join('') || '<tr><td colspan="4" style="text-align:center;color:#999;">Sab stock OK</td></tr>';
+
+  // Dead stock — no sale in 90 days
+  const cutoff = Date.now() - 90*24*60*60*1000;
+  const lastSaleMap = {};
+  billItems.forEach(bi => {
+    const bill = bills.find(b => b.BillID === bi.BillID);
+    if (!bill) return;
+    const t = new Date(bill.CreatedDate).getTime();
+    if (!lastSaleMap[bi.VariantID] || t > lastSaleMap[bi.VariantID]) lastSaleMap[bi.VariantID] = t;
+  });
+  const dead = [];
+  (APP_STATE.data.products || []).forEach(p => (p.variants || []).forEach(v => {
+    const stock = Number(v.Stock) || 0;
+    if (stock <= 0) return;
+    const last = lastSaleMap[v.VariantID];
+    if (!last || last < cutoff) dead.push({ uid: p.UID, name: p.Name, color: v.Color, size: v.Size, stock });
+  }));
+  const deadTbody = document.querySelector('#deadStockTable tbody');
+  if (deadTbody) deadTbody.innerHTML = dead.slice(0, 20).map(r => `
+    <tr><td>${escapeHTML(r.uid)}</td><td>${escapeHTML(r.name)}</td><td>${escapeHTML(r.color)}/${escapeHTML(r.size)}</td><td>${r.stock}</td></tr>
+  `).join('') || '<tr><td colspan="4" style="text-align:center;color:#999;">Koi dead stock nahi</td></tr>';
+
+  // Returns log (from activityLog or local returns array if we ever add it — best-effort)
+  const returnsList = APP_STATE.data.returns || [];
+  const returnsTbody = document.querySelector('#returnsReportTable tbody');
+  const monthAgo = Date.now() - 30*24*60*60*1000;
+  const recentReturns = returnsList.filter(r => new Date(r.Date||r.date||0).getTime() >= monthAgo);
+  if (returnsTbody) returnsTbody.innerHTML = recentReturns.map(r => `
+    <tr><td>${new Date(r.Date||r.date).toLocaleDateString()}</td><td>${escapeHTML(r.BillNumber||r.billNumber||'—')}</td><td>${escapeHTML(r.Item||r.item||'—')}</td><td>${r.Quantity||r.qty||0}</td><td>₹${Number(r.Amount||r.amount||0).toLocaleString('en-IN')}</td></tr>
+  `).join('') || '<tr><td colspan="5" style="text-align:center;color:#999;">Last 30 din me koi return nahi</td></tr>';
+
+  // Staff performance
+  const staffPerf = {};
+  bills.forEach(b => {
+    const staff = b.StaffName || 'Unknown';
+    if (!staffPerf[staff]) staffPerf[staff] = { bills: 0, revenue: 0 };
+    staffPerf[staff].bills++;
+    staffPerf[staff].revenue += Number(b.TotalAmount) || 0;
+  });
+  const staffTbody = document.querySelector('#staffPerformanceTable tbody');
+  if (staffTbody) staffTbody.innerHTML = Object.entries(staffPerf).map(([name, data]) => `
+    <tr><td>${escapeHTML(name)}</td><td>${data.bills}</td><td>₹${data.revenue.toLocaleString('en-IN')}</td></tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center;color:#999;">No data</td></tr>';
+};
+
+// ============================================================================
+// HOOK — When a cash bill completes, log the ACTUAL notes IN/OUT (entered by
+// staff at bill time via the inline grids) to the drawer.
+// ============================================================================
+const _origFinishBillLocally = finishBillLocally;
+finishBillLocally = function(billID, billNumber, customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID, queuedPayload, isOffline) {
+  // Capture note maps BEFORE the original function resets the cart/inputs
+  let capturedIn = null, capturedOut = null;
+  if (paymentMode === 'Cash') {
+    capturedIn = readNoteMap('in');
+    capturedOut = readNoteMap('out');
+    // If staff didn't fill the grids, fall back to greedy from cashGiven
+    const inTotal = denomTotal(capturedIn);
+    if (inTotal === 0) {
+      const given = Number(document.getElementById('cashGiven')?.value) || totalAmount;
+      capturedIn = suggestChangeBreakdown(given);
+    }
+    const outTotal = denomTotal(capturedOut);
+    if (outTotal === 0) {
+      const given = Number(document.getElementById('cashGiven')?.value) || totalAmount;
+      const change = Math.max(0, given - totalAmount);
+      if (change > 0) capturedOut = suggestChangeBreakdown(change);
+      else capturedOut = {};
+    }
+  }
+
+  _origFinishBillLocally(billID, billNumber, customerName, customerMobile, totalAmount, subtotal, discountAmount, paymentMode, paymentID, queuedPayload, isOffline);
+
+  if (paymentMode === 'Cash' && !isOffline) {
+    logCashTxn({
+      type: 'SALE', ref: 'Bill ' + billNumber,
+      notesIn: capturedIn || {}, notesOut: capturedOut || {},
+      note: customerName || ''
+    });
+    // Reset the cash panel for the next bill
+    clearCashEntry();
+  }
+};
+
 // Save data periodically
 setInterval(() => {
   localStorage.setItem('appData', JSON.stringify(APP_STATE.data));
 }, 60000); // Every 1 minute
+
 </script>
 
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7f7b0fd8732c4326aae4b9d58d5c514a","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
