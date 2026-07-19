@@ -11,7 +11,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 :root{
   --bg:#f6f6f4; --panel:#ffffff; --line:#e4e4e0;
@@ -32,7 +31,7 @@ a{color:inherit;}
 .wrap-login{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(1200px 600px at 10% 10%,#1c1c1c 0%,#050505 60%,#000 100%);}
 .card-login{width:100%;max-width:420px;background:#fff;border-radius:14px;padding:32px 28px;box-shadow:0 30px 60px rgba(0,0,0,.35);}
 .brand-mark{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
-.brand-mark .dot{width:34px;height:34px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;letter-spacing:.5px;}
+.brand-mark .dot{width:34px;height:34px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;letter-spacing:.5px;overflow:hidden;background-size:cover;background-position:center;}
 .brand-mark h1{font-size:19px;letter-spacing:.5px;}
 .brand-mark small{display:block;font-size:10px;color:var(--muted);letter-spacing:1.8px;text-transform:uppercase;text-align:center;margin-top:2px;}
 .field{margin-bottom:14px;}
@@ -60,7 +59,7 @@ a{color:inherit;}
 .shell.on{display:grid;}
 .side{grid-row:1/3;background:#0e0e0e;color:#e5e5e0;padding:16px 10px;overflow-y:auto;}
 .side .logo{display:flex;align-items:center;gap:10px;padding:6px 8px 14px;border-bottom:1px solid #222;margin-bottom:10px;}
-.side .logo .dot{width:32px;height:32px;border-radius:7px;background:var(--brand-2);color:#111;display:grid;place-items:center;font-weight:800;}
+.side .logo .dot{width:32px;height:32px;border-radius:7px;background:var(--brand-2);color:#111;display:grid;place-items:center;font-weight:800;overflow:hidden;background-size:cover;background-position:center;}
 .side .logo b{font-size:12px;letter-spacing:1px;}
 .side nav{display:flex;flex-direction:column;gap:2px;}
 .side nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:7px;color:#bdbdb8;font-size:13px;text-decoration:none;cursor:pointer;transition:all .15s;}
@@ -111,7 +110,7 @@ tr:hover td{background:#faf9f4;}
 .empty{padding:30px;text-align:center;color:var(--muted);}
 
 /* toast */
-.toasts{position:fixed;top:16px;right:16px;z-index:9000;display:flex;flex-direction:column;gap:8px;}
+.toasts{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:360px;}
 .toast{background:#111;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.25);font-size:13px;max-width:340px;animation:tsIn .2s ease;}
 .toast.ok{background:var(--ok);}
 .toast.bad{background:var(--bad);}
@@ -163,6 +162,10 @@ tr:hover td{background:#faf9f4;}
 }
 .tag{width:2in;height:3in;padding:8px;border:1px dashed #000;font-family:'Courier New',monospace;}
 
+/* camera scanner box */
+#camBox{width:100%;max-width:320px;height:240px;background:#000;border-radius:8px;overflow:hidden;margin:0 auto;position:relative;}
+#camBox video{width:100% !important;height:100% !important;object-fit:cover;}
+
 /* util */
 .text-r{text-align:right;} .text-c{text-align:center;}
 .mono{font-family:'Courier New',monospace;}
@@ -186,7 +189,7 @@ tr:hover td{background:#faf9f4;}
 <div class="wrap-login" id="loginWrap">
   <div class="card-login">
     <div class="brand-mark">
-      <div class="dot">A</div>
+      <div class="dot" id="loginLogoDot">A</div>
       <div>
         <h1>AK Fashion Hub</h1>
         <small>Retail Operations Console</small>
@@ -210,7 +213,7 @@ tr:hover td{background:#faf9f4;}
 <div class="shell" id="shell">
   <aside class="side">
     <div class="logo">
-      <div class="dot">A</div>
+      <div class="dot" id="sideLogoDot">A</div>
       <b>AK FASHION HUB</b>
     </div>
     <nav id="navBox">
@@ -344,7 +347,7 @@ tr:hover td{background:#faf9f4;}
           <div class="lg strong"><span>Grand Total</span><span id="posTotal" style="float:right;">₹0</span></div>
 
           <!-- Cash tendered → auto change breakdown -->
-          <div class="field mt-8">
+          <div class="field mt-8" id="posTenderedWrap">
             <label>Customer ne diya (₹)</label>
             <input class="inp" id="posTendered" type="number" min="0" placeholder="Auto ho jayega jab enter karo">
           </div>
@@ -385,7 +388,7 @@ tr:hover td{background:#faf9f4;}
           <button class="btn ghost sm" id="btnInvScan">📷 Scan</button>
         </div>
         <div class="tbl-wrap"><table id="invTbl">
-          <thead><tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th><th>Stock</th><th>Location</th><th></th></tr></thead>
+          <thead id="invTblHead"><tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th><th>Stock</th><th>Location</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -405,7 +408,7 @@ tr:hover td{background:#faf9f4;}
     <!-- ===== RETURNS ===== -->
     <div class="screen" id="scr-returns">
       <div class="pane">
-        <h3>Return / Exchange <small><button class="btn ghost sm" id="btnRetScan">📷 Scan Bill Barcode</button></small></h3>
+        <h3>Return / Exchange</h3>
         <div class="row mb-12">
           <input class="inp" id="retSearch" placeholder="Bill number, mobile ya scanned barcode">
           <button class="btn sm" id="btnRetSearch">Search</button>
@@ -539,15 +542,15 @@ tr:hover td{background:#faf9f4;}
       </div>
 
       <div class="pane">
-        <h3>📦 Cash Drawer / Galla <small>Live balance</small></h3>
+        <h3>📦 Cash Drawer <small>Live balance</small></h3>
         <div class="grid-3 mb-12">
           <div class="stat"><div class="lab">Current Balance</div><div class="val" id="drawNow">₹0</div></div>
           <div class="stat"><div class="lab">Today In</div><div class="val" id="drawIn">₹0</div></div>
           <div class="stat"><div class="lab">Today Out</div><div class="val" id="drawOut">₹0</div></div>
         </div>
         <div class="row">
-          <button class="btn ok sm" id="btnCashIn">＋ Cash In (Note-wise)</button>
-          <button class="btn bad sm" id="btnCashOut">－ Cash Out (Note-wise)</button>
+          <button class="btn ok sm" id="btnCashIn">＋ Cash In</button>
+          <button class="btn bad sm" id="btnCashOut">－ Cash Out</button>
         </div>
       </div>
 
@@ -563,9 +566,9 @@ tr:hover td{background:#faf9f4;}
       </div>
 
       <div class="pane">
-        <h3>📜 Today's Cash Log <small>Har entry note-wise breakdown ke saath</small></h3>
+        <h3>📜 Today's Cash Log</h3>
         <div class="tbl-wrap"><table id="cashTbl">
-          <thead><tr><th>Time</th><th>Type</th><th>Ref</th><th>Amount</th><th>Notes Used</th><th>Balance</th><th>Notes/Reason</th></tr></thead>
+          <thead><tr><th>Time</th><th>Type</th><th>Ref</th><th>Amount</th><th>Balance</th><th>Notes</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -575,11 +578,6 @@ tr:hover td{background:#faf9f4;}
     <div class="screen" id="scr-expenses">
       <div class="pane">
         <h3>Expenses <small><button class="btn sm" id="btnAddExp">＋ Add Expense</button></small></h3>
-        <div class="grid-3 mb-12" id="expSummary">
-          <div class="stat"><div class="lab">This Month</div><div class="val" id="expMonthTotal">₹0</div></div>
-          <div class="stat"><div class="lab">All Time</div><div class="val" id="expAllTotal">₹0</div></div>
-          <div class="stat"><div class="lab">Entries</div><div class="val" id="expCount">0</div></div>
-        </div>
         <div class="tbl-wrap"><table id="expTbl">
           <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Staff</th></tr></thead>
           <tbody></tbody>
@@ -615,6 +613,7 @@ tr:hover td{background:#faf9f4;}
 
     <!-- ===== ATTENDANCE ===== -->
     <div class="screen" id="scr-attendance">
+      <div class="grid-2">
       <div class="pane">
         <h3>🕐 Staff Attendance <small>Punch IN aur OUT log karo</small></h3>
         <div class="grid-3 mb-12">
@@ -637,6 +636,22 @@ tr:hover td{background:#faf9f4;}
           <thead><tr><th>Staff</th><th>Date</th><th>IN</th><th>OUT</th><th>Hours</th><th>Notes</th></tr></thead>
           <tbody></tbody>
         </table></div>
+      </div>
+
+      <div class="pane">
+        <h3>💵 Galla (Cash Drawer) Summary <small>Aaj ka overview</small></h3>
+        <div class="grid-2 mb-12">
+          <div class="stat"><div class="lab">Opening</div><div class="val" id="attCashOpen">₹0</div></div>
+          <div class="stat"><div class="lab">Current Balance</div><div class="val" id="attCashNow">₹0</div></div>
+          <div class="stat"><div class="lab">Total Aaya (In)</div><div class="val" id="attCashIn">₹0</div></div>
+          <div class="stat"><div class="lab">Total Gaya (Out)</div><div class="val" id="attCashOut">₹0</div></div>
+        </div>
+        <div class="strong mb-8">Aaj ki Galla Entries</div>
+        <div class="tbl-wrap"><table id="attCashTbl">
+          <thead><tr><th>Time</th><th>Type</th><th>Ref</th><th>Amount</th><th>Notes</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
       </div>
     </div>
 
@@ -665,6 +680,7 @@ tr:hover td{background:#faf9f4;}
               <input type="file" id="setLogoFile" accept="image/*" style="max-width:220px;">
               <button class="btn ghost sm" id="btnClearLogo">Remove</button>
             </div>
+            <div class="hint mt-8">Yeh logo login page, sidebar, browser tab icon aur printed bill — sab jagah automatically use hoga.</div>
           </div>
         </div>
         <button class="btn sm" id="btnSaveShop">Save Profile</button>
@@ -680,13 +696,13 @@ tr:hover td{background:#faf9f4;}
           <div>
             <input type="file" id="setUpiFile" accept="image/*">
             <button class="btn ghost sm mt-8" id="btnClearUpi">Remove</button>
-            <div class="hint mt-8">Ye QR bill screen me "UPI (Scan QR)" chunte hi customer ko dikhega aur bill print pe bhi aayega.</div>
+            <div class="hint mt-8">Ye QR bill screen me "UPI" ya "Online" payment mode chunte hi customer ko dikhega aur bill print pe bhi aayega.</div>
           </div>
         </div>
       </div>
 
       <div class="pane">
-        <h3>Bill Template <small>Har cheez individually on/off karein</small></h3>
+        <h3>Bill Template</h3>
         <div class="grid-3 mb-12">
           <div class="field">
             <label>Print Format</label>
@@ -698,27 +714,7 @@ tr:hover td{background:#faf9f4;}
           <div class="field"><label>Header Text</label><input class="inp" id="btHeader" placeholder="AK FASHION HUB"></div>
           <div class="field"><label>Footer Text</label><input class="inp" id="btFooter" placeholder="Thank You! Visit Again"></div>
         </div>
-        <div class="field mb-12">
-          <label>Return Policy Line</label>
-          <div class="row">
-            <input class="inp" id="btReturnDays" type="number" min="0" value="3" style="max-width:100px;">
-            <input class="inp" id="btReturnText" placeholder="din ke andar hi return/exchange manya hoga">
-          </div>
-          <div class="hint mt-8">Bill pe likha jayega aur returns screen pe bhi isi din-limit se check hoga.</div>
-        </div>
-        <div class="field mb-12">
-          <label>Show on Bill</label>
-          <div class="chips">
-            <label class="chip on"><input type="checkbox" id="btShowLogo" checked> Logo</label>
-            <label class="chip on"><input type="checkbox" id="btShowAddr" checked> Shop Address</label>
-            <label class="chip on"><input type="checkbox" id="btShowCust" checked> Customer Details</label>
-            <label class="chip on"><input type="checkbox" id="btShowBarcode" checked> Bill Barcode</label>
-            <label class="chip on"><input type="checkbox" id="btShowReturnPolicy" checked> Return Policy Line</label>
-            <label class="chip on"><input type="checkbox" id="btShowFooter" checked> Footer</label>
-          </div>
-        </div>
         <button class="btn sm" id="btnSaveBill">Save Bill Template</button>
-        <button class="btn ghost sm" id="btnPreviewBill">👁 Preview</button>
       </div>
 
       <div class="pane">
@@ -731,12 +727,11 @@ tr:hover td{background:#faf9f4;}
       <div class="pane">
         <h3>Backup &amp; Restore</h3>
         <div class="row">
-          <button class="btn ok sm" id="btnDownload">⬇ Backup Now (Instant Download)</button>
+          <button class="btn ghost sm" id="btnDownload">⬇ Download JSON Backup</button>
           <label class="btn ghost sm" style="cursor:pointer;">⬆ Restore Backup
             <input type="file" id="restoreFile" accept="application/json" style="display:none;">
           </label>
         </div>
-        <div class="hint mt-8" id="lastBackupHint">Last backup: kabhi nahi</div>
         <div class="hint mt-8">Restore sirf local cache replace karega — Sheet ka data unchanged rahega. Full recovery ke liye Google Sheet ka native version history use karein.</div>
       </div>
       <div class="pane" id="paneMasterPw">
@@ -784,16 +779,7 @@ const state = {
     razorpayKey: '',
     billFormat: 'thermal',
     billHeader: 'AK FASHION HUB',
-    billFooter: 'Thank You! Visit Again',
-    returnDays: 3,
-    returnText: 'din ke andar hi return/exchange manya hoga',
-    showLogo: true,
-    showAddr: true,
-    showCust: true,
-    showBarcode: true,
-    showReturnPolicy: true,
-    showFooter: true,
-    lastBackup: ''
+    billFooter: 'Thank You! Visit Again'
   },
   user: null,                 // { staffID, name, mobile, role, permissions }
   data: emptyStore(),
@@ -802,7 +788,7 @@ const state = {
   lastBill: null,
   denomOpen: {},
   denomClose: {},
-  cashDenomPick: {},           // temp denom picker for cash in/out modal
+  tenderedDenoms: {},         // denomination-wise breakdown customer gave in POS
   chart: null,
   pendingSubmit: false        // duplicate-click guard
 };
@@ -928,6 +914,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireAttendance();
   wireSettings();
   buildDenomInputs();
+  applyBrandLogo();
 
   // repaint cached data immediately, then sync
   if(state.user){ enterShell(); pullAll(); }
@@ -935,6 +922,31 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(queueFlush, 20000);
   window.addEventListener('online', queueFlush);
 });
+
+/* ------- brand logo (login / sidebar / favicon / bill print) ------- */
+function applyBrandLogo(){
+  const logo = state.cfg.shopLogo;
+  [ '#loginLogoDot', '#sideLogoDot' ].forEach(sel => {
+    const el = $(sel);
+    if(!el) return;
+    if(logo){
+      el.style.backgroundImage = 'url(' + logo + ')';
+      el.textContent = '';
+    }else{
+      el.style.backgroundImage = '';
+      el.textContent = 'A';
+    }
+  });
+  // favicon / home-screen icon on phone
+  if(logo){
+    let link = document.querySelector("link[rel~='icon']");
+    if(!link){ link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
+    link.href = logo;
+    let touch = document.querySelector("link[rel='apple-touch-icon']");
+    if(!touch){ touch = document.createElement('link'); touch.rel='apple-touch-icon'; document.head.appendChild(touch); }
+    touch.href = logo;
+  }
+}
 
 /* ------- login ------- */
 function showLogin(){ $('#loginWrap').style.display='grid'; $('#shell').classList.remove('on'); }
@@ -1111,8 +1123,8 @@ function renderDash(){
   const tb = $('#dashBills tbody'); tb.innerHTML='';
   bills.slice().reverse().slice(0,10).forEach(b=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(b.BillNumber||'')}</td><td>${escapeHtml(b.CustomerName||b.CustomerMobile||'—')}</td>
-      <td>${fmt(b.Total)}</td><td>${escapeHtml(b.PaymentMode||'Cash')}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>`;
+    tr.innerHTML = `<td>${b.BillNumber||''}</td><td>${b.CustomerName||b.CustomerMobile||'—'}</td>
+      <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>`;
     tb.appendChild(tr);
   });
   if(!bills.length) tb.innerHTML = '<tr><td colspan="5" class="empty">No bills yet</td></tr>';
@@ -1141,16 +1153,22 @@ function wirePOS(){
   });
   $('#btnScanCam').addEventListener('click', ()=> openCamScanner(code=>{
     addToCartByScan(code);
-  }));
+  }, { continuous:true, gapMs:3000 }));
   $('#posPay').addEventListener('change', updateUpiQr);
 }
 function updateUpiQr(){
   const mode = $('#posPay').value;
-  if(mode === 'UPI' && state.cfg.upiQR){
+  const showQr = (mode === 'UPI' || mode === 'Online');
+  $('#posTenderedWrap').style.display = (mode==='Cash' || mode==='Mixed') ? 'block' : 'none';
+  $('#changeBox').style.display = 'none';
+  if(showQr && state.cfg.upiQR){
     $('#upiQrImg').src = state.cfg.upiQR;
     $('#upiQrBox').style.display = 'block';
   }else{
     $('#upiQrBox').style.display = 'none';
+    if(showQr && !state.cfg.upiQR){
+      toast('UPI QR set nahi hai — Settings me upload karein', 'warn');
+    }
   }
 }
 function showSuggest(term){
@@ -1233,8 +1251,8 @@ function refreshCart(){
     row.className = 'cart-row';
     row.innerHTML = `
       <div>
-        <div class="strong">${escapeHtml(c.Name)}</div>
-        <div class="dim" style="font-size:12px;">${escapeHtml(c.UID)} • ${escapeHtml(c.Color||'')} ${escapeHtml(c.Size||'')} • ${fmt(c.Price)}</div>
+        <div class="strong">${c.Name}</div>
+        <div class="dim" style="font-size:12px;">${c.UID} • ${c.Color||''} ${c.Size||''} • ${fmt(c.Price)}</div>
       </div>
       <div class="qty-ctrl">
         <button data-a="dec" data-i="${i}">–</button>
@@ -1280,31 +1298,19 @@ function breakChange(amt){
   });
   return { notes: out, unrounded: rem };
 }
+function denomText(obj){
+  return Object.keys(obj).sort((a,c)=>c-a).map(n => '₹'+n+' × '+obj[n]).join('  •  ');
+}
 function updateChangeBox(total){
   const t = Number($('#posTendered').value || 0);
   const box = $('#changeBox');
-  if(!$('#posTendered').value){ box.style.display = 'none'; return; }
-  if(t < total){
-    // customer gave LESS than the bill — tell staff exactly how short they are
-    const short = total - t;
-    box.style.display = 'block';
-    box.className = 'tag-info';
-    box.innerHTML = '<b>⚠ Customer ne ' + fmt(short) + ' kam diye hain</b> — Diya: ' + fmt(t) + ', Bill: ' + fmt(total);
-    return;
-  }
-  // customer gave equal or MORE — show change to return, note-wise
+  if(!t || t < total){ box.style.display = 'none'; state.tenderedDenoms = {}; return; }
   const change = t - total;
-  box.className = 'tag-note';
-  if(change === 0){
-    box.style.display = 'block';
-    box.innerHTML = '<b>✓ Poora paisa mil gaya — koi change nahi dena</b>';
-    return;
-  }
   const b = breakChange(change);
-  const parts = Object.keys(b.notes).sort((a,c)=>c-a)
-    .map(n => '₹'+n+' × '+b.notes[n]).join('  •  ');
+  state.tenderedDenoms = b.notes;
+  const parts = denomText(b.notes);
   box.style.display = 'block';
-  box.innerHTML = '<b>Customer ne ' + fmt(change) + ' zyada diye — Return ₹' + Math.round(change) + '</b>' + (parts ? ' — ' + parts : ' (coin/change nahi hai denom me)');
+  box.innerHTML = '<b>Return ₹' + Math.round(change) + '</b>' + (parts ? ' — ' + parts : ' (coin/change nahi hai denom me)');
 }
 async function checkCoin(){
   const code = $('#posCoin').value.trim();
@@ -1315,7 +1321,7 @@ async function checkCoin(){
   if(new Date(w.ExpiryDate) < new Date()){ toast('Coin expire ho chuka', 'bad'); return; }
   state.activeCoin = w;
   $('#coinApplyBox').style.display='block';
-  $('#coinApplyBox').innerHTML = `Coin <b>${escapeHtml(w.WalletID)}</b> — ₹${w.RemainingAmount} balance. Bill se auto minus hoga.`;
+  $('#coinApplyBox').innerHTML = `Coin <b>${w.WalletID}</b> — ₹${w.RemainingAmount} balance. Bill se auto minus hoga.`;
   refreshCart();
 }
 async function completeSale(){
@@ -1328,16 +1334,16 @@ async function completeSale(){
   const disc = Number($('#posDisc').value||0);
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
   const total = Math.max(0, sub - disc - coinUse);
+  const payMode = $('#posPay').value;
   const tendered = Number($('#posTendered').value||0);
+  const changeGiven = (payMode==='Cash' && tendered > total) ? (tendered - total) : 0;
   const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const payload = {
     BillID: billID,
     CustomerMobile: $('#posCustMob').value.trim(),
     CustomerName: $('#posCustName').value.trim(),
     Subtotal: sub, Discount: disc, Total: total,
-    PaymentMode: $('#posPay').value,
-    TenderedAmount: tendered,
-    ChangeReturned: Math.max(0, tendered-total),
+    PaymentMode: payMode,
     StaffID: state.user.staffID, StaffName: state.user.name,
     items: state.cart.map(c => ({
       ProductID: c.ProductID, VariantID: c.VariantID, UID: c.UID,
@@ -1347,7 +1353,8 @@ async function completeSale(){
       LineProfit: (c.Price - c.CostPrice) * c.Quantity - 10
     })),
     WalletID: state.activeCoin ? state.activeCoin.WalletID : '',
-    WalletUsed: coinUse
+    WalletUsed: coinUse,
+    Tendered: tendered, ChangeGiven: changeGiven
   };
   // Upsert customer alongside (fire and forget — sheet also upserts on bill)
   if(payload.CustomerMobile){
@@ -1362,22 +1369,49 @@ async function completeSale(){
   if(r.data && r.data.duplicate){ toast('Bill already saved (duplicate blocked)', 'warn'); }
   state.lastBill = { ...payload, BillNumber: r.data.billNumber };
   toast('Bill saved: '+r.data.billNumber, 'ok');
-  // Log cash movement in the drawer if paid in cash (money physically came IN)
-  if(payload.PaymentMode === 'Cash' && total>0){
+
+  // ------- Cash Drawer / Galla logging -------
+  if(payMode === 'Cash'){
+    const tenderedNoteText = denomText(state.tenderedDenoms||{});
+    // Money the customer physically handed over goes IN
     apiPost('addCashTxn', {
       Date: dayKey(nowISO()),
       Time: new Date().toTimeString().substr(0,8),
-      Type: 'IN', Amount: total, Reference: 'SALE-'+r.data.billNumber,
+      Type: 'IN', Amount: tendered > 0 ? tendered : total,
+      Reference: 'BILL-'+(r.data.billNumber||billID),
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Cash sale — '+r.data.billNumber
+      Description: 'Cash sale' + (tenderedNoteText ? ' — Customer diya: '+tenderedNoteText : '')
+    });
+    // Change handed back goes OUT
+    if(changeGiven > 0){
+      const changeNoteText = denomText(breakChange(changeGiven).notes);
+      apiPost('addCashTxn', {
+        Date: dayKey(nowISO()),
+        Time: new Date().toTimeString().substr(0,8),
+        Type: 'OUT', Amount: changeGiven,
+        Reference: 'CHANGE-'+(r.data.billNumber||billID),
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Change returned' + (changeNoteText ? ' — Diya: '+changeNoteText : '')
+      });
+    }
+  }else if(total > 0){
+    // Non-cash sale still logged for reference (0 impact on physical drawer, tagged clearly)
+    apiPost('addCashTxn', {
+      Date: dayKey(nowISO()),
+      Time: new Date().toTimeString().substr(0,8),
+      Type: 'INFO', Amount: 0,
+      Reference: 'BILL-'+(r.data.billNumber||billID),
+      StaffID: state.user.staffID, StaffName: state.user.name,
+      Description: payMode+' sale of '+fmt(total)+' (not physical cash)'
     });
   }
+
   // reset
-  state.cart=[]; state.activeCoin=null;
+  state.cart=[]; state.activeCoin=null; state.tenderedDenoms={};
   $('#posCoin').value=''; $('#posCoinLine').style.display='none';
   $('#coinApplyBox').style.display='none';
-  $('#posDisc').value=0; $('#posTendered').value='';
-  $('#posCustMob').value=''; $('#posCustName').value='';
+  $('#posDisc').value=0;
+  $('#posCustMob').value=''; $('#posCustName').value=''; $('#posTendered').value='';
   refreshCart();
   printBill(state.lastBill);
   pullAll();
@@ -1388,11 +1422,24 @@ function renderPOS(){
   updateUpiQr();
 }
 
-/* ------- print bill (thermal 3in style, template-driven) ------- */
+/* ------- print helper: toggles #printBox display cleanly so it never gets stuck ------- */
+function printHTML(html){
+  const box = $('#printBox');
+  box.innerHTML = html;
+  box.style.display = 'block';
+  const cleanup = () => { box.style.display = 'none'; box.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  setTimeout(() => { window.print(); }, 50);
+  // safety net in case afterprint doesn't fire on some browsers
+  setTimeout(cleanup, 4000);
+}
+
+/* ------- print bill (thermal 3in style) ------- */
 function printBill(b){
+  if(!b){ toast('No bill to print', 'warn'); return; }
   const items = b.items||[];
   const rows = items.map(it =>
-    `<tr><td>${escapeHtml(it.Name)}<br><small>${escapeHtml(it.Color||'')} ${escapeHtml(it.Size||'')}</small></td>
+    `<tr><td>${it.Name}<br><small>${it.Color||''} ${it.Size||''}</small></td>
      <td class="text-c">${it.Quantity}</td>
      <td class="text-r">${fmt(it.Price)}</td>
      <td class="text-r">${fmt(it.LineTotal)}</td></tr>`
@@ -1400,30 +1447,23 @@ function printBill(b){
   const isThermal = (state.cfg.billFormat || 'thermal') === 'thermal';
   const pageWidth = isThermal ? '80mm' : '210mm';
   const fontSz = isThermal ? '12px' : '14px';
-  const logo = (state.cfg.showLogo!==false && state.cfg.shopLogo) ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
-  const addrBlock = (state.cfg.showAddr!==false) ? `<small>${escapeHtml(state.cfg.shopAddress||'')}</small><br>Mob: ${escapeHtml(state.cfg.shopMobile||'')}<br>` : '';
-  const custBlock = (state.cfg.showCust!==false) ? `<div>Cust: ${escapeHtml(b.CustomerName||'-')}<br>Mob: ${escapeHtml(b.CustomerMobile||'-')}</div><hr>` : '';
-  const upiQr = (b.PaymentMode === 'UPI' && state.cfg.upiQR)
+  const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
+  const upiQr = ((b.PaymentMode === 'UPI' || b.PaymentMode === 'Online') && state.cfg.upiQR)
     ? `<div style="text-align:center;margin-top:6px;"><img src="${state.cfg.upiQR}" style="max-width:120px;"><br><small>Scan to pay</small></div>` : '';
-  const returnDays = state.cfg.returnDays!==undefined ? state.cfg.returnDays : 3;
-  const returnText = state.cfg.returnText || 'din ke andar hi return/exchange manya hoga';
-  const returnPolicy = (state.cfg.showReturnPolicy!==false)
-    ? `<div style="text-align:center;font-size:10px;margin-top:4px;">⚠ ${returnDays} ${escapeHtml(returnText)}. Uske baad NOT RETURNABLE.</div>` : '';
-  const footer = (state.cfg.showFooter!==false) ? `<div style="text-align:center;font-size:10px;">${escapeHtml(state.cfg.billFooter||'Thank you! Visit again')}</div>` : '';
-  const barcodeBlock = (state.cfg.showBarcode!==false && b.BillNumber)
-    ? `<div style="text-align:center;margin-top:4px;"><canvas id="billBarcodeCv"></canvas><br><small>${escapeHtml(b.BillNumber)}</small></div>` : '';
-
+  const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
   const html = `
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:${fontSz};padding:6px;">
       <div style="text-align:center;">
         ${logo}
-        <b style="font-size:${isThermal?'14px':'18px'};">${escapeHtml(state.cfg.billHeader || state.cfg.shopName)}</b><br>
-        ${addrBlock}
-        Bill: ${escapeHtml(b.BillNumber||'')}<br>
+        <b style="font-size:${isThermal?'14px':'18px'};">${state.cfg.billHeader || state.cfg.shopName}</b><br>
+        <small>${state.cfg.shopAddress||''}</small><br>
+        Mob: ${state.cfg.shopMobile}<br>
+        Bill: ${b.BillNumber||''}<br>
         ${new Date().toLocaleString('en-IN')}
       </div>
       <hr>
-      ${custBlock}
+      <div>Cust: ${b.CustomerName||'-'}<br>Mob: ${b.CustomerMobile||'-'}</div>
+      <hr>
       <table style="width:100%;font-size:${isThermal?'11px':'13px'};">
         <thead><tr><th align="left">Item</th><th>Qty</th><th align="right">Rate</th><th align="right">Amt</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1431,112 +1471,23 @@ function printBill(b){
       <hr>
       <div>Subtotal: ${fmt(b.Subtotal)}</div>
       <div>Discount: -${fmt(b.Discount)}</div>
-      ${b.WalletUsed ? '<div>Coin '+escapeHtml(b.WalletID)+': -'+fmt(b.WalletUsed)+'</div>' : ''}
+      ${b.WalletUsed ? '<div>Coin '+b.WalletID+': -'+fmt(b.WalletUsed)+'</div>' : ''}
       <div><b>Total: ${fmt(b.Total)}</b></div>
-      <div>Mode: ${escapeHtml(b.PaymentMode)}</div>
-      ${b.TenderedAmount ? '<div>Received: '+fmt(b.TenderedAmount)+' | Change: '+fmt(b.ChangeReturned||0)+'</div>' : ''}
+      <div>Mode: ${b.PaymentMode}</div>
+      ${cashLine}
       ${upiQr}
-      ${barcodeBlock}
       <hr>
-      ${returnPolicy}
-      ${footer}
+      <div style="text-align:center;font-size:10px;">${state.cfg.billFooter||'Thank you! Visit again'}</div>
     </div>`;
-  $('#printBox').innerHTML = html;
-  if(state.cfg.showBarcode!==false && b.BillNumber){
-    try{ bwipjs.toCanvas('billBarcodeCv', { bcid:'code128', text: String(b.BillNumber), scale:2, height:10, includetext:false }); }catch(e){}
-  }
-  window.print();
+  printHTML(html);
 }
-
-/* ------- WhatsApp: send bill as an actual PNG image ------- */
-async function billToImageBlob(b){
-  // Build an off-screen, clean-styled invoice card for crisp image capture
-  const holder = document.createElement('div');
-  holder.style.position = 'fixed';
-  holder.style.left = '-9999px';
-  holder.style.top = '0';
-  holder.style.background = '#fff';
-  holder.style.padding = '16px';
-  holder.style.width = '360px';
-  holder.style.fontFamily = "'Courier New', monospace";
-  holder.style.color = '#111';
-
-  const items = b.items||[];
-  const rows = items.map(it => `
-    <tr><td style="padding:4px 0;">${escapeHtml(it.Name)}<br><small>${escapeHtml(it.Color||'')} ${escapeHtml(it.Size||'')}</small></td>
-    <td style="text-align:center;">${it.Quantity}</td>
-    <td style="text-align:right;">${fmt(it.Price)}</td>
-    <td style="text-align:right;">${fmt(it.LineTotal)}</td></tr>`).join('');
-  const logo = (state.cfg.showLogo!==false && state.cfg.shopLogo) ? `<img src="${state.cfg.shopLogo}" style="max-height:44px;margin-bottom:4px;">` : '';
-  const returnDays = state.cfg.returnDays!==undefined ? state.cfg.returnDays : 3;
-  const returnText = state.cfg.returnText || 'din ke andar hi return/exchange manya hoga';
-
-  holder.innerHTML = `
-    <div style="text-align:center;">
-      ${logo}
-      <div style="font-weight:800;font-size:16px;">${escapeHtml(state.cfg.billHeader||state.cfg.shopName)}</div>
-      <div style="font-size:11px;">${escapeHtml(state.cfg.shopAddress||'')}</div>
-      <div style="font-size:11px;">Mob: ${escapeHtml(state.cfg.shopMobile||'')}</div>
-      <div style="font-size:12px;margin-top:4px;">Bill: ${escapeHtml(b.BillNumber||'')} — ${new Date().toLocaleDateString('en-IN')}</div>
-    </div>
-    <hr style="margin:8px 0;">
-    <div style="font-size:12px;">Cust: ${escapeHtml(b.CustomerName||'-')} | ${escapeHtml(b.CustomerMobile||'-')}</div>
-    <hr style="margin:8px 0;">
-    <table style="width:100%;font-size:12px;border-collapse:collapse;">
-      <thead><tr style="border-bottom:1px solid #ccc;"><th align="left">Item</th><th>Qty</th><th align="right">Rate</th><th align="right">Amt</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <hr style="margin:8px 0;">
-    <div style="font-size:13px;">Subtotal: ${fmt(b.Subtotal)}</div>
-    <div style="font-size:13px;">Discount: -${fmt(b.Discount)}</div>
-    ${b.WalletUsed ? '<div style="font-size:13px;">Coin: -'+fmt(b.WalletUsed)+'</div>' : ''}
-    <div style="font-size:16px;font-weight:800;margin-top:4px;">Total: ${fmt(b.Total)}</div>
-    <div style="font-size:12px;">Mode: ${escapeHtml(b.PaymentMode)}</div>
-    <hr style="margin:8px 0;">
-    <div style="text-align:center;font-size:10px;color:#a00;">⚠ ${returnDays} ${escapeHtml(returnText)}. Uske baad NOT RETURNABLE.</div>
-    <div style="text-align:center;font-size:11px;margin-top:6px;">${escapeHtml(state.cfg.billFooter||'Thank you! Visit again')}</div>
-  `;
-  document.body.appendChild(holder);
-  let blob = null;
-  try{
-    const canvas = await html2canvas(holder, { scale: 2, backgroundColor: '#ffffff' });
-    blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-  }catch(e){
-    console.error(e);
-  }
-  document.body.removeChild(holder);
-  return blob;
-}
-async function whatsappLastBill(){
+function whatsappLastBill(){
   if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
   const b = state.lastBill;
+  const msg = `${state.cfg.shopName}\nInvoice: ${b.BillNumber}\nAmount Paid: ₹${b.Total}\nPayment Mode: ${b.PaymentMode}\n\nThank you for shopping with us! We look forward to serving you again.`;
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
-  toast('Bill image taiyar ho raha hai…');
-  const blob = await billToImageBlob(b);
-  if(!blob){ toast('Image banane me dikkat aayi', 'bad'); return; }
-  const file = new File([blob], (b.BillNumber||'bill')+'.png', { type:'image/png' });
-
-  // Best path: native share sheet lets you pick WhatsApp and attaches the PNG directly
-  if(navigator.canShare && navigator.canShare({ files:[file] })){
-    try{
-      await navigator.share({
-        files: [file],
-        title: state.cfg.shopName,
-        text: 'Bill '+(b.BillNumber||'')+' — Total ₹'+Math.round(b.Total||0)
-      });
-      return;
-    }catch(e){ /* user cancelled or unsupported — fall through to download */ }
-  }
-  // Fallback: download the PNG, then open WhatsApp chat so staff can attach it manually
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = (b.BillNumber||'bill')+'.png'; a.click();
-  URL.revokeObjectURL(url);
-  toast('Bill image download ho gayi — WhatsApp me attach kar dein', 'ok');
-  if(mob){
-    const msg = `${state.cfg.shopName}\nBill: ${b.BillNumber}\nAmount: ₹${b.Total}\nMode: ${b.PaymentMode}\nDhanyavaad!`;
-    window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
-  }
+  if(!mob){ toast('Customer mobile chahiye', 'warn'); return; }
+  window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
 
 /* ------- customer history modal ------- */
@@ -1552,15 +1503,15 @@ async function viewCustomerHistory(){
     const its = (b.items||[]).map(i=>i.Name+' ('+i.Quantity+')').join(', ');
     return `<tr>
       <td>${(b.CreatedDate||'').substr(0,10)}</td>
-      <td>${escapeHtml(b.BillNumber||'')}</td>
-      <td>${escapeHtml(its)}</td>
+      <td>${b.BillNumber||''}</td>
+      <td>${its}</td>
       <td class="text-r">${fmt(b.Total)}</td>
-      <td>${escapeHtml(b.PaymentMode||'')}</td>
+      <td>${b.PaymentMode||''}</td>
     </tr>`;
   }).join('');
   const coins = (r.data.wallets||[]).map(w=>`
-    <tr><td class="mono">${escapeHtml(w.WalletID)}</td><td>${fmt(w.Amount)}</td><td>${fmt(w.RemainingAmount)}</td>
-    <td>${(w.ExpiryDate||'').substr(0,10)}</td><td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'?'bad':'warn')}">${escapeHtml(w.Status)}</span></td></tr>
+    <tr><td class="mono">${w.WalletID}</td><td>${fmt(w.Amount)}</td><td>${fmt(w.RemainingAmount)}</td>
+    <td>${(w.ExpiryDate||'').substr(0,10)}</td><td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'?'bad':'warn')}">${w.Status}</span></td></tr>
   `).join('');
   openModal('Customer • '+(c.Name||m), `
     <div class="grid-3 mb-16">
@@ -1591,13 +1542,13 @@ function openScanDetails(p){
     byColor[v.Color] = (byColor[v.Color]||0) + Number(v.Stock||0);
     bySize[v.Size]   = (bySize[v.Size]||0)   + Number(v.Stock||0);
   });
-  const colorRows = Object.keys(byColor).map(c=>`<tr><td>${escapeHtml(c)}</td><td class="text-r">${byColor[c]}</td></tr>`).join('');
-  const sizeRows  = Object.keys(bySize).map(c=>`<tr><td>${escapeHtml(c)}</td><td class="text-r">${bySize[c]}</td></tr>`).join('');
+  const colorRows = Object.keys(byColor).map(c=>`<tr><td>${c}</td><td class="text-r">${byColor[c]}</td></tr>`).join('');
+  const sizeRows  = Object.keys(bySize).map(c=>`<tr><td>${c}</td><td class="text-r">${bySize[c]}</td></tr>`).join('');
   const variantRows = variants.map(v => `
     <tr>
-      <td class="mono">${escapeHtml(v.UID||p.UID)}</td>
-      <td>${escapeHtml(v.Color||'')}</td>
-      <td>${escapeHtml(v.Size||'')}</td>
+      <td class="mono">${v.UID||p.UID}</td>
+      <td>${v.Color||''}</td>
+      <td>${v.Size||''}</td>
       <td class="text-r">${v.Stock}</td>
       <td><button class="btn sm ok" data-vid="${v.VariantID}">Add to Cart</button></td>
     </tr>`).join('');
@@ -1605,19 +1556,20 @@ function openScanDetails(p){
   openModal(p.Name + ' — Details', `
     <div class="grid-2 mb-12">
       <div>
-        <div><span class="dim">UID</span>: <b>${escapeHtml(p.UID||'')}</b></div>
-        <div><span class="dim">Barcode</span>: <span class="mono">${escapeHtml(p.Barcode||'')}</span></div>
-        <div><span class="dim">Category</span>: ${escapeHtml(p.Category||'—')}</div>
-        <div><span class="dim">Type</span>: ${escapeHtml(p.Type||'—')}</div>
-        <div><span class="dim">Fit</span>: ${escapeHtml(p.Fit||'—')}</div>
-        <div><span class="dim">Fabric</span>: ${escapeHtml(p.FabricType||'—')}</div>
-        <div><span class="dim">Material</span>: ${escapeHtml(p.Material||'—')}</div>
-        <div><span class="dim">Shade</span>: ${escapeHtml(p.Shade||'—')}</div>
+        <div><span class="dim">Name</span>: <b>${p.Name||''}</b></div>
+        <div><span class="dim">UID</span>: <b>${p.UID||''}</b></div>
+        <div><span class="dim">Barcode</span>: <span class="mono">${p.Barcode||''}</span></div>
+        <div><span class="dim">Category</span>: ${p.Category||'—'}</div>
+        <div><span class="dim">Type</span>: ${p.Type||'—'}</div>
+        <div><span class="dim">Fit</span>: ${p.Fit||'—'}</div>
+        <div><span class="dim">Fabric</span>: ${p.FabricType||'—'}</div>
+        <div><span class="dim">Material</span>: ${p.Material||'—'}</div>
+        <div><span class="dim">Shade</span>: ${p.Shade||'—'}</div>
       </div>
       <div>
-        <div><span class="dim">Brand</span>: ${escapeHtml(p.Brand||'—')}</div>
-        <div><span class="dim">Gender</span>: ${escapeHtml(p.Gender||'—')}</div>
-        <div><span class="dim">Batch</span>: <b>${escapeHtml(p.BatchNumber||'—')}</b></div>
+        <div><span class="dim">Brand</span>: ${p.Brand||'—'}</div>
+        <div><span class="dim">Gender</span>: ${p.Gender||'—'}</div>
+        <div><span class="dim">Batch</span>: <b>${p.BatchNumber||'—'}</b></div>
         <div><span class="dim">Total Stock</span>: <b>${variants.reduce((s,v)=>s+Number(v.Stock||0),0)}</b></div>
         ${state.user.role==='admin' ? '<div><span class="dim">CP</span>: '+fmt(p.CostPrice)+'</div>' : ''}
         <div><span class="dim">SP</span>: ${fmt(p.SalePrice)}</div>
@@ -1625,7 +1577,7 @@ function openScanDetails(p){
         <div><span class="dim">Last Updated</span>: ${(p.UpdatedDate||p.CreatedDate||'').substr(0,10)}</div>
       </div>
     </div>
-    ${p.Description ? '<div class="pane" style="margin-bottom:12px;">'+escapeHtml(p.Description)+'</div>' : ''}
+    ${p.Description ? '<div class="pane" style="margin-bottom:12px;">'+p.Description+'</div>' : ''}
     <div class="grid-2 mb-12">
       <div>
         <div class="strong mb-8">Color-wise Stock</div>
@@ -1670,11 +1622,11 @@ function renderProducts(){
     const stk = (p.variants||[]).reduce((s,v)=>s+Number(v.Stock||0),0);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${escapeHtml(p.UID||'')}</td>
-      <td><span class="link">${escapeHtml(p.Name||'')}</span></td>
-      <td>${escapeHtml(p.Category||'—')}</td>
-      <td>${escapeHtml(p.Type||'—')}</td>
-      <td>${escapeHtml(p.BatchNumber||'—')}</td>
+      <td class="mono">${p.UID||''}</td>
+      <td><span class="link">${p.Name||''}</span></td>
+      <td>${p.Category||'—'}</td>
+      <td>${p.Type||'—'}</td>
+      <td>${p.BatchNumber||'—'}</td>
       <td>${stk}</td>
       <td>${isAdmin ? fmt(p.CostPrice) : '—'}</td>
       <td>${fmt(p.SalePrice)}</td>
@@ -1709,8 +1661,8 @@ function openProductForm(existing){
   const p = existing || {};
   openModal((isEdit?'Edit':'New') + ' Product', `
     <div class="grid-2 mb-12">
-      <div class="field"><label>UID *</label><input class="inp" id="pfUID" value="${escapeHtml(p.UID||'')}" ${isEdit?'readonly':''}></div>
-      <div class="field"><label>Product Name *</label><input class="inp" id="pfName" value="${escapeHtml(p.Name||'')}"></div>
+      <div class="field"><label>UID *</label><input class="inp" id="pfUID" value="${p.UID||''}" ${isEdit?'readonly':''}></div>
+      <div class="field"><label>Product Name *</label><input class="inp" id="pfName" value="${p.Name||''}"></div>
     </div>
     <div class="grid-3 mb-12">
       <div class="field"><label>Category</label><select class="inp" id="pfCat">${CAT_LIST.map(c=>'<option '+(p.Category===c?'selected':'')+'>'+c+'</option>').join('')}</select></div>
@@ -1718,21 +1670,21 @@ function openProductForm(existing){
       <div class="field"><label>Fit</label><select class="inp" id="pfFit">${FIT_LIST.map(c=>'<option '+(p.Fit===c?'selected':'')+'>'+c+'</option>').join('')}</select></div>
     </div>
     <div class="grid-3 mb-12">
-      <div class="field"><label>Fabric</label><input class="inp" id="pfFab" value="${escapeHtml(p.FabricType||'')}" placeholder="Cotton, Denim..."></div>
-      <div class="field"><label>Material</label><input class="inp" id="pfMat" value="${escapeHtml(p.Material||'')}" placeholder="Blend, Pure Cotton..."></div>
-      <div class="field"><label>Shade</label><input class="inp" id="pfShade" value="${escapeHtml(p.Shade||'')}" placeholder="Light Blue, Dark..."></div>
+      <div class="field"><label>Fabric</label><input class="inp" id="pfFab" value="${p.FabricType||''}" placeholder="Cotton, Denim..."></div>
+      <div class="field"><label>Material</label><input class="inp" id="pfMat" value="${p.Material||''}" placeholder="Blend, Pure Cotton..."></div>
+      <div class="field"><label>Shade</label><input class="inp" id="pfShade" value="${p.Shade||''}" placeholder="Light Blue, Dark..."></div>
     </div>
     <div class="grid-3 mb-12">
       <div class="field"><label>Gender</label><select class="inp" id="pfGender"><option>Unisex</option><option ${p.Gender==='Men'?'selected':''}>Men</option><option ${p.Gender==='Women'?'selected':''}>Women</option><option ${p.Gender==='Kids'?'selected':''}>Kids</option></select></div>
-      <div class="field"><label>Brand</label><input class="inp" id="pfBrand" value="${escapeHtml(p.Brand||'AK FASHION HUB')}"></div>
-      <div class="field"><label>Batch Number *</label><input class="inp" id="pfBatch" value="${escapeHtml(p.BatchNumber||'')}" placeholder="e.g. B-JAN-01"></div>
+      <div class="field"><label>Brand</label><input class="inp" id="pfBrand" value="${p.Brand||'AK FASHION HUB'}"></div>
+      <div class="field"><label>Batch Number *</label><input class="inp" id="pfBatch" value="${p.BatchNumber||''}" placeholder="e.g. B-JAN-01"></div>
     </div>
     <div class="grid-3 mb-12">
       <div class="field"><label>Cost Price *</label><input class="inp" id="pfCP" type="number" min="0" value="${p.CostPrice||0}"></div>
       <div class="field"><label>Sale Price *</label><input class="inp" id="pfSP" type="number" min="0" value="${p.SalePrice||0}"></div>
       <div class="field"><label>MRP</label><input class="inp" id="pfMRP" type="number" min="0" value="${p.MRP||0}"></div>
     </div>
-    <div class="field mb-12"><label>Description</label><textarea class="inp" id="pfDesc" rows="2">${escapeHtml(p.Description||'')}</textarea></div>
+    <div class="field mb-12"><label>Description</label><textarea class="inp" id="pfDesc" rows="2">${p.Description||''}</textarea></div>
 
     ${isEdit ? '' : `
     <div class="divider"></div>
@@ -1853,6 +1805,11 @@ function wireInventory(){
 }
 function renderInventory(){
   const term = ($('#invSearch').value||'').toLowerCase();
+  const isAdmin = state.user && state.user.role==='admin';
+  // header: add CP column for admin only
+  $('#invTblHead').innerHTML = '<tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th>'
+    + (isAdmin ? '<th>Cost Price</th>' : '')
+    + '<th>Stock</th><th>Location</th><th></th></tr>';
   const rows = [];
   let totalU = 0;
   (state.data.products||[]).forEach(p => {
@@ -1868,16 +1825,17 @@ function renderInventory(){
   rows.slice(0, 500).forEach(({p,v}) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${escapeHtml(p.UID)}</td>
-      <td>${escapeHtml(p.Name)}</td>
-      <td>${escapeHtml(v.Color||'')}</td>
-      <td>${escapeHtml(v.Size||'')}</td>
-      <td>${escapeHtml(v.BatchNumber || p.BatchNumber || '—')}</td>
-      <td><b class="${Number(v.Stock)<=5?'':''}">${v.Stock}</b></td>
-      <td>${escapeHtml([v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ')||'—')}</td>
+      <td class="mono">${p.UID}</td>
+      <td><b>${p.Name}</b></td>
+      <td>${v.Color||''}</td>
+      <td>${v.Size||''}</td>
+      <td>${v.BatchNumber || p.BatchNumber || '—'}</td>
+      ${isAdmin ? '<td>'+fmt(p.CostPrice)+'</td>' : ''}
+      <td><b>${v.Stock}</b></td>
+      <td>${[v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ')||'—'}</td>
       <td>
         <button class="btn ghost sm" data-a="view" data-p="${p.ProductID}">👁</button>
-        ${state.user.role==='admin' ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'">Stock ±</button>' : ''}
+        ${isAdmin ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'">Stock ±</button>' : ''}
       </td>`;
     tb.appendChild(tr);
   });
@@ -1898,7 +1856,7 @@ function renderInventory(){
       pullAll();
     }
   };
-  if(!rows.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No inventory rows</td></tr>';
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="'+(isAdmin?9:8)+'" class="empty">No inventory rows</td></tr>';
 }
 
 /* ============ CUSTOMERS ============ */
@@ -1918,9 +1876,9 @@ function renderCustomers(){
       .reduce((s,w)=>s+Number(w.RemainingAmount||0), 0);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escapeHtml(c.Name||'')}</td>
-      <td>${escapeHtml(c.Mobile||'')}</td>
-      <td>${escapeHtml(c.City||'—')}</td>
+      <td>${c.Name||''}</td>
+      <td>${c.Mobile||''}</td>
+      <td>${c.City||'—'}</td>
       <td>${fmt(c.TotalSpend)}</td>
       <td>${c.LoyaltyPoints||0}</td>
       <td>${fmt(c.DueBalance)}</td>
@@ -1949,14 +1907,14 @@ function openCustomerForm(c){
   c = c || {};
   openModal((isEdit?'Edit':'Add') + ' Customer', `
     <div class="grid-2 mb-12">
-      <div class="field"><label>Name *</label><input class="inp" id="cfName" value="${escapeHtml(c.Name||'')}"></div>
-      <div class="field"><label>Mobile *</label><input class="inp" id="cfMob" value="${escapeHtml(c.Mobile||'')}" maxlength="10"></div>
+      <div class="field"><label>Name *</label><input class="inp" id="cfName" value="${c.Name||''}"></div>
+      <div class="field"><label>Mobile *</label><input class="inp" id="cfMob" value="${c.Mobile||''}" maxlength="10"></div>
     </div>
     <div class="grid-2 mb-12">
-      <div class="field"><label>City</label><input class="inp" id="cfCity" value="${escapeHtml(c.City||'')}"></div>
-      <div class="field"><label>Email</label><input class="inp" id="cfEmail" value="${escapeHtml(c.Email||'')}"></div>
+      <div class="field"><label>City</label><input class="inp" id="cfCity" value="${c.City||''}"></div>
+      <div class="field"><label>Email</label><input class="inp" id="cfEmail" value="${c.Email||''}"></div>
     </div>
-    <div class="field"><label>Address</label><textarea class="inp" id="cfAddr" rows="2">${escapeHtml(c.Address||'')}</textarea></div>
+    <div class="field"><label>Address</label><textarea class="inp" id="cfAddr" rows="2">${c.Address||''}</textarea></div>
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label: isEdit?'Save':'Add', kind:'ok', on: async () => {
@@ -1995,10 +1953,10 @@ function renderSuppliers(){
     const buys = (state.data.purchases||[]).filter(p => String(p.SupplierID)===String(s.SupplierID)).length;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="link" data-id="${s.SupplierID}">${escapeHtml(s.Name||'')}</span></td>
-      <td>${escapeHtml(s.Mobile||'')}</td>
-      <td>${escapeHtml(s.City||'')}</td>
-      <td>${escapeHtml(s.GSTIN||'—')}</td>
+      <td><span class="link" data-id="${s.SupplierID}">${s.Name||''}</span></td>
+      <td>${s.Mobile||''}</td>
+      <td>${s.City||''}</td>
+      <td>${s.GSTIN||'—'}</td>
       <td>${buys}</td>
       <td><button class="btn ghost sm" data-a="view" data-id="${s.SupplierID}">👁 Profile</button></td>`;
     tb.appendChild(tr);
@@ -2016,14 +1974,14 @@ function openSupplierForm(s){
   const isEdit=!!s; s=s||{};
   openModal((isEdit?'Edit':'Add') + ' Supplier', `
     <div class="grid-2 mb-12">
-      <div class="field"><label>Name *</label><input class="inp" id="sfName" value="${escapeHtml(s.Name||'')}"></div>
-      <div class="field"><label>Mobile *</label><input class="inp" id="sfMob" value="${escapeHtml(s.Mobile||'')}"></div>
+      <div class="field"><label>Name *</label><input class="inp" id="sfName" value="${s.Name||''}"></div>
+      <div class="field"><label>Mobile *</label><input class="inp" id="sfMob" value="${s.Mobile||''}"></div>
     </div>
     <div class="grid-2 mb-12">
-      <div class="field"><label>City</label><input class="inp" id="sfCity" value="${escapeHtml(s.City||'')}"></div>
-      <div class="field"><label>GSTIN</label><input class="inp" id="sfGST" value="${escapeHtml(s.GSTIN||'')}"></div>
+      <div class="field"><label>City</label><input class="inp" id="sfCity" value="${s.City||''}"></div>
+      <div class="field"><label>GSTIN</label><input class="inp" id="sfGST" value="${s.GSTIN||''}"></div>
     </div>
-    <div class="field"><label>Address</label><textarea class="inp" id="sfAddr" rows="2">${escapeHtml(s.Address||'')}</textarea></div>
+    <div class="field"><label>Address</label><textarea class="inp" id="sfAddr" rows="2">${s.Address||''}</textarea></div>
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Save', kind:'ok', on: async () => {
@@ -2042,20 +2000,20 @@ function openSupplierProfile(s){
     const prod = (state.data.products||[]).find(x => String(x.ProductID)===String(p.ProductID)) || {};
     return `<tr>
       <td>${(p.Date||'').substr(0,10)}</td>
-      <td>${escapeHtml(prod.Name||p.UID||'')}</td>
-      <td>${escapeHtml(p.Color||'')} ${escapeHtml(p.Size||'')}</td>
+      <td>${prod.Name||p.UID||''}</td>
+      <td>${p.Color||''} ${p.Size||''}</td>
       <td>${p.Quantity}</td>
       <td>${fmt(p.UnitCost)}</td>
       <td>${fmt(p.TotalCost)}</td>
-      <td>${escapeHtml(p.InvoiceNumber||'—')}</td>
+      <td>${p.InvoiceNumber||'—'}</td>
     </tr>`;
   }).join('');
   openModal('Supplier • '+s.Name, `
     <div class="grid-2 mb-12">
-      <div><b>Mobile:</b> ${escapeHtml(s.Mobile)}<br><b>City:</b> ${escapeHtml(s.City||'—')}<br><b>GSTIN:</b> ${escapeHtml(s.GSTIN||'—')}</div>
-      <div><b>Address:</b> ${escapeHtml(s.Address||'—')}<br><b>Total Orders:</b> ${buys.length}<br><b>Since:</b> ${(s.CreatedDate||'').substr(0,10)}</div>
+      <div><b>Mobile:</b> ${s.Mobile}<br><b>City:</b> ${s.City||'—'}<br><b>GSTIN:</b> ${s.GSTIN||'—'}</div>
+      <div><b>Address:</b> ${s.Address||'—'}<br><b>Total Orders:</b> ${buys.length}<br><b>Since:</b> ${(s.CreatedDate||'').substr(0,10)}</div>
     </div>
-    <div class="strong mb-8">Purchase History (ID ke saath)</div>
+    <div class="strong mb-8">Purchase History</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>Date</th><th>Product</th><th>Var</th><th>Qty</th><th>Rate</th><th>Total</th><th>Inv#</th></tr></thead>
       <tbody>${rows||'<tr><td colspan="7" class="empty">No purchases</td></tr>'}</tbody>
@@ -2103,14 +2061,14 @@ function renderWallet(){
   list.slice().reverse().forEach(w => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${escapeHtml(w.WalletID)}</td>
-      <td>${escapeHtml(w.CustomerName||'')}</td>
-      <td>${escapeHtml(w.CustomerMobile||'')}</td>
+      <td class="mono">${w.WalletID}</td>
+      <td>${w.CustomerName||''}</td>
+      <td>${w.CustomerMobile||''}</td>
       <td>${fmt(w.Amount)}</td>
       <td>${fmt(w.RemainingAmount)}</td>
       <td>${(w.IssueDate||'').substr(0,10)}</td>
       <td>${(w.ExpiryDate||'').substr(0,10)}</td>
-      <td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'||w.Status==='Cancelled'?'bad':'warn')}">${escapeHtml(w.Status)}</span></td>
+      <td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'||w.Status==='Cancelled'?'bad':'warn')}">${w.Status}</span></td>
       <td>
         <button class="btn ghost sm" data-a="wa" data-id="${w.WalletID}">📱 WA</button>
         ${w.Status==='Active' ? '<button class="btn bad sm" data-a="cancel" data-id="'+w.WalletID+'">Cancel</button>' : ''}
@@ -2133,7 +2091,7 @@ function renderWallet(){
 function sendCoinWhatsapp(w){
   const mob = String(w.CustomerMobile||'').replace(/\D/g,'');
   if(!mob){ toast('Mobile missing', 'bad'); return; }
-  const msg = `Namaste ${w.CustomerName||''}!\n${state.cfg.shopName} ki taraf se aapko ₹${w.Amount} ka store-credit coin diya gaya hai.\n\nCoin Code: ${w.WalletID}\nBalance: ₹${w.RemainingAmount}\nValid till: ${(w.ExpiryDate||'').substr(0,10)}\nReason: ${w.Reason||'Refund'}\n\nApni next kharidari me is code ko bataye — amount bill se automatically kat jayega.\nDhanyavaad!`;
+  const msg = `Dear ${w.CustomerName||'Customer'},\n\n${state.cfg.shopName} has issued you a store-credit coupon worth ₹${w.Amount}.\n\nCoupon Code: ${w.WalletID}\nBalance: ₹${w.RemainingAmount}\nValid Until: ${(w.ExpiryDate||'').substr(0,10)}\n\nPlease share this code on your next visit — the amount will be automatically applied to your bill.\n\nThank you for shopping with us!`;
   window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
 function openIssueCoinForm(pref){
@@ -2187,10 +2145,6 @@ function openIssueCoinForm(pref){
 function wireReturns(){
   $('#btnRetSearch').addEventListener('click', doReturnSearch);
   $('#retSearch').addEventListener('keyup', e => { if(e.key==='Enter') doReturnSearch(); });
-  $('#btnRetScan').addEventListener('click', ()=> openCamScanner(code=>{
-    $('#retSearch').value = code;
-    doReturnSearch();
-  }));
 }
 function renderReturns(){ $('#retResult').innerHTML=''; }
 function doReturnSearch(){
@@ -2211,44 +2165,25 @@ function doReturnSearch(){
   if(!bill){ $('#retResult').innerHTML = '<div class="empty">Bill nahi mila</div>'; return; }
   showBillForReturn(bill);
 }
-function daysSince(dateStr){
-  if(!dateStr) return 9999;
-  const then = new Date(dateStr);
-  const now = new Date();
-  return Math.floor((now - then) / (1000*60*60*24));
-}
 function showBillForReturn(b){
   const items = (state.data.billItems||[]).filter(it => it.BillID === b.BillID);
-  const age = daysSince(b.CreatedDate);
-  const allowedDays = state.cfg.returnDays!==undefined ? Number(state.cfg.returnDays) : 3;
-  const withinWindow = age <= allowedDays;
-
   const rows = items.map(it => `
     <tr>
-      <td>${escapeHtml(it.Name)}</td>
-      <td>${escapeHtml(it.Color||'')} ${escapeHtml(it.Size||'')}</td>
+      <td>${it.Name}</td>
+      <td>${it.Color||''} ${it.Size||''}</td>
       <td>${it.Quantity}</td>
       <td>${fmt(it.Price)}</td>
-      ${withinWindow ? `<td><input class="inp" data-vid="${it.VariantID}" type="number" min="0" max="${it.Quantity}" value="0" style="max-width:70px;"></td>
-      <td class="dim">Refund: <span data-refund="${it.VariantID}">₹0</span></td>` : `<td colspan="2" class="dim">—</td>`}
+      <td><input class="inp" data-vid="${it.VariantID}" type="number" min="0" max="${it.Quantity}" value="0" style="max-width:70px;"></td>
+      <td class="dim">Refund: <span data-refund="${it.VariantID}">₹0</span></td>
     </tr>`).join('');
-
-  const notReturnableBanner = !withinWindow ? `
-    <div class="tag-info" style="background:#fce6e6;border-color:#efc0c0;color:#8b1e1e;margin-bottom:12px;">
-      ⚠ Ye bill ${age} din pehle ka hai (limit: ${allowedDays} din). <b>NOT RETURNABLE.</b>
-    </div>` : '';
-
   $('#retResult').innerHTML = `
     <div class="pane">
-      ${notReturnableBanner}
       <div class="grid-2 mb-12">
-        <div><b>Bill:</b> ${escapeHtml(b.BillNumber)}<br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)} (${age} din pehle)<br><b>Total:</b> ${fmt(b.Total)}</div>
-        <div><b>Customer:</b> ${escapeHtml(b.CustomerName||'—')}<br><b>Mobile:</b> ${escapeHtml(b.CustomerMobile||'—')}<br><b>Mode:</b> ${escapeHtml(b.PaymentMode||'')}</div>
+        <div><b>Bill:</b> ${b.BillNumber}<br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
+        <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
       </div>
-      <div class="strong mb-8">Sale Details</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Var</th><th>Bought</th><th>Price</th>${withinWindow?'<th>Return Qty</th><th></th>':'<th colspan="2">Status</th>'}</tr></thead>
+      <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Var</th><th>Bought</th><th>Price</th><th>Return Qty</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>
-      ${withinWindow ? `
       <div class="mt-16 grid-3">
         <div class="field"><label>Reason</label><input class="inp" id="retReason" placeholder="Size issue, defect..."></div>
         <div class="field"><label>Refund Mode</label>
@@ -2260,10 +2195,8 @@ function showBillForReturn(b){
         <div class="field"><label>Total Refund</label><div class="lg strong mt-8" id="retTotal">₹0</div></div>
       </div>
       <div class="mt-16"><button class="btn ok" id="btnDoReturn">Process Return</button></div>
-      ` : `<div class="mt-16 hint">Return window khatam ho chuka hai — is bill par koi return/exchange process nahi ho sakta.</div>`}
     </div>
   `;
-  if(!withinWindow) return;
   // wire refund calc
   const box = $('#retResult');
   const items2 = items;
@@ -2327,16 +2260,16 @@ function renderPreorders(){
   (state.data.preorders||[]).slice().reverse().forEach(p => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${escapeHtml(p.OrderNumber||'')}</td>
-      <td>${escapeHtml(p.CustomerName||'')}</td>
-      <td>${escapeHtml(p.CustomerMobile||'')}</td>
-      <td>${escapeHtml(p.ProductName||'')}</td>
-      <td>${escapeHtml((p.Color||'')+' '+(p.Size||''))}</td>
+      <td class="mono">${p.OrderNumber||''}</td>
+      <td>${p.CustomerName||''}</td>
+      <td>${p.CustomerMobile||''}</td>
+      <td>${p.ProductName||''}</td>
+      <td>${(p.Color||'')+' '+(p.Size||'')}</td>
       <td>${p.Quantity}</td>
       <td>${fmt(p.TotalAmount)}</td>
       <td>${fmt(p.PaidAmount)}</td>
       <td>${fmt(p.PendingAmount)}</td>
-      <td><span class="pill ${p.Status==='Paid'?'ok':(p.Status==='Cancelled'?'bad':'warn')}">${escapeHtml(p.Status)}</span></td>
+      <td><span class="pill ${p.Status==='Paid'?'ok':(p.Status==='Cancelled'?'bad':'warn')}">${p.Status}</span></td>
       <td>
         ${p.Status==='Active' ? '<button class="btn sm ok" data-a="pay" data-id="'+p.PreOrderID+'">＋ Pay</button>' : ''}
         ${p.Status==='Active' ? '<button class="btn sm bad" data-a="cancel" data-id="'+p.PreOrderID+'">×</button>' : ''}
@@ -2405,10 +2338,10 @@ function renderStaff(){
   (state.data.staff||[]).forEach(s => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escapeHtml(s.Name)}</td>
-      <td>${escapeHtml(s.Mobile)}</td>
-      <td><span class="pill ${s.Role==='admin'?'ok':''}">${escapeHtml(s.Role||'staff')}</span></td>
-      <td><span class="pill ${s.Status==='Active'?'ok':'bad'}">${escapeHtml(s.Status)}</span></td>
+      <td>${s.Name}</td>
+      <td>${s.Mobile}</td>
+      <td><span class="pill ${s.Role==='admin'?'ok':''}">${s.Role||'staff'}</span></td>
+      <td><span class="pill ${s.Status==='Active'?'ok':'bad'}">${s.Status}</span></td>
       <td>${(s.LastLogin||'').substr(0,16).replace('T',' ')}</td>
       <td>
         <button class="btn ghost sm" data-a="edit" data-id="${s.StaffID}">✎</button>
@@ -2432,8 +2365,8 @@ function openStaffForm(s){
   const isEdit=!!s; s=s||{};
   openModal((isEdit?'Edit':'Add') + ' Staff', `
     <div class="grid-2 mb-12">
-      <div class="field"><label>Name *</label><input class="inp" id="stName" value="${escapeHtml(s.Name||'')}"></div>
-      <div class="field"><label>Mobile *</label><input class="inp" id="stMob" value="${escapeHtml(s.Mobile||'')}" maxlength="10"></div>
+      <div class="field"><label>Name *</label><input class="inp" id="stName" value="${s.Name||''}"></div>
+      <div class="field"><label>Mobile *</label><input class="inp" id="stMob" value="${s.Mobile||''}" maxlength="10"></div>
     </div>
     <div class="grid-3 mb-12">
       <div class="field"><label>Role</label>
@@ -2495,19 +2428,12 @@ function wireExpenses(){
 }
 function renderExpenses(){
   const tb = $('#expTbl tbody'); tb.innerHTML='';
-  const list = state.data.expenses||[];
-  list.slice().reverse().forEach(e => {
+  (state.data.expenses||[]).slice().reverse().forEach(e => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${(e.Date||'').substr(0,10)}</td><td>${escapeHtml(e.Category||'')}</td><td>${escapeHtml(e.Description||'')}</td><td>${fmt(e.Amount)}</td><td>${escapeHtml(e.StaffName||'')}</td>`;
+    tr.innerHTML = `<td>${(e.Date||'').substr(0,10)}</td><td>${e.Category||''}</td><td>${e.Description||''}</td><td>${fmt(e.Amount)}</td><td>${e.StaffName||''}</td>`;
     tb.appendChild(tr);
   });
-  if(!list.length) tb.innerHTML = '<tr><td colspan="5" class="empty">No expenses</td></tr>';
-  const monthStart = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
-  const monthTotal = list.filter(e => (e.Date||'').startsWith(monthStart)).reduce((s,e)=>s+Number(e.Amount||0),0);
-  const allTotal = list.reduce((s,e)=>s+Number(e.Amount||0),0);
-  $('#expMonthTotal').textContent = fmt(monthTotal);
-  $('#expAllTotal').textContent = fmt(allTotal);
-  $('#expCount').textContent = list.length;
+  if(!state.data.expenses?.length) tb.innerHTML = '<tr><td colspan="5" class="empty">No expenses</td></tr>';
 }
 
 /* ============ REPORTS ============ */
@@ -2525,14 +2451,14 @@ function renderReports(){
     agg[k].rev += Number(it.LineTotal||0);
   });
   const top = Object.values(agg).sort((a,b)=>b.qty-a.qty).slice(0,10);
-  $('#repTop tbody').innerHTML = top.map(t => `<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.variant)}</td><td>${t.qty}</td><td>${fmt(t.rev)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No sales in 30d</td></tr>';
+  $('#repTop tbody').innerHTML = top.map(t => `<tr><td>${t.name}</td><td>${t.variant}</td><td>${t.qty}</td><td>${fmt(t.rev)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No sales in 30d</td></tr>';
 
   // low stock
   const low = [];
   (state.data.products||[]).forEach(p => (p.variants||[]).forEach(v => {
     if(Number(v.Stock||0) <= 5) low.push({ p, v });
   }));
-  $('#repLow tbody').innerHTML = low.slice(0,50).map(({p,v}) => `<tr><td class="mono">${escapeHtml(p.UID)}</td><td>${escapeHtml(p.Name)}</td><td>${escapeHtml((v.Color||'')+' '+(v.Size||''))}</td><td>${v.Stock}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No low stock</td></tr>';
+  $('#repLow tbody').innerHTML = low.slice(0,50).map(({p,v}) => `<tr><td class="mono">${p.UID}</td><td>${p.Name}</td><td>${(v.Color||'')+' '+(v.Size||'')}</td><td>${v.Stock}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No low stock</td></tr>';
 
   // dead stock — sold count in last 90d
   const ninetyAgo = new Date(); ninetyAgo.setDate(ninetyAgo.getDate()-90);
@@ -2541,11 +2467,11 @@ function renderReports(){
   (state.data.products||[]).forEach(p => (p.variants||[]).forEach(v => {
     if(!soldVids.has(v.VariantID) && Number(v.Stock||0) > 0) dead.push({ p, v });
   }));
-  $('#repDead tbody').innerHTML = dead.slice(0,50).map(({p,v}) => `<tr><td class="mono">${escapeHtml(p.UID)}</td><td>${escapeHtml(p.Name)}</td><td>${escapeHtml((v.Color||'')+' '+(v.Size||''))}</td><td>${v.Stock}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Sab items sell ho rahe hain 🎉</td></tr>';
+  $('#repDead tbody').innerHTML = dead.slice(0,50).map(({p,v}) => `<tr><td class="mono">${p.UID}</td><td>${p.Name}</td><td>${(v.Color||'')+' '+(v.Size||'')}</td><td>${v.Stock}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Sab items sell ho rahe hain 🎉</td></tr>';
 
   // returns
   const rets30 = (state.data.returns||[]).filter(r => new Date(r.CreatedDate) >= thirtyAgo);
-  $('#repRet tbody').innerHTML = rets30.map(r => `<tr><td>${(r.CreatedDate||'').substr(0,10)}</td><td>${escapeHtml(r.BillID||'')}</td><td>${escapeHtml(r.Name)}</td><td>${r.Quantity}</td><td>${fmt(r.RefundAmount)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No returns in 30d</td></tr>';
+  $('#repRet tbody').innerHTML = rets30.map(r => `<tr><td>${(r.CreatedDate||'').substr(0,10)}</td><td>${r.BillID||''}</td><td>${r.Name}</td><td>${r.Quantity}</td><td>${fmt(r.RefundAmount)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No returns in 30d</td></tr>';
 
   // staff performance
   const bills30 = bills.filter(b => new Date(b.CreatedDate) >= thirtyAgo);
@@ -2557,7 +2483,7 @@ function renderReports(){
     perf[k].rev += Number(b.Total||0);
   });
   const rows = Object.values(perf).sort((a,b)=>b.rev-a.rev);
-  $('#repStaff tbody').innerHTML = rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.bills}</td><td>${fmt(r.rev)}</td><td>${fmt(r.bills?r.rev/r.bills:0)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No sales in 30d</td></tr>';
+  $('#repStaff tbody').innerHTML = rows.map(r => `<tr><td>${r.name}</td><td>${r.bills}</td><td>${fmt(r.rev)}</td><td>${fmt(r.bills?r.rev/r.bills:0)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No sales in 30d</td></tr>';
 }
 
 /* ============ BARCODE STICKER GENERATOR ============ */
@@ -2580,9 +2506,9 @@ function renderTags(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input class="inp" type="number" min="0" max="99" value="${qty}" data-vid="${v.VariantID}" style="max-width:50px;padding:4px 6px;"></td>
-      <td><b>${escapeHtml(p.Name)}</b><br><small class="dim">${escapeHtml(p.UID)}</small></td>
-      <td>${escapeHtml(v.Color||'')} ${escapeHtml(v.Size||'')}</td>
-      <td>${escapeHtml(v.BatchNumber || p.BatchNumber || '—')}</td>
+      <td><b>${p.Name}</b><br><small class="dim">${p.UID}</small></td>
+      <td>${v.Color||''} ${v.Size||''}</td>
+      <td>${v.BatchNumber || p.BatchNumber || '—'}</td>
       <td>${fmt(p.MRP)}</td>
       <td>${fmt(v.SalePrice||p.SalePrice)}</td>
       <td><canvas id="mini-${i}" width="60" height="60" style="border:1px solid #eee;"></canvas></td>`;
@@ -2681,9 +2607,8 @@ function printStickerSheet(){
       </div>`;
   }).join('');
 
-  $('#printBox').innerHTML = `
+  const sheetHtml = `
     <style>
-      #printBox { display:block !important; }
       .stk-sheet { display:flex; flex-wrap:wrap; gap:2mm; padding:2mm; }
       .stk { border:1px dashed #666; padding:1.5mm; overflow:hidden;
               font-family:'Courier New', monospace; font-size:${dims.fs}px;
@@ -2701,18 +2626,20 @@ function printStickerSheet(){
     </style>
     <div class="stk-sheet">${cellsHtml}</div>
   `;
-  // Draw DataMatrix on every canvas
-  stickers.forEach((s, idx) => {
-    try{
-      bwipjs.toCanvas('stkdm-' + idx, {
-        bcid: 'datamatrix',
-        text: s.v.Barcode || s.v.VariantBarcode || s.p.UID,
-        scale: 3,
-        includetext: false
-      });
-    }catch(e){}
-  });
-  window.print();
+  printHTML(sheetHtml);
+  // Draw DataMatrix on every canvas (must run after the HTML is in the DOM)
+  setTimeout(() => {
+    stickers.forEach((s, idx) => {
+      try{
+        bwipjs.toCanvas('stkdm-' + idx, {
+          bcid: 'datamatrix',
+          text: s.v.Barcode || s.v.VariantBarcode || s.p.UID,
+          scale: 3,
+          includetext: false
+        });
+      }catch(e){}
+    });
+  }, 60);
 }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 
@@ -2722,8 +2649,8 @@ function printTag(pid, vid){
   const v = p ? p.variants.find(x => x.VariantID === vid) : null;
   if(!p || !v) return;
   const code = v.Barcode || v.VariantBarcode || p.UID;
-  $('#printBox').innerHTML = `
-    <style>#printBox{display:block !important;} .tag1{width:50mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;}</style>
+  const html = `
+    <style>.tag1{width:50mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;}</style>
     <div class="tag1">
       <div style="font-weight:800;font-size:12px;">${escapeHtml(p.Name)}</div>
       <div style="font-size:10px;">${escapeHtml((v.Color||'')+' '+(v.Size||''))}</div>
@@ -2733,18 +2660,18 @@ function printTag(pid, vid){
       <div style="text-decoration:line-through;color:#666;font-size:11px;">${fmt(p.MRP)}</div>
       <div style="font-size:16px;font-weight:900;">${fmt(v.SalePrice||p.SalePrice)}</div>
     </div>`;
-  try{
-    bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 4, includetext: false });
-  }catch(e){}
-  window.print();
+  printHTML(html);
+  setTimeout(() => {
+    try{ bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 4, includetext: false }); }catch(e){}
+  }, 60);
 }
 
-/* ============ CASH DRAWER / GALLA ============ */
+/* ============ CASH DRAWER ============ */
 function wireCash(){
   $('#btnSaveOpen').addEventListener('click', saveOpening);
   $('#btnSaveClose').addEventListener('click', saveClosing);
-  $('#btnCashIn').addEventListener('click', () => openCashDenomModal('IN'));
-  $('#btnCashOut').addEventListener('click', () => openCashDenomModal('OUT'));
+  $('#btnCashIn').addEventListener('click', () => cashInOut('IN'));
+  $('#btnCashOut').addEventListener('click', () => cashInOut('OUT'));
 }
 function buildDenomInputs(){
   const mkGrid = (id, target) => {
@@ -2782,7 +2709,7 @@ function updateClosingCalc(){
 }
 function renderCash(){
   const today = dayKey(nowISO());
-  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today);
+  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO');
   const in_ = rows.filter(t => t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const out_ = rows.filter(t => t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
@@ -2791,20 +2718,13 @@ function renderCash(){
   $('#drawNow').textContent = fmt(opening + in_ - out_);
   const tb = $('#cashTbl tbody'); tb.innerHTML='';
   rows.slice().reverse().forEach(t => {
-    let notesUsed = '—';
-    if(t.DenomBreakdown){
-      try{
-        const d = typeof t.DenomBreakdown === 'string' ? JSON.parse(t.DenomBreakdown) : t.DenomBreakdown;
-        notesUsed = Object.keys(d).filter(k=>d[k]>0).sort((a,b)=>b-a).map(k=>'₹'+k+'×'+d[k]).join(', ') || '—';
-      }catch(e){}
-    }
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${(t.Time||'').substr(0,5) || (t.Date||'').substr(11,5)}</td>
-      <td>${escapeHtml(t.Type||'')}</td><td>${escapeHtml(t.Reference||'')}</td>
-      <td>${fmt(t.Amount)}</td><td>${escapeHtml(notesUsed)}</td><td>${fmt(t.DrawerBalance)}</td><td>${escapeHtml(t.Description||'')}</td>`;
+      <td>${t.Type||''}</td><td>${t.Reference||''}</td>
+      <td>${fmt(t.Amount)}</td><td>${fmt(t.DrawerBalance)}</td><td>${t.Description||''}</td>`;
     tb.appendChild(tr);
   });
-  if(!rows.length) tb.innerHTML = '<tr><td colspan="7" class="empty">No cash entries today</td></tr>';
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No cash entries today</td></tr>';
   updateClosingCalc();
 }
 async function saveOpening(){
@@ -2836,54 +2756,22 @@ async function saveClosing(){
   toast('Closing saved. Difference: '+fmt(closing-expected), closing===expected?'ok':'warn');
   pullAll();
 }
-// Note-wise Cash IN / Cash OUT modal — records exact denominations, all saved to sheet
-function openCashDenomModal(type){
-  state.cashDenomPick = {};
-  const gridHtml = DENOMS.map(d => `
-    <div class="cell">
-      <b>₹${d}</b>
-      <input type="number" min="0" value="0" data-denom="${d}" id="cdi-${d}">
-    </div>
-  `).join('');
-  openModal((type==='IN' ? '＋ Cash In' : '－ Cash Out') + ' — Note-wise', `
-    <div class="denom-grid mb-12">${gridHtml}</div>
-    <div class="stat mb-12"><div class="lab">Total</div><div class="val" id="cdTotal">₹0</div></div>
-    <div class="field"><label>Reference / Reason</label><input class="inp" id="cdDesc" placeholder="${type==='IN'?'e.g. Owner deposit, extra float':'e.g. Supplier payment, expense'}"></div>
-  `, [
-    { label:'Cancel', kind:'ghost', on: closeModal },
-    { label: type==='IN'?'Save Cash In':'Save Cash Out', kind: type==='IN'?'ok':'bad', on: async () => {
-      const denoms = {};
-      let total = 0;
-      DENOMS.forEach(d => {
-        const n = Number($('#cdi-'+d).value||0);
-        if(n>0){ denoms[d] = n; total += n*d; }
-      });
-      if(total<=0){ toast('Kam se kam ek note count karein', 'warn'); return; }
-      if(type === 'OUT'){
-        const ok = await requirePin('Cash OUT ke liye PIN daaliye');
-        if(!ok) return;
-      }
-      const r = await apiPost('addCashTxn', {
-        Date: dayKey(nowISO()),
-        Time: new Date().toTimeString().substr(0,8),
-        Type: type, Amount: total, Description: $('#cdDesc').value,
-        Reference: type+' (note-wise)',
-        DenomBreakdown: JSON.stringify(denoms),
-        StaffID: state.user.staffID, StaffName: state.user.name
-      });
-      if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Galla '+type+' logged: '+fmt(total), 'ok');
-      closeModal();
-      pullAll();
-    }}
-  ]);
-  DENOMS.forEach(d => {
-    $('#cdi-'+d).addEventListener('input', () => {
-      let total = 0;
-      DENOMS.forEach(x => total += Number($('#cdi-'+x).value||0)*x);
-      $('#cdTotal').textContent = fmt(total);
-    });
+async function cashInOut(type){
+  const amt = Number(prompt(type==='IN' ? 'Cash IN amount (₹):' : 'Cash OUT amount (₹):')||0);
+  if(amt<=0) return;
+  if(type === 'OUT'){
+    const ok = await requirePin('Cash OUT ke liye PIN daaliye');
+    if(!ok) return;
+  }
+  const desc = prompt('Notes / reason:')||'';
+  const r = await apiPost('addCashTxn', {
+    Date: dayKey(nowISO()),
+    Time: new Date().toTimeString().substr(0,8),
+    Type: type, Amount: amt, Description: desc,
+    Reference: type+' manual',
+    StaffID: state.user.staffID, StaffName: state.user.name
   });
+  if(r.success){ toast('Logged', 'ok'); pullAll(); }
 }
 
 /* ============ ATTENDANCE ============ */
@@ -2943,10 +2831,28 @@ function renderAttendance(){
     const r = byStaff[k];
     const hrs = (r.in && r.out) ? diffHours(r.in, r.out) : '—';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${today}</td><td>${r.in||'—'}</td><td>${r.out||'—'}</td><td>${hrs}</td><td>${escapeHtml(r.notes||'')}</td>`;
+    tr.innerHTML = `<td>${r.name}</td><td>${today}</td><td>${r.in||'—'}</td><td>${r.out||'—'}</td><td>${hrs}</td><td>${r.notes||''}</td>`;
     tb.appendChild(tr);
   });
   if(!Object.keys(byStaff).length) tb.innerHTML = '<tr><td colspan="6" class="empty">No punches today</td></tr>';
+
+  // ---- Galla (cash drawer) summary panel on the Attendance screen ----
+  const cashToday = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-'));
+  const inAmt = cashToday.filter(t=>t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const outAmt = cashToday.filter(t=>t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
+  $('#attCashOpen').textContent = fmt(opening);
+  $('#attCashIn').textContent = fmt(inAmt);
+  $('#attCashOut').textContent = fmt(outAmt);
+  $('#attCashNow').textContent = fmt(opening + inAmt - outAmt);
+  const atb = $('#attCashTbl tbody'); atb.innerHTML = '';
+  cashToday.slice().reverse().forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${(t.Time||'').substr(0,5) || (t.Date||'').substr(11,5)}</td>
+      <td>${t.Type||''}</td><td>${t.Reference||''}</td><td>${fmt(t.Amount)}</td><td>${t.Description||''}</td>`;
+    atb.appendChild(tr);
+  });
+  if(!cashToday.length) atb.innerHTML = '<tr><td colspan="5" class="empty">Aaj koi galla entry nahi</td></tr>';
 }
 function diffHours(hIn, hOut){
   const [a,b] = hIn.split(':').map(Number), [c,d] = hOut.split(':').map(Number);
@@ -2973,10 +2879,10 @@ function wireSettings(){
   $('#setShopAddr').value = state.cfg.shopAddress || '';
   if(state.cfg.shopLogo){ $('#setLogoPrev').src = state.cfg.shopLogo; $('#setLogoPrev').style.display = 'inline-block'; }
   $('#setLogoFile').addEventListener('change', e => readImage(e.target.files[0], dataURL => {
-    state.cfg.shopLogo = dataURL; $('#setLogoPrev').src = dataURL; $('#setLogoPrev').style.display='inline-block'; saveCfg(); toast('Logo saved', 'ok');
+    state.cfg.shopLogo = dataURL; $('#setLogoPrev').src = dataURL; $('#setLogoPrev').style.display='inline-block'; saveCfg(); applyBrandLogo(); toast('Logo saved — sab jagah update ho gaya', 'ok');
   }));
   $('#btnClearLogo').addEventListener('click', () => {
-    state.cfg.shopLogo = ''; $('#setLogoPrev').src=''; $('#setLogoPrev').style.display='none'; saveCfg(); toast('Logo removed');
+    state.cfg.shopLogo = ''; $('#setLogoPrev').src=''; $('#setLogoPrev').style.display='none'; saveCfg(); applyBrandLogo(); toast('Logo removed');
   });
   $('#btnSaveShop').addEventListener('click', () => {
     state.cfg.shopName = $('#setShop').value.trim();
@@ -2994,42 +2900,15 @@ function wireSettings(){
     state.cfg.upiQR = ''; $('#setUpiPrev').src=''; $('#setUpiPrev').style.display='none'; $('#setUpiNo').style.display='block'; saveCfg(); toast('UPI QR removed');
   });
 
-  // Bill template — every toggle individually editable
+  // Bill template
   $('#btFormat').value = state.cfg.billFormat || 'thermal';
   $('#btHeader').value = state.cfg.billHeader || state.cfg.shopName;
   $('#btFooter').value = state.cfg.billFooter || '';
-  $('#btReturnDays').value = state.cfg.returnDays!==undefined ? state.cfg.returnDays : 3;
-  $('#btReturnText').value = state.cfg.returnText || 'din ke andar hi return/exchange manya hoga';
-  $('#btShowLogo').checked = state.cfg.showLogo!==false;
-  $('#btShowAddr').checked = state.cfg.showAddr!==false;
-  $('#btShowCust').checked = state.cfg.showCust!==false;
-  $('#btShowBarcode').checked = state.cfg.showBarcode!==false;
-  $('#btShowReturnPolicy').checked = state.cfg.showReturnPolicy!==false;
-  $('#btShowFooter').checked = state.cfg.showFooter!==false;
-  $$('#scr-settings .chip input[type=checkbox]').forEach(cb=>{
-    cb.closest('.chip').classList.toggle('on', cb.checked);
-    cb.addEventListener('change', ()=> cb.closest('.chip').classList.toggle('on', cb.checked));
-  });
   $('#btnSaveBill').addEventListener('click', () => {
     state.cfg.billFormat = $('#btFormat').value;
     state.cfg.billHeader = $('#btHeader').value;
     state.cfg.billFooter = $('#btFooter').value;
-    state.cfg.returnDays = Number($('#btReturnDays').value||3);
-    state.cfg.returnText = $('#btReturnText').value;
-    state.cfg.showLogo = $('#btShowLogo').checked;
-    state.cfg.showAddr = $('#btShowAddr').checked;
-    state.cfg.showCust = $('#btShowCust').checked;
-    state.cfg.showBarcode = $('#btShowBarcode').checked;
-    state.cfg.showReturnPolicy = $('#btShowReturnPolicy').checked;
-    state.cfg.showFooter = $('#btShowFooter').checked;
     saveCfg(); toast('Bill template saved', 'ok');
-  });
-  $('#btnPreviewBill').addEventListener('click', () => {
-    printBill(state.lastBill || {
-      BillNumber:'PREVIEW-0001', CustomerName:'Test Customer', CustomerMobile:'9999999999',
-      Subtotal:1200, Discount:100, Total:1100, PaymentMode:'Cash',
-      items:[{ Name:'Sample Kurti', Color:'Blue', Size:'M', Quantity:1, Price:1100, LineTotal:1100 }]
-    });
   });
 
   // Razorpay
@@ -3038,8 +2917,12 @@ function wireSettings(){
     state.cfg.razorpayKey = $('#setRzKey').value.trim(); saveCfg(); toast('Razorpay key saved', 'ok');
   });
 
-  // Backup — one click, instant download, everything already synced to Sheet on every save
-  $('#btnDownload').addEventListener('click', doInstantBackup);
+  // Backup
+  $('#btnDownload').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(state.data, null, 2)], { type:'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'akfh-backup-' + dayKey(nowISO()) + '.json'; a.click();
+  });
   $('#restoreFile').addEventListener('change', async e => {
     const f = e.target.files[0]; if(!f) return;
     try{
@@ -3052,40 +2935,17 @@ function wireSettings(){
       render(currentScreen());
     }catch(err){ toast('Restore fail: '+err.message, 'bad'); }
   });
-  updateLastBackupHint();
 
-  // Master password — validates OLD password against the server before allowing change
+  // Master password
   $('#btnPwChange').addEventListener('click', async () => {
-    const p0 = $('#pwOld').value;
     const p1 = $('#pwNew').value, p2 = $('#pwNew2').value;
-    if(!p0){ toast('Old password daaliye', 'bad'); return; }
-    if(p1.length < 6 || p1 !== p2){ toast('New password check karein (min 6 aur match)', 'bad'); return; }
-    const chk = await apiPost('login', { mobile: state.user.mobile, password: p0 });
-    if(!chk.success){ toast('Old password galat hai', 'bad'); return; }
+    if(p1.length < 6 || p1 !== p2){ toast('Password check karein (min 6 aur match)', 'bad'); return; }
     const r = await apiPost('updateStaff', {
       staffID: state.user.staffID, Password: p1
     });
-    if(r.success){ toast('Password changed', 'ok'); $('#pwOld').value=''; $('#pwNew').value=''; $('#pwNew2').value=''; }
+    if(r.success){ toast('Password changed', 'ok'); $('#pwNew').value=''; $('#pwNew2').value=''; }
     else toast(r.error, 'bad');
   });
-}
-// One-click backup: downloads the full local dataset instantly and remembers when it ran
-function doInstantBackup(){
-  const blob = new Blob([JSON.stringify(state.data, null, 2)], { type:'application/json' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = 'akfh-backup-' + dayKey(nowISO()) + '-' + Date.now() + '.json'; a.click();
-  URL.revokeObjectURL(a.href);
-  state.cfg.lastBackup = nowISO();
-  saveCfg();
-  updateLastBackupHint();
-  toast('Backup downloaded', 'ok');
-}
-function updateLastBackupHint(){
-  const el = $('#lastBackupHint');
-  if(!el) return;
-  el.textContent = state.cfg.lastBackup
-    ? 'Last backup: ' + new Date(state.cfg.lastBackup).toLocaleString('en-IN')
-    : 'Last backup: kabhi nahi — abhi ek le lein';
 }
 function readImage(file, cb){
   if(!file) return;
@@ -3093,7 +2953,7 @@ function readImage(file, cb){
   rd.onload = () => cb(rd.result);
   rd.readAsDataURL(file);
 }
-function renderSettings(){ updateLastBackupHint(); }
+function renderSettings(){ /* values set on wire */ }
 
 /* ============ MODAL ============ */
 function openModal(title, bodyHTML, actions){
@@ -3109,28 +2969,41 @@ function openModal(title, bodyHTML, actions){
   });
   $('#veil').classList.add('on');
 }
-function closeModal(){ stopCam(); $('#veil').classList.remove('on'); }
+function closeModal(){ $('#veil').classList.remove('on'); }
 $('#veil').addEventListener('click', e => { if(e.target.id==='veil') closeModal(); });
 
 /* ============ CAMERA SCANNER ============ */
 let camScanner = null;
 let camTorch = false;
-function openCamScanner(onCode){
+function openCamScanner(onCode, opts){
+  opts = opts || {};
+  const continuous = !!opts.continuous;
+  const gapMs = opts.gapMs || 3000;
+  let lastCode = null, lastTime = 0;
   camTorch = false;
   openModal('Scan Barcode', `
-    <div id="camBox" style="width:100%;min-height:280px;background:#000;border-radius:8px;overflow:hidden;"></div>
+    <div id="camBox"></div>
     <div class="row mt-8">
       <button class="btn ghost sm" id="btnTorch">🔦 Torch ON</button>
-      <span class="hint">Camera permission zaruri hai</span>
+      <span class="hint">${continuous ? 'Camera khuli rahegi — jitne chaho scan karo, khatam hone par Done dabao' : 'Camera permission zaruri hai'}</span>
     </div>
   `, [
-    { label:'Cancel', kind:'ghost', on: () => { stopCam(); closeModal(); } }
+    { label: continuous ? 'Done' : 'Cancel', kind:'ghost', on: () => { stopCam(); closeModal(); } }
   ]);
   setTimeout(async () => {
     try{
       camScanner = new Html5Qrcode('camBox');
-      await camScanner.start({ facingMode:'environment' }, { fps: 10, qrbox: { width: 250, height: 150 } },
-        code => { stopCam(); closeModal(); onCode(code); },
+      await camScanner.start({ facingMode:'environment' }, { fps: 10, qrbox: { width: 220, height: 130 } },
+        code => {
+          const now = Date.now();
+          if(continuous){
+            if(code === lastCode && (now - lastTime) < gapMs) return; // debounce duplicate re-reads
+            lastCode = code; lastTime = now;
+            onCode(code);
+          }else{
+            stopCam(); closeModal(); onCode(code);
+          }
+        },
         () => {}
       );
     }catch(err){ toast('Camera failed: '+err.message, 'bad'); }
