@@ -7,7 +7,7 @@
   <title>AK FASHION HUB</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#000000">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+ <script src="https://cdn.jsdelivr.net/npm/bwip-js/dist/bwip-js-min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
@@ -1324,7 +1324,14 @@ function openCameraScanner(onResult, continuous = false) {
     : 'Camera ko barcode/QR ke saamne rakhein — scan hote hi apne aap band ho jayega.';
 
   activeScanner = new Html5Qrcode('scannerReader');
-  const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+  const config = {
+  fps: 10,
+  qrbox: { width: 250, height: 150 },
+  formatsToSupport: [
+    Html5QrcodeSupportedFormats.DATA_MATRIX,
+    Html5QrcodeSupportedFormats.CODE_128
+  ]
+};
 
   Html5Qrcode.getCameras().then(cameras => {
     if (!cameras || !cameras.length) {
@@ -3480,23 +3487,14 @@ function renderBarcodeDataURI(text) {
   if (!text) return '';
   try {
     const canvas = document.createElement('canvas');
-    JsBarcode(canvas, String(text), {
-      format: 'CODE128',
-      width: 4,           // thicker bars for print reliability
-      height: 140,        // tall so downscaling stays sharp
-      displayValue: true, // show the number below so it's readable if scan fails
-      fontSize: 22,
-      textMargin: 4,
-      margin: 4,
-      background: '#ffffff',
-      lineColor: '#000000'
-    });
-    return canvas.toDataURL('image/png');
-  } catch (e) {
-    console.error('Barcode render error:', e);
-    return '';
-  }
-}
+   bwipjs.toCanvas(canvas, {
+  bcid: 'datamatrix',
+  text: String(text),
+  scale: 4,
+  padding: 4,
+  includetext: true,
+  textxalign: 'center'
+});
 
 function buildLabelSheetsHTML() {
   const tagSize = document.getElementById('tagSize').value;
@@ -4277,7 +4275,14 @@ function updateTagPreview() {
 
   if (CONFIG.TAG_TEMPLATE.showBarcode) {
     try {
-      JsBarcode('#previewBarcode', 'AKFH000001', { format: 'CODE128', height: 44, width: 2.2, displayValue: false });
+   const svg = document.getElementById('previewBarcode');
+
+bwipjs.toSVG(svg, {
+  bcid: 'datamatrix',
+  text: 'AKFH000001',
+  scale: 3,
+  includetext: false
+});
     } catch (e) {}
   }
 }
