@@ -3485,16 +3485,25 @@ function generateLabelSheets() {
 // browser scale down, we keep bars crisp and scannable on any printer.
 function renderBarcodeDataURI(text) {
   if (!text) return '';
+
   try {
     const canvas = document.createElement('canvas');
-   bwipjs.toCanvas(canvas, {
-  bcid: 'datamatrix',
-  text: String(text),
-  scale: 4,
-  padding: 4,
-  includetext: true,
-  textxalign: 'center'
-});
+
+    bwipjs.toCanvas(canvas, {
+      bcid: 'datamatrix',
+      text: String(text),
+      scale: 4,
+      padding: 4,
+      includetext: true,
+      textxalign: 'center'
+    });
+
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('Data Matrix render error:', e);
+    return '';
+  }
+}
 
 function buildLabelSheetsHTML() {
   const tagSize = document.getElementById('tagSize').value;
