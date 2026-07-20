@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -280,7 +279,7 @@ tr:hover td{background:#faf9f4;}
         </div>
         <div class="pane">
           <h3>Recent Bills</h3>
-          <div class="tbl-wrap"><table id="dashBills"><thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Mode</th><th>Time</th></tr></thead><tbody></tbody></table></div>
+          <div class="tbl-wrap"><table id="dashBills"><thead><tr><th>#</th><th>Customer</th><th>Total</th><th>Mode</th><th>Time</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
     </div>
@@ -501,9 +500,9 @@ tr:hover td{background:#faf9f4;}
           <div class="field">
             <label>Sticker Size</label>
             <select class="inp" id="tagSize">
-              <option value="small">Small (1.5 × 1 in) — DataMatrix only</option>
-              <option value="medium" selected>Medium (2 × 1.5 in) — DataMatrix + Price</option>
-              <option value="large">Large (2 × 3 in) — Full price tag</option>
+              <option value="small">Small — DataMatrix only</option>
+              <option value="medium" selected>Medium — DataMatrix + Price</option>
+              <option value="large">Large — Full price tag</option>
             </select>
           </div>
           <div class="field">
@@ -517,7 +516,7 @@ tr:hover td{background:#faf9f4;}
           </div>
         </div>
 
-        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print pe ek page pe multiple stickers grid me aayenge.</div>
+        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print pe ek page pe multiple stickers grid me aayenge. Color/Size ka text tag pe print nahi hota — sirf barcode scan karne par milega. DataMatrix 2×2cm fixed hai, corner par sirf chhote edge-marks aate hain (poora border nahi).</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -544,12 +543,17 @@ tr:hover td{background:#faf9f4;}
       </div>
 
       <div class="pane">
-        <h3>📦 Cash Drawer <small>Live balance</small></h3>
+        <h3>📦 Cash Drawer <small>Live balance — note-wise auto-tracked</small></h3>
         <div class="grid-3 mb-12">
           <div class="stat"><div class="lab">Current Balance</div><div class="val" id="drawNow">₹0</div></div>
           <div class="stat"><div class="lab">Today In</div><div class="val" id="drawIn">₹0</div></div>
           <div class="stat"><div class="lab">Today Out</div><div class="val" id="drawOut">₹0</div></div>
         </div>
+        <div class="strong mb-8">Note-wise Live Count <small class="dim" style="font-weight:400;">— bill/cash-in-out se apne aap update hota hai</small></div>
+        <div class="tbl-wrap mb-12"><table id="denomLiveTbl">
+          <thead><tr><th>Note</th><th>Qty</th><th>Value</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
         <div class="row">
           <button class="btn ok sm" id="btnCashIn">＋ Cash In</button>
           <button class="btn bad sm" id="btnCashOut">－ Cash Out</button>
@@ -800,7 +804,7 @@ const state = {
   lastBill: null,
   denomOpen: {},
   denomClose: {},
-  tenderedDenoms: {},         // denomination-wise breakdown customer gave in POS
+  tenderedDenoms: {},         // denomination-wise breakdown of CHANGE to give back in POS (for display)
   chart: null,
   pendingSubmit: false        // duplicate-click guard
 };
@@ -810,7 +814,7 @@ function emptyStore(){
     products:[], customers:[], suppliers:[], purchases:[], bills:[],
     billItems:[], staff:[], preorders:[], expenses:[], returns:[],
     cashTransactions:[], cashDrawer:[], attendance:[], orders:[],
-    wallet:[], walletTransactions:[]
+    wallet:[], walletTransactions:[], drawerDenoms:{}
   };
 }
 
@@ -844,6 +848,43 @@ function toast(msg, kind){
   el.textContent = msg;
   $('#tstBox').appendChild(el);
   setTimeout(()=>{ el.style.opacity='0'; setTimeout(()=>el.remove(), 250); }, 2600);
+}
+
+/* ------- scan feedback: beep + vibrate + global 1-second duplicate guard -------
+   Every scan entry point in the app (POS keyboard/gun scan, camera scans in
+   POS/Inventory/Returns) funnels through handleScan() so behaviour is identical
+   everywhere: same barcode within 1000ms is ignored, otherwise beep + vibrate
+   fire immediately and the real handler runs. */
+let _scanAudioCtx = null;
+function beepScan(){
+  try{
+    if(!_scanAudioCtx) _scanAudioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(_scanAudioCtx.state === 'suspended') _scanAudioCtx.resume();
+    const osc = _scanAudioCtx.createOscillator();
+    const gain = _scanAudioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 1800;
+    gain.gain.value = 0.001;
+    gain.gain.exponentialRampToValueAtTime(0.2, _scanAudioCtx.currentTime + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, _scanAudioCtx.currentTime + 0.13);
+    osc.connect(gain); gain.connect(_scanAudioCtx.destination);
+    osc.start();
+    osc.stop(_scanAudioCtx.currentTime + 0.14);
+  }catch(e){}
+  try{ if(navigator.vibrate) navigator.vibrate(80); }catch(e){}
+}
+const SCAN_DEBOUNCE_MS = 1000;
+let _lastScanCode = null, _lastScanAt = 0;
+function handleScan(code, cb){
+  code = String(code||'').trim();
+  if(!code) return;
+  const now = Date.now();
+  if(code === _lastScanCode && (now - _lastScanAt) < SCAN_DEBOUNCE_MS){
+    return; // same barcode too soon — ignore silently, no double add / no double beep
+  }
+  _lastScanCode = code; _lastScanAt = now;
+  beepScan();
+  cb(code);
 }
 
 /* ------- persistence ------- */
@@ -1114,10 +1155,14 @@ function renderDash(){
     const stk = p.variants ? p.variants.reduce((a,v)=>a+Number(v.Stock||0),0) : Number(p.TotalStock||0);
     return s + stk * Number(p.CostPrice||0);
   }, 0);
-  const draw = (state.data.cashTransactions || []).reduce((s,t)=>{
-    const a = Number(t.Amount||0);
-    return t.Type==='OUT' ? s-a : s+a;
-  }, 0);
+  const dd = state.data.drawerDenoms || {};
+  const hasDenomTruth = DENOMS.some(d => dd['Denom'+d] !== undefined);
+  const draw = hasDenomTruth
+    ? DENOMS.reduce((s,d)=> s + Number(dd['Denom'+d]||0) * d, 0)
+    : (state.data.cashTransactions || []).reduce((s,t)=>{
+        const a = Number(t.Amount||0);
+        return t.Type==='OUT' ? s-a : s+a;
+      }, 0);
 
   $('#s-todaySales').textContent = fmt(sales);
   $('#s-todayBills').textContent = todaysBills.length + ' bills';
@@ -1166,16 +1211,33 @@ function renderDash(){
   bills.slice().reverse().slice(0,10).forEach(b=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${b.BillNumber||''}</td><td>${b.CustomerName||b.CustomerMobile||'—'}</td>
-      <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>`;
+      <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>
+      <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨</button></td>`;
     tb.appendChild(tr);
   });
-  if(!bills.length) tb.innerHTML = '<tr><td colspan="5" class="empty">No bills yet</td></tr>';
+  if(!bills.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No bills yet</td></tr>';
+  tb.onclick = e => {
+    const btn = e.target.closest('button[data-a="print"]'); if(!btn) return;
+    const b = bills.find(x => x.BillID === btn.dataset.id);
+    if(b) printBill(billWithItems(b));
+  };
+}
+
+// Reconstruct a full bill object (with line items) from state.data so any
+// historical bill can be reprinted from any listing screen at any time.
+function billWithItems(b){
+  const items = (state.data.billItems||[]).filter(it => it.BillID === b.BillID);
+  return Object.assign({}, b, { items });
 }
 
 /* ============ POS ============ */
 function wirePOS(){
   $('#posScan').addEventListener('keyup', e => {
-    if(e.key==='Enter'){ addToCartByScan($('#posScan').value.trim()); $('#posScan').value=''; $('#posSuggest').innerHTML=''; }
+    if(e.key==='Enter'){
+      const val = $('#posScan').value.trim();
+      handleScan(val, code => addToCartByScan(code));
+      $('#posScan').value=''; $('#posSuggest').innerHTML='';
+    }
     else showSuggest($('#posScan').value.trim());
   });
   $('#btnClearCart').addEventListener('click', () => { state.cart=[]; state.activeCoin=null; refreshCart(); });
@@ -1195,7 +1257,7 @@ function wirePOS(){
   });
   $('#btnScanCam').addEventListener('click', ()=> openCamScanner(code=>{
     addToCartByScan(code);
-  }, { continuous:true, gapMs:3000 }));
+  }, { continuous:true }));
   $('#posPay').addEventListener('change', updateUpiQr);
 }
 function updateUpiQr(){
@@ -1349,7 +1411,7 @@ function updateChangeBox(total){
   if(!t || t < total){ box.style.display = 'none'; state.tenderedDenoms = {}; return; }
   const change = t - total;
   const b = breakChange(change);
-  state.tenderedDenoms = b.notes;
+  state.tenderedDenoms = b.notes; // change-to-give breakdown, used only for the on-screen hint
   const parts = denomText(b.notes);
   box.style.display = 'block';
   box.innerHTML = '<b>Return ₹' + Math.round(change) + '</b>' + (parts ? ' — ' + parts : ' (coin/change nahi hai denom me)');
@@ -1412,21 +1474,22 @@ async function completeSale(){
   state.lastBill = { ...payload, BillNumber: r.data.billNumber };
   toast('Bill saved: '+r.data.billNumber, 'ok');
 
-  // ------- Cash Drawer / Galla logging -------
+  // ------- Cash Drawer / Galla logging + note-wise auto-tracking -------
   if(payMode === 'Cash'){
-    const tenderedNoteText = denomText(state.tenderedDenoms||{});
-    // Money the customer physically handed over goes IN
+    const tenderedAmt = tendered > 0 ? tendered : total;
+    const receivedBreak = breakChange(tenderedAmt).notes;   // notes assumed received from customer
+    const changeBreak = changeGiven > 0 ? breakChange(changeGiven).notes : {}; // notes handed back
+    const receivedNoteText = denomText(receivedBreak);
     apiPost('addCashTxn', {
       Date: dayKey(nowISO()),
       Time: new Date().toTimeString().substr(0,8),
-      Type: 'IN', Amount: tendered > 0 ? tendered : total,
+      Type: 'IN', Amount: tenderedAmt,
       Reference: 'BILL-'+(r.data.billNumber||billID),
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Cash sale' + (tenderedNoteText ? ' — Customer diya: '+tenderedNoteText : '')
+      Description: 'Cash sale' + (receivedNoteText ? ' — Customer diya: '+receivedNoteText : '')
     });
-    // Change handed back goes OUT
     if(changeGiven > 0){
-      const changeNoteText = denomText(breakChange(changeGiven).notes);
+      const changeNoteText = denomText(changeBreak);
       apiPost('addCashTxn', {
         Date: dayKey(nowISO()),
         Time: new Date().toTimeString().substr(0,8),
@@ -1436,6 +1499,13 @@ async function completeSale(){
         Description: 'Change returned' + (changeNoteText ? ' — Diya: '+changeNoteText : '')
       });
     }
+    // Note-wise drawer count updates automatically — no manual counting needed.
+    const netDelta = {};
+    DENOMS.forEach(d => { netDelta[d] = (receivedBreak[d]||0) - (changeBreak[d]||0); });
+    apiPost('updateDrawerDenoms', {
+      delta: netDelta, staffID: state.user.staffID, staffName: state.user.name,
+      reference: 'BILL-'+(r.data.billNumber||billID)
+    }).then(()=> pullAll());
   }else if(total > 0){
     // Non-cash sale still logged for reference (0 impact on physical drawer, tagged clearly)
     apiPost('addCashTxn', {
@@ -1500,6 +1570,7 @@ function printBill(b){
   const upiQr = ((b.PaymentMode === 'UPI' || b.PaymentMode === 'Online') && state.cfg.upiQR)
     ? `<div style="text-align:center;margin-top:6px;"><img src="${state.cfg.upiQR}" style="max-width:120px;"><br><small>Scan to pay</small></div>` : '';
   const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
+  const billBarcodeID = 'billBc_' + rnd();
   const html = `
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:${fontSz};padding:6px;">
       <div style="text-align:center;">
@@ -1526,9 +1597,25 @@ function printBill(b){
       ${cashLine}
       ${upiQr}
       <hr>
+      <div style="text-align:center;margin-top:4px;">
+        <canvas id="${billBarcodeID}"></canvas>
+      </div>
       <div style="text-align:center;font-size:10px;">${state.cfg.billFooter||'Thank you! Visit again'}</div>
     </div>`;
-  printHTML(html);
+  printHTML(html, () => {
+    // Draw a scannable barcode of the bill number onto the printed bill —
+    // scanning it (e.g. on Returns screen) jumps straight to this bill.
+    try{
+      bwipjs.toCanvas(billBarcodeID, {
+        bcid: 'code128',
+        text: b.BillNumber || b.BillID || '',
+        scale: 2,
+        height: 10,
+        includetext: true,
+        textsize: 8
+      });
+    }catch(e){ console.error('bill barcode draw failed', e); }
+  });
 }
 function whatsappLastBill(){
   if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
@@ -1556,6 +1643,7 @@ async function viewCustomerHistory(){
       <td>${its}</td>
       <td class="text-r">${fmt(b.Total)}</td>
       <td>${b.PaymentMode||''}</td>
+      <td><button class="btn ghost sm" data-bp="${b.BillID}">🖨</button></td>
     </tr>`;
   }).join('');
   const coins = (r.data.wallets||[]).map(w=>`
@@ -1573,13 +1661,19 @@ async function viewCustomerHistory(){
     </div>
     <div class="strong mb-8">Recent Bills</div>
     <div class="tbl-wrap mb-16"><table>
-      <thead><tr><th>Date</th><th>Bill#</th><th>Items</th><th>Total</th><th>Mode</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" class="empty">No bills</td></tr>'}</tbody></table></div>
+      <thead><tr><th>Date</th><th>Bill#</th><th>Items</th><th>Total</th><th>Mode</th><th></th></tr></thead>
+      <tbody id="custHistBills">${rows||'<tr><td colspan="6" class="empty">No bills</td></tr>'}</tbody></table></div>
     <div class="strong mb-8">Coins</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>Code</th><th>Amount</th><th>Remaining</th><th>Expires</th><th>Status</th></tr></thead>
       <tbody>${coins||'<tr><td colspan="5" class="empty">No coins</td></tr>'}</tbody></table></div>
   `, []);
+  const histBox = $('#custHistBills');
+  if(histBox) histBox.onclick = e => {
+    const btn = e.target.closest('button[data-bp]'); if(!btn) return;
+    const b = (r.data.bills||[]).find(x => x.BillID === btn.dataset.bp);
+    if(b) printBill(b);
+  };
 }
 
 /* ============ PRODUCT SCAN / DETAILS MODAL ============ */
@@ -2221,9 +2315,20 @@ function findSalesByCode(code){
     .sort((a,b)=> String(b.bill.CreatedDate).localeCompare(String(a.bill.CreatedDate)));
 }
 
+// A scanned code might also directly be a bill barcode (printed on the bill
+// itself — code128 of BillNumber). Check that first so scanning the receipt
+// jumps straight to that bill instead of trying to resolve it as a product.
+function findBillByCode(code){
+  const t = String(code||'').trim();
+  if(!t) return null;
+  return (state.data.bills||[]).find(b => String(b.BillNumber)===t || String(b.BillID)===t) || null;
+}
+
 // Scan handler: jumps straight to the most recent sale of the scanned item and
 // shows product name, sale date, days elapsed, and return eligibility upfront.
 function scanForReturn(code){
+  const billHit = findBillByCode(code);
+  if(billHit){ showBillForReturn(billHit); return; }
   const sales = findSalesByCode(code);
   if(!sales.length){ $('#retResult').innerHTML = '<div class="pane"><div class="empty">Ye item kabhi becha nahi gaya — koi bill nahi mila.</div></div>'; return; }
   if(sales.length === 1){
@@ -2309,6 +2414,9 @@ function showBillForReturn(b, highlightVariantID){
         <div><b>Bill:</b> ${b.BillNumber}<br><b>Bill ID:</b> <span class="mono">${b.BillID}</span><br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
         <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
       </div>
+      <div class="row mb-12">
+        <button class="btn ghost sm" id="btnPrintOrigBill">🖨 Print Original Bill</button>
+      </div>
       <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Var</th><th>Bought</th><th>Price</th><th>Return Qty</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>
       <div class="mt-16 grid-3">
@@ -2321,12 +2429,15 @@ function showBillForReturn(b, highlightVariantID){
         </div>
         <div class="field"><label>Total Refund</label><div class="lg strong mt-8" id="retTotal">₹0</div></div>
       </div>
-      <div class="mt-16"><button class="btn ok" id="btnDoReturn">Process Return</button></div>
+      <div class="mt-16 row">
+        <button class="btn ok" id="btnDoReturn">Process Return</button>
+      </div>
     </div>
   `;
   // wire refund calc
   const box = $('#retResult');
   const items2 = items;
+  $('#btnPrintOrigBill').addEventListener('click', () => printBill(billWithItems(b)));
   box.querySelectorAll('input[data-vid]').forEach(inp => {
     inp.addEventListener('input', () => {
       let total = 0;
@@ -2348,13 +2459,14 @@ function showBillForReturn(b, highlightVariantID){
     });
     if(!lines.length){ toast('Return qty daaliye', 'warn'); return; }
     let totalRefund = 0;
+    const returnedLines = [];
     for(const l of lines){
       const it = items2.find(i => i.VariantID === l.vid);
       const r = await apiPost('returnBill', {
         billID: b.BillID, variantID: l.vid, quantity: l.qty,
         reason: $('#retReason').value, staffID: state.user.staffID
       });
-      if(r.success){ totalRefund += Number(r.data.refund||0); }
+      if(r.success){ totalRefund += Number(r.data.refund||0); returnedLines.push({ it, qty:l.qty, refund:Number(r.data.refund||0) }); }
     }
     if($('#retMode').value === 'coin'){
       // issue a coin for the amount
@@ -2371,11 +2483,46 @@ function showBillForReturn(b, highlightVariantID){
         StaffID: state.user.staffID, StaffName: state.user.name,
         Description: 'Refund for '+b.BillNumber
       });
+      if(totalRefund > 0){
+        const brk = breakChange(totalRefund).notes;
+        const delta = {}; DENOMS.forEach(d => delta[d] = -(brk[d]||0));
+        apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RETURN-'+b.BillNumber });
+      }
     }
+    printReturnReceipt(b, returnedLines, totalRefund, $('#retMode').value);
     pullAll();
     $('#retResult').innerHTML = '';
     $('#retSearch').value = '';
   });
+}
+
+// Simple printable return/exchange receipt — mirrors the bill's thermal style.
+function printReturnReceipt(b, lines, totalRefund, mode){
+  const rows = lines.map(l => `<tr><td>${l.it.Name}<br><small>${l.it.Color||''} ${l.it.Size||''}</small></td><td class="text-c">${l.qty}</td><td class="text-r">${fmt(l.refund)}</td></tr>`).join('');
+  const isThermal = (state.cfg.billFormat || 'thermal') === 'thermal';
+  const pageWidth = isThermal ? '80mm' : '210mm';
+  const html = `
+    <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:12px;padding:6px;">
+      <div style="text-align:center;">
+        <b>${state.cfg.billHeader || state.cfg.shopName}</b><br>
+        <b>RETURN / EXCHANGE RECEIPT</b><br>
+        Against Bill: ${b.BillNumber||''}<br>
+        ${new Date().toLocaleString('en-IN')}
+      </div>
+      <hr>
+      <div>Cust: ${b.CustomerName||'-'}<br>Mob: ${b.CustomerMobile||'-'}</div>
+      <hr>
+      <table style="width:100%;font-size:11px;">
+        <thead><tr><th align="left">Item</th><th>Qty</th><th align="right">Refund</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <hr>
+      <div><b>Total Refund: ${fmt(totalRefund)}</b></div>
+      <div>Mode: ${mode==='coin' ? 'Store Coin' : 'Cash'}</div>
+      <hr>
+      <div style="text-align:center;font-size:10px;">Thank you</div>
+    </div>`;
+  printHTML(html);
 }
 
 /* ============ PRE-ORDERS ============ */
@@ -2688,6 +2835,9 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // Build a full print sheet from the current queue and open the browser print dialog.
+// Tags: no full dashed outline anymore — just two tiny top corner marks so the
+// cutting edge is visible. Color/Size text is NOT printed — it only shows up
+// once the tag is scanned. DataMatrix is fixed at 2cm × 2cm and price is bigger.
 function printStickerSheet(){
   const size = $('#tagSize').value;         // small | medium | large
   const showMRP   = $('#tShowMRP').checked;
@@ -2711,24 +2861,22 @@ function printStickerSheet(){
   if(!stickers.length){ toast('Sticker qty daaliye', 'warn'); return; }
 
   const dims = {
-    small:  { w:'38mm', h:'25mm', dm:60, fs:10 },
-    medium: { w:'50mm', h:'38mm', dm:80, fs:12 },
-    large:  { w:'50mm', h:'75mm', dm:100, fs:14 }
+    small:  { w:'30mm', h:'34mm', fs:10 },
+    medium: { w:'34mm', h:'40mm', fs:12 },
+    large:  { w:'50mm', h:'75mm', fs:14 }
   }[size];
 
   const cellsHtml = stickers.map((s, idx) => {
     const { p, v } = s;
-    const code = v.Barcode || v.VariantBarcode || p.UID;
     const price = fmt(v.SalePrice || p.SalePrice);
     return `
-      <div class="stk" style="width:${dims.w};height:${dims.h};">
+      <div class="stk" style="width:${dims.w};min-height:${dims.h};">
+        <span class="corner tl"></span><span class="corner tr"></span>
         ${showName ? '<div class="stk-name">' + escapeHtml(p.Name) + '</div>' : ''}
-        <div class="stk-var">${escapeHtml((v.Color||'') + ' ' + (v.Size||''))}</div>
         ${showBatch ? '<div class="stk-batch">B:' + escapeHtml(v.BatchNumber || p.BatchNumber || '') + '</div>' : ''}
         <div class="stk-dm">
           <canvas id="stkdm-${idx}"></canvas>
         </div>
-        <div class="stk-code">${escapeHtml(code)}</div>
         ${showMRP ? '<div class="stk-mrp">MRP <s>' + fmt(p.MRP) + '</s></div>' : ''}
         ${showSP  ? '<div class="stk-sp">' + price + '</div>' : ''}
       </div>`;
@@ -2737,18 +2885,20 @@ function printStickerSheet(){
   const sheetHtml = `
     <style>
       .stk-sheet { display:flex; flex-wrap:wrap; gap:2mm; padding:2mm; }
-      .stk { border:1px dashed #666; padding:1.5mm; overflow:hidden;
+      .stk { position:relative; border:none; padding:2mm 1.5mm; overflow:visible;
               font-family:'Courier New', monospace; font-size:${dims.fs}px;
               display:flex; flex-direction:column; align-items:center; justify-content:center;
-              text-align:center; line-height:1.1; box-sizing:border-box; }
+              text-align:center; line-height:1.15; box-sizing:border-box; }
+      /* tiny top-corner edge marks — replaces the old full dashed outline */
+      .stk .corner{ position:absolute; top:0; width:2mm; height:2mm; }
+      .stk .corner.tl{ left:0; border-top:0.35mm solid #000; border-left:0.35mm solid #000; }
+      .stk .corner.tr{ right:0; border-top:0.35mm solid #000; border-right:0.35mm solid #000; }
       .stk-name { font-weight:800; font-size:${dims.fs}px; }
-      .stk-var { font-size:${dims.fs-1}px; }
       .stk-batch { font-size:${dims.fs-2}px; color:#333; }
-      .stk-dm { margin:1mm 0; }
-      .stk-dm canvas { width:${dims.dm*.6}px; height:${dims.dm*.6}px; }
-      .stk-code { font-size:${dims.fs-3}px; letter-spacing:.5px; }
-      .stk-mrp { font-size:${dims.fs-2}px; color:#555; }
-      .stk-sp { font-weight:900; font-size:${dims.fs+4}px; }
+      .stk-dm { margin:1.2mm 0; }
+      .stk-dm canvas { width:20mm; height:20mm; }
+      .stk-mrp { font-size:${dims.fs-1}px; color:#555; }
+      .stk-sp { font-weight:900; font-size:${dims.fs+8}px; }
       @page { margin: 4mm; }
     </style>
     <div class="stk-sheet">${cellsHtml}</div>
@@ -2760,7 +2910,7 @@ function printStickerSheet(){
         bwipjs.toCanvas('stkdm-' + idx, {
           bcid: 'datamatrix',
           text: s.v.Barcode || s.v.VariantBarcode || s.p.UID,
-          scale: 3,
+          scale: 5,
           includetext: false
         });
       }catch(e){ console.error('barcode draw failed', e); }
@@ -2776,18 +2926,21 @@ function printTag(pid, vid){
   if(!p || !v) return;
   const code = v.Barcode || v.VariantBarcode || p.UID;
   const html = `
-    <style>.tag1{width:50mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;}</style>
+    <style>.tag1{width:34mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;position:relative;}
+    .tag1 .corner{position:absolute;top:0;width:2mm;height:2mm;}
+    .tag1 .corner.tl{left:0;border-top:0.35mm solid #000;border-left:0.35mm solid #000;}
+    .tag1 .corner.tr{right:0;border-top:0.35mm solid #000;border-right:0.35mm solid #000;}
+    </style>
     <div class="tag1">
+      <span class="corner tl"></span><span class="corner tr"></span>
       <div style="font-weight:800;font-size:12px;">${escapeHtml(p.Name)}</div>
-      <div style="font-size:10px;">${escapeHtml((v.Color||'')+' '+(v.Size||''))}</div>
       <div style="font-size:9px;">B:${escapeHtml(v.BatchNumber || p.BatchNumber || '—')}</div>
-      <canvas id="pt" style="margin:2mm 0;"></canvas>
-      <div style="font-size:9px;">${escapeHtml(code)}</div>
+      <canvas id="pt" style="width:20mm;height:20mm;margin:2mm 0;"></canvas>
       <div style="text-decoration:line-through;color:#666;font-size:11px;">${fmt(p.MRP)}</div>
-      <div style="font-size:16px;font-weight:900;">${fmt(v.SalePrice||p.SalePrice)}</div>
+      <div style="font-size:22px;font-weight:900;">${fmt(v.SalePrice||p.SalePrice)}</div>
     </div>`;
   printHTML(html, () => {
-    try{ bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 4, includetext: false }); }catch(e){ console.error('barcode draw failed', e); }
+    try{ bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 5, includetext: false }); }catch(e){ console.error('barcode draw failed', e); }
   });
 }
 
@@ -2824,23 +2977,45 @@ function buildDenomInputs(){
 }
 function updateClosingCalc(){
   const closing = DENOMS.reduce((s,d)=>s + (state.denomClose[d]||0)*d, 0);
-  const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
-  const today = dayKey(nowISO());
-  const in_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
-  const out_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
-  const expected = opening + in_ - out_;
+  const dd = state.data.drawerDenoms || {};
+  const hasDenomTruth = DENOMS.some(d => dd['Denom'+d] !== undefined);
+  const expected = hasDenomTruth
+    ? DENOMS.reduce((s,d)=> s + Number(dd['Denom'+d]||0) * d, 0)
+    : (() => {
+        const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
+        const today = dayKey(nowISO());
+        const in_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
+        const out_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
+        return opening + in_ - out_;
+      })();
   $('#closeExpected').textContent = fmt(expected);
   $('#closeDiff').textContent = fmt(closing - expected);
 }
 function renderCash(){
   const today = dayKey(nowISO());
-  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO');
+  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-'));
   const in_ = rows.filter(t => t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const out_ = rows.filter(t => t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
-  const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
+
+  const dd = state.data.drawerDenoms || {};
+  const hasDenomTruth = DENOMS.some(d => dd['Denom'+d] !== undefined);
+  const liveTotal = hasDenomTruth
+    ? DENOMS.reduce((s,d)=> s + Number(dd['Denom'+d]||0) * d, 0)
+    : (DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0) + in_ - out_);
+
   $('#drawIn').textContent = fmt(in_);
   $('#drawOut').textContent = fmt(out_);
-  $('#drawNow').textContent = fmt(opening + in_ - out_);
+  $('#drawNow').textContent = fmt(liveTotal);
+
+  // Note-wise live table — sourced straight from the backend so it survives refresh.
+  const dtb = $('#denomLiveTbl tbody'); dtb.innerHTML = '';
+  DENOMS.forEach(d => {
+    const qty = Number(dd['Denom'+d]||0);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>₹${d}</td><td>${qty}</td><td>${fmt(qty*d)}</td>`;
+    dtb.appendChild(tr);
+  });
+
   const tb = $('#cashTbl tbody'); tb.innerHTML='';
   rows.slice().reverse().forEach(t => {
     const tr = document.createElement('tr');
@@ -2860,6 +3035,8 @@ async function saveOpening(){
     StaffID: state.user.staffID
   });
   if(!r.success){ toast(r.error, 'bad'); return; }
+  // Opening count becomes the new baseline truth for the live note-wise drawer.
+  await apiPost('setDrawerDenoms', { denoms: state.denomOpen, staffID: state.user.staffID, staffName: state.user.name });
   toast('Opening cash saved: '+fmt(total), 'ok');
   pullAll();
 }
@@ -2878,6 +3055,8 @@ async function saveClosing(){
     StaffID: state.user.staffID
   });
   if(!r.success){ toast(r.error, 'bad'); return; }
+  // Physically counted closing figure corrects the running note-wise truth.
+  await apiPost('setDrawerDenoms', { denoms: state.denomClose, staffID: state.user.staffID, staffName: state.user.name });
   toast('Closing saved. Difference: '+fmt(closing-expected), closing===expected?'ok':'warn');
   pullAll();
 }
@@ -2896,7 +3075,14 @@ async function cashInOut(type){
     Reference: type+' manual',
     StaffID: state.user.staffID, StaffName: state.user.name
   });
-  if(r.success){ toast('Logged', 'ok'); pullAll(); }
+  if(r.success){
+    // Auto note-wise breakdown of the amount, applied as a delta to the drawer.
+    const brk = breakChange(amt).notes;
+    const delta = {};
+    DENOMS.forEach(d => { delta[d] = type==='IN' ? (brk[d]||0) : -(brk[d]||0); });
+    await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: type+' manual' });
+    toast('Logged', 'ok'); pullAll();
+  }
 }
 
 /* ============ ATTENDANCE ============ */
@@ -2969,7 +3155,9 @@ function renderAttendance(){
   $('#attCashOpen').textContent = fmt(opening);
   $('#attCashIn').textContent = fmt(inAmt);
   $('#attCashOut').textContent = fmt(outAmt);
-  $('#attCashNow').textContent = fmt(opening + inAmt - outAmt);
+  const dd = state.data.drawerDenoms || {};
+  const hasDenomTruth = DENOMS.some(d => dd['Denom'+d] !== undefined);
+  $('#attCashNow').textContent = fmt(hasDenomTruth ? DENOMS.reduce((s,d)=> s + Number(dd['Denom'+d]||0) * d, 0) : (opening + inAmt - outAmt));
   const atb = $('#attCashTbl tbody'); atb.innerHTML = '';
   cashToday.slice().reverse().forEach(t => {
     const tr = document.createElement('tr');
@@ -3104,14 +3292,14 @@ function openModal(title, bodyHTML, actions){
 function closeModal(){ $('#veil').classList.remove('on'); }
 $('#veil').addEventListener('click', e => { if(e.target.id==='veil') closeModal(); });
 
-/* ============ CAMERA SCANNER ============ */
+/* ============ CAMERA SCANNER ============
+   All camera scans funnel through handleScan() so the same 1-second
+   duplicate guard + beep + vibrate apply everywhere (POS / Inventory / Returns). */
 let camScanner = null;
 let camTorch = false;
 function openCamScanner(onCode, opts){
   opts = opts || {};
   const continuous = !!opts.continuous;
-  const gapMs = opts.gapMs || 3000;
-  let lastCode = null, lastTime = 0;
   camTorch = false;
   openModal('Scan Barcode', `
     <div id="camBox"></div>
@@ -3127,13 +3315,10 @@ function openCamScanner(onCode, opts){
       camScanner = new Html5Qrcode('camBox');
       await camScanner.start({ facingMode:'environment' }, { fps: 10, qrbox: { width: 220, height: 130 } },
         code => {
-          const now = Date.now();
           if(continuous){
-            if(code === lastCode && (now - lastTime) < gapMs) return; // debounce duplicate re-reads
-            lastCode = code; lastTime = now;
-            onCode(code);
+            handleScan(code, onCode);
           }else{
-            stopCam(); closeModal(); onCode(code);
+            handleScan(code, c => { stopCam(); closeModal(); onCode(c); });
           }
         },
         () => {}
