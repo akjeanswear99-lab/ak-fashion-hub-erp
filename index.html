@@ -32,7 +32,7 @@ a{color:inherit;}
 .wrap-login{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(1200px 600px at 10% 10%,#1c1c1c 0%,#050505 60%,#000 100%);}
 .card-login{width:100%;max-width:420px;background:#fff;border-radius:14px;padding:32px 28px;box-shadow:0 30px 60px rgba(0,0,0,.35);}
 .brand-mark{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:22px;}
-.brand-mark .dot{width:34px;height:34px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;letter-spacing:.5px;}
+.brand-mark .dot{width:34px;height:34px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;letter-spacing:.5px;overflow:hidden;background-size:cover;background-position:center;}
 .brand-mark h1{font-size:19px;letter-spacing:.5px;}
 .brand-mark small{display:block;font-size:10px;color:var(--muted);letter-spacing:1.8px;text-transform:uppercase;text-align:center;margin-top:2px;}
 .field{margin-bottom:14px;}
@@ -60,7 +60,7 @@ a{color:inherit;}
 .shell.on{display:grid;}
 .side{grid-row:1/3;background:#0e0e0e;color:#e5e5e0;padding:16px 10px;overflow-y:auto;}
 .side .logo{display:flex;align-items:center;gap:10px;padding:6px 8px 14px;border-bottom:1px solid #222;margin-bottom:10px;}
-.side .logo .dot{width:32px;height:32px;border-radius:7px;background:var(--brand-2);color:#111;display:grid;place-items:center;font-weight:800;}
+.side .logo .dot{width:32px;height:32px;border-radius:7px;background:var(--brand-2);color:#111;display:grid;place-items:center;font-weight:800;overflow:hidden;background-size:cover;background-position:center;}
 .side .logo b{font-size:12px;letter-spacing:1px;}
 .side nav{display:flex;flex-direction:column;gap:2px;}
 .side nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:7px;color:#bdbdb8;font-size:13px;text-decoration:none;cursor:pointer;transition:all .15s;}
@@ -111,7 +111,7 @@ tr:hover td{background:#faf9f4;}
 .empty{padding:30px;text-align:center;color:var(--muted);}
 
 /* toast */
-.toasts{position:fixed;top:16px;right:16px;z-index:9000;display:flex;flex-direction:column;gap:8px;}
+.toasts{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:360px;}
 .toast{background:#111;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.25);font-size:13px;max-width:340px;animation:tsIn .2s ease;}
 .toast.ok{background:var(--ok);}
 .toast.bad{background:var(--bad);}
@@ -163,6 +163,10 @@ tr:hover td{background:#faf9f4;}
 }
 .tag{width:2in;height:3in;padding:8px;border:1px dashed #000;font-family:'Courier New',monospace;}
 
+/* camera scanner box */
+#camBox{width:100%;max-width:320px;height:240px;background:#000;border-radius:8px;overflow:hidden;margin:0 auto;position:relative;}
+#camBox video{width:100% !important;height:100% !important;object-fit:cover;}
+
 /* util */
 .text-r{text-align:right;} .text-c{text-align:center;}
 .mono{font-family:'Courier New',monospace;}
@@ -186,7 +190,7 @@ tr:hover td{background:#faf9f4;}
 <div class="wrap-login" id="loginWrap">
   <div class="card-login">
     <div class="brand-mark">
-      <div class="dot">A</div>
+      <div class="dot" id="loginLogoDot">A</div>
       <div>
         <h1>AK Fashion Hub</h1>
         <small>Retail Operations Console</small>
@@ -210,7 +214,7 @@ tr:hover td{background:#faf9f4;}
 <div class="shell" id="shell">
   <aside class="side">
     <div class="logo">
-      <div class="dot">A</div>
+      <div class="dot" id="sideLogoDot">A</div>
       <b>AK FASHION HUB</b>
     </div>
     <nav id="navBox">
@@ -344,7 +348,7 @@ tr:hover td{background:#faf9f4;}
           <div class="lg strong"><span>Grand Total</span><span id="posTotal" style="float:right;">₹0</span></div>
 
           <!-- Cash tendered → auto change breakdown -->
-          <div class="field mt-8">
+          <div class="field mt-8" id="posTenderedWrap">
             <label>Customer ne diya (₹)</label>
             <input class="inp" id="posTendered" type="number" min="0" placeholder="Auto ho jayega jab enter karo">
           </div>
@@ -385,7 +389,7 @@ tr:hover td{background:#faf9f4;}
           <button class="btn ghost sm" id="btnInvScan">📷 Scan</button>
         </div>
         <div class="tbl-wrap"><table id="invTbl">
-          <thead><tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th><th>Stock</th><th>Location</th><th></th></tr></thead>
+          <thead id="invTblHead"><tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th><th>Stock</th><th>Location</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -408,6 +412,7 @@ tr:hover td{background:#faf9f4;}
         <h3>Return / Exchange</h3>
         <div class="row mb-12">
           <input class="inp" id="retSearch" placeholder="Bill number, mobile ya scanned barcode">
+          <button class="btn ghost sm" id="btnRetScan">📷 Scan Tag</button>
           <button class="btn sm" id="btnRetSearch">Search</button>
         </div>
         <div id="retResult"></div>
@@ -610,6 +615,7 @@ tr:hover td{background:#faf9f4;}
 
     <!-- ===== ATTENDANCE ===== -->
     <div class="screen" id="scr-attendance">
+      <div class="grid-2">
       <div class="pane">
         <h3>🕐 Staff Attendance <small>Punch IN aur OUT log karo</small></h3>
         <div class="grid-3 mb-12">
@@ -632,6 +638,22 @@ tr:hover td{background:#faf9f4;}
           <thead><tr><th>Staff</th><th>Date</th><th>IN</th><th>OUT</th><th>Hours</th><th>Notes</th></tr></thead>
           <tbody></tbody>
         </table></div>
+      </div>
+
+      <div class="pane">
+        <h3>💵 Galla (Cash Drawer) Summary <small>Aaj ka overview</small></h3>
+        <div class="grid-2 mb-12">
+          <div class="stat"><div class="lab">Opening</div><div class="val" id="attCashOpen">₹0</div></div>
+          <div class="stat"><div class="lab">Current Balance</div><div class="val" id="attCashNow">₹0</div></div>
+          <div class="stat"><div class="lab">Total Aaya (In)</div><div class="val" id="attCashIn">₹0</div></div>
+          <div class="stat"><div class="lab">Total Gaya (Out)</div><div class="val" id="attCashOut">₹0</div></div>
+        </div>
+        <div class="strong mb-8">Aaj ki Galla Entries</div>
+        <div class="tbl-wrap"><table id="attCashTbl">
+          <thead><tr><th>Time</th><th>Type</th><th>Ref</th><th>Amount</th><th>Notes</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
       </div>
     </div>
 
@@ -660,6 +682,7 @@ tr:hover td{background:#faf9f4;}
               <input type="file" id="setLogoFile" accept="image/*" style="max-width:220px;">
               <button class="btn ghost sm" id="btnClearLogo">Remove</button>
             </div>
+            <div class="hint mt-8">Yeh logo login page, sidebar, browser tab icon aur printed bill — sab jagah automatically use hoga.</div>
           </div>
         </div>
         <button class="btn sm" id="btnSaveShop">Save Profile</button>
@@ -675,7 +698,7 @@ tr:hover td{background:#faf9f4;}
           <div>
             <input type="file" id="setUpiFile" accept="image/*">
             <button class="btn ghost sm mt-8" id="btnClearUpi">Remove</button>
-            <div class="hint mt-8">Ye QR bill screen me "UPI (Scan QR)" chunte hi customer ko dikhega aur bill print pe bhi aayega.</div>
+            <div class="hint mt-8">Ye QR bill screen me "UPI" ya "Online" payment mode chunte hi customer ko dikhega aur bill print pe bhi aayega.</div>
           </div>
         </div>
       </div>
@@ -694,6 +717,15 @@ tr:hover td{background:#faf9f4;}
           <div class="field"><label>Footer Text</label><input class="inp" id="btFooter" placeholder="Thank You! Visit Again"></div>
         </div>
         <button class="btn sm" id="btnSaveBill">Save Bill Template</button>
+      </div>
+
+      <div class="pane">
+        <h3>Return Policy</h3>
+        <div class="grid-3 mb-12">
+          <div class="field"><label>Return Window (days)</label><input class="inp" id="setRetDays" type="number" min="0" value="3"></div>
+        </div>
+        <div class="hint mb-8">Bill date se itne din tak hi item return/exchange allowed maana jaayega. Returns screen me scan karte hi yeh auto-check hoga.</div>
+        <button class="btn sm" id="btnSaveRetDays">Save Return Policy</button>
       </div>
 
       <div class="pane">
@@ -758,7 +790,8 @@ const state = {
     razorpayKey: '',
     billFormat: 'thermal',
     billHeader: 'AK FASHION HUB',
-    billFooter: 'Thank You! Visit Again'
+    billFooter: 'Thank You! Visit Again',
+    returnWindowDays: 3
   },
   user: null,                 // { staffID, name, mobile, role, permissions }
   data: emptyStore(),
@@ -767,6 +800,7 @@ const state = {
   lastBill: null,
   denomOpen: {},
   denomClose: {},
+  tenderedDenoms: {},         // denomination-wise breakdown customer gave in POS
   chart: null,
   pendingSubmit: false        // duplicate-click guard
 };
@@ -787,6 +821,21 @@ const fmt = n => '₹' + Math.round(Number(n||0)).toLocaleString('en-IN');
 const money = n => Number(n||0).toFixed(0);
 const rnd = () => Math.random().toString(36).slice(2, 8);
 const nowISO = () => new Date().toISOString();
+function isAdminUser(){
+  if(!state.user) return false;
+  // Backend may return the role under different key casings depending on
+  // how the Sheet/Apps Script names its columns — check all common variants.
+  const raw = state.user.role ?? state.user.Role ?? state.user.ROLE ?? state.user.userRole;
+  if(raw === undefined || raw === null || raw === ''){
+    // No role field at all came back from the backend — this is a backend
+    // integration quirk, not an explicit "this is a staff account" signal.
+    // Also check Permissions as a fallback signal before defaulting to allow.
+    const perms = String(state.user.Permissions || state.user.permissions || '').toLowerCase();
+    if(perms) return perms.includes('all');
+    return true;
+  }
+  return String(raw).trim().toLowerCase() === 'admin';
+}
 const dayKey = iso => (iso||'').substr(0,10);
 
 function toast(msg, kind){
@@ -892,6 +941,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireAttendance();
   wireSettings();
   buildDenomInputs();
+  applyBrandLogo();
 
   // repaint cached data immediately, then sync
   if(state.user){ enterShell(); pullAll(); }
@@ -900,6 +950,31 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('online', queueFlush);
 });
 
+/* ------- brand logo (login / sidebar / favicon / bill print) ------- */
+function applyBrandLogo(){
+  const logo = state.cfg.shopLogo;
+  [ '#loginLogoDot', '#sideLogoDot' ].forEach(sel => {
+    const el = $(sel);
+    if(!el) return;
+    if(logo){
+      el.style.backgroundImage = 'url(' + logo + ')';
+      el.textContent = '';
+    }else{
+      el.style.backgroundImage = '';
+      el.textContent = 'A';
+    }
+  });
+  // favicon / home-screen icon on phone
+  if(logo){
+    let link = document.querySelector("link[rel~='icon']");
+    if(!link){ link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
+    link.href = logo;
+    let touch = document.querySelector("link[rel='apple-touch-icon']");
+    if(!touch){ touch = document.createElement('link'); touch.rel='apple-touch-icon'; document.head.appendChild(touch); }
+    touch.href = logo;
+  }
+}
+
 /* ------- login ------- */
 function showLogin(){ $('#loginWrap').style.display='grid'; $('#shell').classList.remove('on'); }
 function enterShell(){
@@ -907,17 +982,23 @@ function enterShell(){
   $('#shell').classList.add('on');
   $('#topUser').textContent = state.user.name;
   $('#topRole').textContent = state.user.role || 'staff';
-  $('#topRole').className = 'badge ' + (state.user.role==='admin'?'role-admin':'');
+  $('#topRole').className = 'badge ' + (isAdminUser()?'role-admin':'');
   applyRolePerms();
   goto('dash');
 }
 function applyRolePerms(){
-  const isAdmin = state.user && state.user.role === 'admin';
-  // Staff can't see cost / profit / master password / staff mgmt
-  $$('a[data-scr="staff"], a[data-scr="reports"], a[data-scr="cash"], a[data-scr="expenses"], a[data-scr="settings"], a[data-scr="suppliers"]').forEach(a=>{
-    a.style.display = isAdmin ? '' : 'none';
-  });
+  const isAdmin = isAdminUser();
+  // Nav links stay visible for everyone — hiding them by role caused admins
+  // to get locked out whenever the backend's role field didn't match exactly.
+  // Restricted screens are gated individually inside render() instead, so a
+  // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
+}
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1 };
+function accessDeniedHTML(){
+  return '<div class="pane"><div class="empty">🔒 Ye section sirf Admin ke liye hai.<br>'
+       + 'Agar aap admin hain aur phir bhi yeh dikh raha hai, toh Staff sheet me apni row check karein — '
+       + 'Role column me exactly <b>admin</b> likha hona chahiye.</div></div>';
 }
 
 function wireLogin(){
@@ -986,6 +1067,15 @@ function currentScreen(){
 
 /* ------- master renderer ------- */
 function render(scr){
+  if(RESTRICTED_SCREENS[scr] && !isAdminUser()){
+    const el = $('#scr-'+scr);
+    if(el){
+      const pane = el.querySelector('.pane');
+      if(pane) pane.parentElement.innerHTML = accessDeniedHTML();
+      else el.innerHTML = accessDeniedHTML();
+    }
+    return;
+  }
   switch(scr){
     case 'dash':      renderDash(); break;
     case 'pos':       renderPOS(); break;
@@ -1105,16 +1195,22 @@ function wirePOS(){
   });
   $('#btnScanCam').addEventListener('click', ()=> openCamScanner(code=>{
     addToCartByScan(code);
-  }));
+  }, { continuous:true, gapMs:3000 }));
   $('#posPay').addEventListener('change', updateUpiQr);
 }
 function updateUpiQr(){
   const mode = $('#posPay').value;
-  if(mode === 'UPI' && state.cfg.upiQR){
+  const showQr = (mode === 'UPI' || mode === 'Online');
+  $('#posTenderedWrap').style.display = (mode==='Cash' || mode==='Mixed') ? 'block' : 'none';
+  $('#changeBox').style.display = 'none';
+  if(showQr && state.cfg.upiQR){
     $('#upiQrImg').src = state.cfg.upiQR;
     $('#upiQrBox').style.display = 'block';
   }else{
     $('#upiQrBox').style.display = 'none';
+    if(showQr && !state.cfg.upiQR){
+      toast('UPI QR set nahi hai — Settings me upload karein', 'warn');
+    }
   }
 }
 function showSuggest(term){
@@ -1244,14 +1340,17 @@ function breakChange(amt){
   });
   return { notes: out, unrounded: rem };
 }
+function denomText(obj){
+  return Object.keys(obj).sort((a,c)=>c-a).map(n => '₹'+n+' × '+obj[n]).join('  •  ');
+}
 function updateChangeBox(total){
   const t = Number($('#posTendered').value || 0);
   const box = $('#changeBox');
-  if(!t || t < total){ box.style.display = 'none'; return; }
+  if(!t || t < total){ box.style.display = 'none'; state.tenderedDenoms = {}; return; }
   const change = t - total;
   const b = breakChange(change);
-  const parts = Object.keys(b.notes).sort((a,c)=>c-a)
-    .map(n => '₹'+n+' × '+b.notes[n]).join('  •  ');
+  state.tenderedDenoms = b.notes;
+  const parts = denomText(b.notes);
   box.style.display = 'block';
   box.innerHTML = '<b>Return ₹' + Math.round(change) + '</b>' + (parts ? ' — ' + parts : ' (coin/change nahi hai denom me)');
 }
@@ -1277,13 +1376,16 @@ async function completeSale(){
   const disc = Number($('#posDisc').value||0);
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
   const total = Math.max(0, sub - disc - coinUse);
+  const payMode = $('#posPay').value;
+  const tendered = Number($('#posTendered').value||0);
+  const changeGiven = (payMode==='Cash' && tendered > total) ? (tendered - total) : 0;
   const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const payload = {
     BillID: billID,
     CustomerMobile: $('#posCustMob').value.trim(),
     CustomerName: $('#posCustName').value.trim(),
     Subtotal: sub, Discount: disc, Total: total,
-    PaymentMode: $('#posPay').value,
+    PaymentMode: payMode,
     StaffID: state.user.staffID, StaffName: state.user.name,
     items: state.cart.map(c => ({
       ProductID: c.ProductID, VariantID: c.VariantID, UID: c.UID,
@@ -1293,7 +1395,8 @@ async function completeSale(){
       LineProfit: (c.Price - c.CostPrice) * c.Quantity - 10
     })),
     WalletID: state.activeCoin ? state.activeCoin.WalletID : '',
-    WalletUsed: coinUse
+    WalletUsed: coinUse,
+    Tendered: tendered, ChangeGiven: changeGiven
   };
   // Upsert customer alongside (fire and forget — sheet also upserts on bill)
   if(payload.CustomerMobile){
@@ -1308,12 +1411,49 @@ async function completeSale(){
   if(r.data && r.data.duplicate){ toast('Bill already saved (duplicate blocked)', 'warn'); }
   state.lastBill = { ...payload, BillNumber: r.data.billNumber };
   toast('Bill saved: '+r.data.billNumber, 'ok');
+
+  // ------- Cash Drawer / Galla logging -------
+  if(payMode === 'Cash'){
+    const tenderedNoteText = denomText(state.tenderedDenoms||{});
+    // Money the customer physically handed over goes IN
+    apiPost('addCashTxn', {
+      Date: dayKey(nowISO()),
+      Time: new Date().toTimeString().substr(0,8),
+      Type: 'IN', Amount: tendered > 0 ? tendered : total,
+      Reference: 'BILL-'+(r.data.billNumber||billID),
+      StaffID: state.user.staffID, StaffName: state.user.name,
+      Description: 'Cash sale' + (tenderedNoteText ? ' — Customer diya: '+tenderedNoteText : '')
+    });
+    // Change handed back goes OUT
+    if(changeGiven > 0){
+      const changeNoteText = denomText(breakChange(changeGiven).notes);
+      apiPost('addCashTxn', {
+        Date: dayKey(nowISO()),
+        Time: new Date().toTimeString().substr(0,8),
+        Type: 'OUT', Amount: changeGiven,
+        Reference: 'CHANGE-'+(r.data.billNumber||billID),
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Change returned' + (changeNoteText ? ' — Diya: '+changeNoteText : '')
+      });
+    }
+  }else if(total > 0){
+    // Non-cash sale still logged for reference (0 impact on physical drawer, tagged clearly)
+    apiPost('addCashTxn', {
+      Date: dayKey(nowISO()),
+      Time: new Date().toTimeString().substr(0,8),
+      Type: 'INFO', Amount: 0,
+      Reference: 'BILL-'+(r.data.billNumber||billID),
+      StaffID: state.user.staffID, StaffName: state.user.name,
+      Description: payMode+' sale of '+fmt(total)+' (not physical cash)'
+    });
+  }
+
   // reset
-  state.cart=[]; state.activeCoin=null;
+  state.cart=[]; state.activeCoin=null; state.tenderedDenoms={};
   $('#posCoin').value=''; $('#posCoinLine').style.display='none';
   $('#coinApplyBox').style.display='none';
   $('#posDisc').value=0;
-  $('#posCustMob').value=''; $('#posCustName').value='';
+  $('#posCustMob').value=''; $('#posCustName').value=''; $('#posTendered').value='';
   refreshCart();
   printBill(state.lastBill);
   pullAll();
@@ -1324,8 +1464,28 @@ function renderPOS(){
   updateUpiQr();
 }
 
+/* ------- print helper: toggles #printBox display cleanly so it never gets stuck ------- */
+function printHTML(html, onReady){
+  const box = $('#printBox');
+  box.innerHTML = html;
+  box.style.display = 'block';
+  // Let any caller draw into the now-attached DOM (e.g. barcode canvases)
+  // BEFORE we trigger print — this was the root cause of blank/empty
+  // barcodes on the printed tags (print used to fire before drawing).
+  if(typeof onReady === 'function'){
+    try{ onReady(); }catch(e){ console.error(e); }
+  }
+  const cleanup = () => { box.style.display = 'none'; box.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  // small delay just to let the browser paint/layout before print dialog opens
+  setTimeout(() => { window.print(); }, 120);
+  // safety net in case afterprint doesn't fire on some browsers
+  setTimeout(cleanup, 5000);
+}
+
 /* ------- print bill (thermal 3in style) ------- */
 function printBill(b){
+  if(!b){ toast('No bill to print', 'warn'); return; }
   const items = b.items||[];
   const rows = items.map(it =>
     `<tr><td>${it.Name}<br><small>${it.Color||''} ${it.Size||''}</small></td>
@@ -1337,8 +1497,9 @@ function printBill(b){
   const pageWidth = isThermal ? '80mm' : '210mm';
   const fontSz = isThermal ? '12px' : '14px';
   const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
-  const upiQr = (b.PaymentMode === 'UPI' && state.cfg.upiQR)
+  const upiQr = ((b.PaymentMode === 'UPI' || b.PaymentMode === 'Online') && state.cfg.upiQR)
     ? `<div style="text-align:center;margin-top:6px;"><img src="${state.cfg.upiQR}" style="max-width:120px;"><br><small>Scan to pay</small></div>` : '';
+  const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
   const html = `
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:${fontSz};padding:6px;">
       <div style="text-align:center;">
@@ -1362,17 +1523,17 @@ function printBill(b){
       ${b.WalletUsed ? '<div>Coin '+b.WalletID+': -'+fmt(b.WalletUsed)+'</div>' : ''}
       <div><b>Total: ${fmt(b.Total)}</b></div>
       <div>Mode: ${b.PaymentMode}</div>
+      ${cashLine}
       ${upiQr}
       <hr>
       <div style="text-align:center;font-size:10px;">${state.cfg.billFooter||'Thank you! Visit again'}</div>
     </div>`;
-  $('#printBox').innerHTML = html;
-  window.print();
+  printHTML(html);
 }
 function whatsappLastBill(){
   if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
   const b = state.lastBill;
-  const msg = `AK FASHION HUB\nBill: ${b.BillNumber}\nAmount: ₹${b.Total}\nMode: ${b.PaymentMode}\nDhanyavaad!`;
+  const msg = `${state.cfg.shopName}\nInvoice: ${b.BillNumber}\nAmount Paid: ₹${b.Total}\nPayment Mode: ${b.PaymentMode}\n\nThank you for shopping with us! We look forward to serving you again.`;
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
   if(!mob){ toast('Customer mobile chahiye', 'warn'); return; }
   window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
@@ -1444,6 +1605,7 @@ function openScanDetails(p){
   openModal(p.Name + ' — Details', `
     <div class="grid-2 mb-12">
       <div>
+        <div><span class="dim">Name</span>: <b>${p.Name||''}</b></div>
         <div><span class="dim">UID</span>: <b>${p.UID||''}</b></div>
         <div><span class="dim">Barcode</span>: <span class="mono">${p.Barcode||''}</span></div>
         <div><span class="dim">Category</span>: ${p.Category||'—'}</div>
@@ -1458,7 +1620,7 @@ function openScanDetails(p){
         <div><span class="dim">Gender</span>: ${p.Gender||'—'}</div>
         <div><span class="dim">Batch</span>: <b>${p.BatchNumber||'—'}</b></div>
         <div><span class="dim">Total Stock</span>: <b>${variants.reduce((s,v)=>s+Number(v.Stock||0),0)}</b></div>
-        ${state.user.role==='admin' ? '<div><span class="dim">CP</span>: '+fmt(p.CostPrice)+'</div>' : ''}
+        ${isAdminUser() ? '<div><span class="dim">CP</span>: '+fmt(p.CostPrice)+'</div>' : ''}
         <div><span class="dim">SP</span>: ${fmt(p.SalePrice)}</div>
         <div><span class="dim">MRP</span>: ${fmt(p.MRP)}</div>
         <div><span class="dim">Last Updated</span>: ${(p.UpdatedDate||p.CreatedDate||'').substr(0,10)}</div>
@@ -1504,7 +1666,7 @@ function renderProducts(){
     (p.BatchNumber||'').toLowerCase().includes(term)
   );
   const tb = $('#prodTbl tbody'); tb.innerHTML='';
-  const isAdmin = state.user && state.user.role==='admin';
+  const isAdmin = isAdminUser();
   list.forEach(p=>{
     const stk = (p.variants||[]).reduce((s,v)=>s+Number(v.Stock||0),0);
     const tr = document.createElement('tr');
@@ -1692,6 +1854,11 @@ function wireInventory(){
 }
 function renderInventory(){
   const term = ($('#invSearch').value||'').toLowerCase();
+  const isAdmin = isAdminUser();
+  // header: add CP column for admin only
+  $('#invTblHead').innerHTML = '<tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th>'
+    + (isAdmin ? '<th>Cost Price</th>' : '')
+    + '<th>Stock</th><th>Location</th><th></th></tr>';
   const rows = [];
   let totalU = 0;
   (state.data.products||[]).forEach(p => {
@@ -1708,15 +1875,16 @@ function renderInventory(){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="mono">${p.UID}</td>
-      <td>${p.Name}</td>
+      <td><b>${p.Name}</b></td>
       <td>${v.Color||''}</td>
       <td>${v.Size||''}</td>
       <td>${v.BatchNumber || p.BatchNumber || '—'}</td>
-      <td><b class="${Number(v.Stock)<=5?'':''}">${v.Stock}</b></td>
+      ${isAdmin ? '<td>'+fmt(p.CostPrice)+'</td>' : ''}
+      <td><b>${v.Stock}</b></td>
       <td>${[v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ')||'—'}</td>
       <td>
         <button class="btn ghost sm" data-a="view" data-p="${p.ProductID}">👁</button>
-        ${state.user.role==='admin' ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'">Stock ±</button>' : ''}
+        ${isAdmin ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'">Stock ±</button>' : ''}
       </td>`;
     tb.appendChild(tr);
   });
@@ -1737,7 +1905,7 @@ function renderInventory(){
       pullAll();
     }
   };
-  if(!rows.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No inventory rows</td></tr>';
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="'+(isAdmin?9:8)+'" class="empty">No inventory rows</td></tr>';
 }
 
 /* ============ CUSTOMERS ============ */
@@ -1972,7 +2140,7 @@ function renderWallet(){
 function sendCoinWhatsapp(w){
   const mob = String(w.CustomerMobile||'').replace(/\D/g,'');
   if(!mob){ toast('Mobile missing', 'bad'); return; }
-  const msg = `Namaste ${w.CustomerName||''}!\n${state.cfg.shopName} ki taraf se aapko ₹${w.Amount} ka store-credit coin diya gaya hai.\n\nCoin Code: ${w.WalletID}\nBalance: ₹${w.RemainingAmount}\nValid till: ${(w.ExpiryDate||'').substr(0,10)}\nReason: ${w.Reason||'Refund'}\n\nApni next kharidari me is code ko bataye — amount bill se automatically kat jayega.\nDhanyavaad!`;
+  const msg = `Dear ${w.CustomerName||'Customer'},\n\n${state.cfg.shopName} has issued you a store-credit coupon worth ₹${w.Amount}.\n\nCoupon Code: ${w.WalletID}\nBalance: ₹${w.RemainingAmount}\nValid Until: ${(w.ExpiryDate||'').substr(0,10)}\n\nPlease share this code on your next visit — the amount will be automatically applied to your bill.\n\nThank you for shopping with us!`;
   window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
 function openIssueCoinForm(pref){
@@ -2026,31 +2194,104 @@ function openIssueCoinForm(pref){
 function wireReturns(){
   $('#btnRetSearch').addEventListener('click', doReturnSearch);
   $('#retSearch').addEventListener('keyup', e => { if(e.key==='Enter') doReturnSearch(); });
+  $('#btnRetScan').addEventListener('click', ()=> openCamScanner(code=>{
+    $('#retSearch').value = code;
+    scanForReturn(code);
+  }));
 }
 function renderReturns(){ $('#retResult').innerHTML=''; }
+
+// Find every past sale of this exact variant (barcode/UID), most recent first.
+function findSalesByCode(code){
+  const t = String(code||'').trim().toLowerCase();
+  if(!t) return [];
+  const hit = findByCode(code); // resolves product + variant via UID/Barcode/VariantBarcode
+  let matches;
+  if(hit && hit.variant){
+    matches = (state.data.billItems||[]).filter(it => it.VariantID === hit.variant.VariantID);
+  }else{
+    matches = (state.data.billItems||[]).filter(it =>
+      String(it.UID||'').toLowerCase() === t ||
+      String(it.VariantID||'').toLowerCase().includes(t)
+    );
+  }
+  return matches
+    .map(it => ({ item: it, bill: (state.data.bills||[]).find(b => b.BillID === it.BillID) }))
+    .filter(x => x.bill)
+    .sort((a,b)=> String(b.bill.CreatedDate).localeCompare(String(a.bill.CreatedDate)));
+}
+
+// Scan handler: jumps straight to the most recent sale of the scanned item and
+// shows product name, sale date, days elapsed, and return eligibility upfront.
+function scanForReturn(code){
+  const sales = findSalesByCode(code);
+  if(!sales.length){ $('#retResult').innerHTML = '<div class="pane"><div class="empty">Ye item kabhi becha nahi gaya — koi bill nahi mila.</div></div>'; return; }
+  if(sales.length === 1){
+    showBillForReturn(sales[0].bill, sales[0].item.VariantID);
+    return;
+  }
+  // Multiple past sales of this exact variant — let staff pick the right one.
+  const rows = sales.slice(0,15).map(({item,bill}) => {
+    const days = daysSince(bill.CreatedDate);
+    const elig = isReturnEligible(bill.CreatedDate);
+    return `<tr>
+      <td>${(bill.CreatedDate||'').substr(0,10)}</td>
+      <td>${bill.BillNumber||''}</td>
+      <td>${bill.CustomerName||bill.CustomerMobile||'—'}</td>
+      <td>${item.Quantity}</td>
+      <td>${days} din pehle</td>
+      <td><span class="pill ${elig?'ok':'bad'}">${elig?'Return OK':'Window khatam'}</span></td>
+      <td><button class="btn sm ok" data-bill="${bill.BillID}" data-vid="${item.VariantID}">Select</button></td>
+    </tr>`;
+  }).join('');
+  $('#retResult').innerHTML = `
+    <div class="pane">
+      <div class="strong mb-8">Ye item ${sales.length} alag bills me becha gaya hai — sahi bill select karein:</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Qty</th><th>Kitne din pehle</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  $('#retResult').querySelector('table').addEventListener('click', e => {
+    const b = e.target.closest('button[data-bill]'); if(!b) return;
+    const bill = (state.data.bills||[]).find(x => x.BillID === b.dataset.bill);
+    if(bill) showBillForReturn(bill, b.dataset.vid);
+  });
+}
+function daysSince(dateStr){
+  if(!dateStr) return '—';
+  const then = new Date(dateStr), now = new Date();
+  return Math.max(0, Math.floor((now - then) / (1000*60*60*24)));
+}
+function isReturnEligible(dateStr){
+  const d = daysSince(dateStr);
+  if(d === '—') return false;
+  const windowDays = state.cfg.returnWindowDays != null ? state.cfg.returnWindowDays : 3;
+  return d <= windowDays;
+}
+
 function doReturnSearch(){
   const q = $('#retSearch').value.trim();
   if(!q) return;
   // 1) try direct bill number
   let bill = (state.data.bills||[]).find(b => String(b.BillNumber||'').toLowerCase() === q.toLowerCase() || String(b.BillID) === q);
+  if(bill){ showBillForReturn(bill); return; }
   // 2) try mobile: show latest bill for that mobile
-  if(!bill && /^\d{10}$/.test(q)){
+  if(/^\d{10}$/.test(q)){
     const list = (state.data.bills||[]).filter(b => String(b.CustomerMobile).replace(/\D/g,'') === q).sort((a,b)=>String(b.CreatedDate).localeCompare(String(a.CreatedDate)));
-    bill = list[0];
+    if(list[0]){ showBillForReturn(list[0]); return; }
   }
-  // 3) try variant barcode
-  if(!bill){
-    const items = (state.data.billItems||[]).filter(it => String(it.UID||'').includes(q) || String(it.VariantID||'').includes(q));
-    if(items.length) bill = (state.data.bills||[]).find(b => b.BillID === items[0].BillID);
-  }
-  if(!bill){ $('#retResult').innerHTML = '<div class="empty">Bill nahi mila</div>'; return; }
-  showBillForReturn(bill);
+  // 3) try barcode / UID — same logic the scanner uses, picks most recent sale
+  scanForReturn(q);
 }
-function showBillForReturn(b){
+function showBillForReturn(b, highlightVariantID){
   const items = (state.data.billItems||[]).filter(it => it.BillID === b.BillID);
+  const days = daysSince(b.CreatedDate);
+  const elig = isReturnEligible(b.CreatedDate);
+  const windowDays = state.cfg.returnWindowDays != null ? state.cfg.returnWindowDays : 3;
   const rows = items.map(it => `
-    <tr>
-      <td>${it.Name}</td>
+    <tr style="${it.VariantID===highlightVariantID?'background:#fff8e6;':''}">
+      <td><b>${it.Name}</b></td>
       <td>${it.Color||''} ${it.Size||''}</td>
       <td>${it.Quantity}</td>
       <td>${fmt(it.Price)}</td>
@@ -2059,8 +2300,13 @@ function showBillForReturn(b){
     </tr>`).join('');
   $('#retResult').innerHTML = `
     <div class="pane">
+      <div class="${elig?'tag-note':'tag-info'} mb-12">
+        <b>${elig ? '✅ Return/Exchange allowed' : '⚠️ Return window khatam'}</b><br>
+        Bill date: ${(b.CreatedDate||'').substr(0,10)} — ${days} din pehle becha gaya (Policy: ${windowDays} din ke andar).
+        ${elig ? '' : ' Is bill ka return normally allowed nahi hai — agar phir bhi karna hai toh manually process karein.'}
+      </div>
       <div class="grid-2 mb-12">
-        <div><b>Bill:</b> ${b.BillNumber}<br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
+        <div><b>Bill:</b> ${b.BillNumber}<br><b>Bill ID:</b> <span class="mono">${b.BillID}</span><br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
         <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
       </div>
       <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Var</th><th>Bought</th><th>Price</th><th>Return Qty</th><th></th></tr></thead>
@@ -2488,9 +2734,8 @@ function printStickerSheet(){
       </div>`;
   }).join('');
 
-  $('#printBox').innerHTML = `
+  const sheetHtml = `
     <style>
-      #printBox { display:block !important; }
       .stk-sheet { display:flex; flex-wrap:wrap; gap:2mm; padding:2mm; }
       .stk { border:1px dashed #666; padding:1.5mm; overflow:hidden;
               font-family:'Courier New', monospace; font-size:${dims.fs}px;
@@ -2508,18 +2753,19 @@ function printStickerSheet(){
     </style>
     <div class="stk-sheet">${cellsHtml}</div>
   `;
-  // Draw DataMatrix on every canvas
-  stickers.forEach((s, idx) => {
-    try{
-      bwipjs.toCanvas('stkdm-' + idx, {
-        bcid: 'datamatrix',
-        text: s.v.Barcode || s.v.VariantBarcode || s.p.UID,
-        scale: 3,
-        includetext: false
-      });
-    }catch(e){}
+  printHTML(sheetHtml, () => {
+    // canvases now exist in the DOM — draw every DataMatrix before print() fires
+    stickers.forEach((s, idx) => {
+      try{
+        bwipjs.toCanvas('stkdm-' + idx, {
+          bcid: 'datamatrix',
+          text: s.v.Barcode || s.v.VariantBarcode || s.p.UID,
+          scale: 3,
+          includetext: false
+        });
+      }catch(e){ console.error('barcode draw failed', e); }
+    });
   });
-  window.print();
 }
 function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 
@@ -2529,8 +2775,8 @@ function printTag(pid, vid){
   const v = p ? p.variants.find(x => x.VariantID === vid) : null;
   if(!p || !v) return;
   const code = v.Barcode || v.VariantBarcode || p.UID;
-  $('#printBox').innerHTML = `
-    <style>#printBox{display:block !important;} .tag1{width:50mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;}</style>
+  const html = `
+    <style>.tag1{width:50mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;}</style>
     <div class="tag1">
       <div style="font-weight:800;font-size:12px;">${escapeHtml(p.Name)}</div>
       <div style="font-size:10px;">${escapeHtml((v.Color||'')+' '+(v.Size||''))}</div>
@@ -2540,10 +2786,9 @@ function printTag(pid, vid){
       <div style="text-decoration:line-through;color:#666;font-size:11px;">${fmt(p.MRP)}</div>
       <div style="font-size:16px;font-weight:900;">${fmt(v.SalePrice||p.SalePrice)}</div>
     </div>`;
-  try{
-    bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 4, includetext: false });
-  }catch(e){}
-  window.print();
+  printHTML(html, () => {
+    try{ bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 4, includetext: false }); }catch(e){ console.error('barcode draw failed', e); }
+  });
 }
 
 /* ============ CASH DRAWER ============ */
@@ -2589,7 +2834,7 @@ function updateClosingCalc(){
 }
 function renderCash(){
   const today = dayKey(nowISO());
-  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today);
+  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO');
   const in_ = rows.filter(t => t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const out_ = rows.filter(t => t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
@@ -2715,6 +2960,24 @@ function renderAttendance(){
     tb.appendChild(tr);
   });
   if(!Object.keys(byStaff).length) tb.innerHTML = '<tr><td colspan="6" class="empty">No punches today</td></tr>';
+
+  // ---- Galla (cash drawer) summary panel on the Attendance screen ----
+  const cashToday = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-'));
+  const inAmt = cashToday.filter(t=>t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const outAmt = cashToday.filter(t=>t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
+  $('#attCashOpen').textContent = fmt(opening);
+  $('#attCashIn').textContent = fmt(inAmt);
+  $('#attCashOut').textContent = fmt(outAmt);
+  $('#attCashNow').textContent = fmt(opening + inAmt - outAmt);
+  const atb = $('#attCashTbl tbody'); atb.innerHTML = '';
+  cashToday.slice().reverse().forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${(t.Time||'').substr(0,5) || (t.Date||'').substr(11,5)}</td>
+      <td>${t.Type||''}</td><td>${t.Reference||''}</td><td>${fmt(t.Amount)}</td><td>${t.Description||''}</td>`;
+    atb.appendChild(tr);
+  });
+  if(!cashToday.length) atb.innerHTML = '<tr><td colspan="5" class="empty">Aaj koi galla entry nahi</td></tr>';
 }
 function diffHours(hIn, hOut){
   const [a,b] = hIn.split(':').map(Number), [c,d] = hOut.split(':').map(Number);
@@ -2741,10 +3004,10 @@ function wireSettings(){
   $('#setShopAddr').value = state.cfg.shopAddress || '';
   if(state.cfg.shopLogo){ $('#setLogoPrev').src = state.cfg.shopLogo; $('#setLogoPrev').style.display = 'inline-block'; }
   $('#setLogoFile').addEventListener('change', e => readImage(e.target.files[0], dataURL => {
-    state.cfg.shopLogo = dataURL; $('#setLogoPrev').src = dataURL; $('#setLogoPrev').style.display='inline-block'; saveCfg(); toast('Logo saved', 'ok');
+    state.cfg.shopLogo = dataURL; $('#setLogoPrev').src = dataURL; $('#setLogoPrev').style.display='inline-block'; saveCfg(); applyBrandLogo(); toast('Logo saved — sab jagah update ho gaya', 'ok');
   }));
   $('#btnClearLogo').addEventListener('click', () => {
-    state.cfg.shopLogo = ''; $('#setLogoPrev').src=''; $('#setLogoPrev').style.display='none'; saveCfg(); toast('Logo removed');
+    state.cfg.shopLogo = ''; $('#setLogoPrev').src=''; $('#setLogoPrev').style.display='none'; saveCfg(); applyBrandLogo(); toast('Logo removed');
   });
   $('#btnSaveShop').addEventListener('click', () => {
     state.cfg.shopName = $('#setShop').value.trim();
@@ -2771,6 +3034,13 @@ function wireSettings(){
     state.cfg.billHeader = $('#btHeader').value;
     state.cfg.billFooter = $('#btFooter').value;
     saveCfg(); toast('Bill template saved', 'ok');
+  });
+
+  // Return policy
+  $('#setRetDays').value = state.cfg.returnWindowDays != null ? state.cfg.returnWindowDays : 3;
+  $('#btnSaveRetDays').addEventListener('click', () => {
+    state.cfg.returnWindowDays = Math.max(0, Number($('#setRetDays').value||0));
+    saveCfg(); toast('Return policy saved: '+state.cfg.returnWindowDays+' din', 'ok');
   });
 
   // Razorpay
@@ -2837,22 +3107,35 @@ $('#veil').addEventListener('click', e => { if(e.target.id==='veil') closeModal(
 /* ============ CAMERA SCANNER ============ */
 let camScanner = null;
 let camTorch = false;
-function openCamScanner(onCode){
+function openCamScanner(onCode, opts){
+  opts = opts || {};
+  const continuous = !!opts.continuous;
+  const gapMs = opts.gapMs || 3000;
+  let lastCode = null, lastTime = 0;
   camTorch = false;
   openModal('Scan Barcode', `
-    <div id="camBox" style="width:100%;min-height:280px;background:#000;border-radius:8px;overflow:hidden;"></div>
+    <div id="camBox"></div>
     <div class="row mt-8">
       <button class="btn ghost sm" id="btnTorch">🔦 Torch ON</button>
-      <span class="hint">Camera permission zaruri hai</span>
+      <span class="hint">${continuous ? 'Camera khuli rahegi — jitne chaho scan karo, khatam hone par Done dabao' : 'Camera permission zaruri hai'}</span>
     </div>
   `, [
-    { label:'Cancel', kind:'ghost', on: () => { stopCam(); closeModal(); } }
+    { label: continuous ? 'Done' : 'Cancel', kind:'ghost', on: () => { stopCam(); closeModal(); } }
   ]);
   setTimeout(async () => {
     try{
       camScanner = new Html5Qrcode('camBox');
-      await camScanner.start({ facingMode:'environment' }, { fps: 10, qrbox: { width: 250, height: 150 } },
-        code => { stopCam(); closeModal(); onCode(code); },
+      await camScanner.start({ facingMode:'environment' }, { fps: 10, qrbox: { width: 220, height: 130 } },
+        code => {
+          const now = Date.now();
+          if(continuous){
+            if(code === lastCode && (now - lastTime) < gapMs) return; // debounce duplicate re-reads
+            lastCode = code; lastTime = now;
+            onCode(code);
+          }else{
+            stopCam(); closeModal(); onCode(code);
+          }
+        },
         () => {}
       );
     }catch(err){ toast('Camera failed: '+err.message, 'bad'); }
