@@ -1797,20 +1797,42 @@ function renderProducts(){
 
 const CAT_LIST  = ['Bottom Wear','Top Wear','Ethnic','Dress','Winter Wear','Accessories','Other'];
 const TYPE_LIST = ['Jeans','Trouser','Lower','Shirt','T-Shirt','Kurti','Kurta','Saree','Suit','Dress','Jacket','Sweater','Other'];
-const FIT_LIST  = ['Slim Fit','Straight','Regular','Wide Leg','Skinny','Bootcut','Relaxed','—'];
+const FIT_LIST  = ['Slim Fit','Straight','Regular','Wide Leg','Skinny','Bootcut','Relaxed','Comfort Fit','Loose Fit'];
+const COLOR_PRESETS = ['Black','Blue','Grey','White','Red','Green','Brown','Cream','Beige','Pink','Yellow','Maroon','Navy'];
+const SIZE_PRESETS  = ['28','30','32','34','36','38','40','S','M','L','XL','XXL','Free'];
+
+// Generates the next sequential product UID (AKFH000001, AKFH000002, ...)
+// automatically — staff never type or choose it, and it stays fixed once
+// the product is created (the field is always read-only).
+function nextProductUID(){
+  const existing = new Set((state.data.products||[]).map(p => String(p.UID||'')));
+  let n = (state.data.products||[]).length;
+  let uid;
+  do{ n++; uid = 'AKFH' + String(n).padStart(6,'0'); } while(existing.has(uid));
+  return uid;
+}
+
+// Working state for the "Add Product" variant builder (colors/sizes chosen
+// so far, plus any per-variant stock the user has customised individually).
+let pfColorList = [];
+let pfSizeList = [];
+let pfStockOverride = {};
 
 function openProductForm(existing){
   const isEdit = !!existing;
   const p = existing || {};
+  pfColorList = []; pfSizeList = []; pfStockOverride = {};
+  const uidValue = isEdit ? (p.UID||'') : nextProductUID();
+
   openModal((isEdit?'Edit':'New') + ' Product', `
     <div class="grid-2 mb-12">
-      <div class="field"><label>UID *</label><input class="inp" id="pfUID" value="${p.UID||''}" ${isEdit?'readonly':''}></div>
+      <div class="field"><label>UID <small class="dim" style="font-weight:400;">(auto-generated)</small></label><input class="inp" id="pfUID" value="${uidValue}" readonly></div>
       <div class="field"><label>Product Name *</label><input class="inp" id="pfName" value="${p.Name||''}"></div>
     </div>
     <div class="grid-3 mb-12">
-      <div class="field"><label>Category</label><select class="inp" id="pfCat">${CAT_LIST.map(c=>'<option '+(p.Category===c?'selected':'')+'>'+c+'</option>').join('')}</select></div>
-      <div class="field"><label>Type</label><select class="inp" id="pfType">${TYPE_LIST.map(c=>'<option '+(p.Type===c?'selected':'')+'>'+c+'</option>').join('')}</select></div>
-      <div class="field"><label>Fit</label><select class="inp" id="pfFit">${FIT_LIST.map(c=>'<option '+(p.Fit===c?'selected':'')+'>'+c+'</option>').join('')}</select></div>
+      <div class="field"><label>Category</label><input class="inp" id="pfCat" list="pfCatList" value="${p.Category||''}" placeholder="Choose or type your own"><datalist id="pfCatList">${CAT_LIST.map(c=>'<option value="'+c+'">').join('')}</datalist></div>
+      <div class="field"><label>Type</label><input class="inp" id="pfType" list="pfTypeList" value="${p.Type||''}" placeholder="Choose or type your own"><datalist id="pfTypeList">${TYPE_LIST.map(c=>'<option value="'+c+'">').join('')}</datalist></div>
+      <div class="field"><label>Fit</label><input class="inp" id="pfFit" list="pfFitList" value="${p.Fit||''}" placeholder="Choose or type your own"><datalist id="pfFitList">${FIT_LIST.map(c=>'<option value="'+c+'">').join('')}</datalist></div>
     </div>
     <div class="grid-3 mb-12">
       <div class="field"><label>Fabric</label><input class="inp" id="pfFab" value="${p.FabricType||''}" placeholder="Cotton, Denim..."></div>
@@ -1829,63 +1851,198 @@ function openProductForm(existing){
     </div>
     <div class="field mb-12"><label>Description</label><textarea class="inp" id="pfDesc" rows="2">${p.Description||''}</textarea></div>
 
-    ${isEdit ? '' : `
+    ${isEdit ? `
     <div class="divider"></div>
-    <div class="strong mb-8">Variants — colors × sizes select karein, combinations auto ban jayenge</div>
-    <div class="mb-8"><span class="dim">Colors:</span></div>
-    <div class="chips mb-12" id="pfColors">
-      ${['Black','Blue','Grey','White','Red','Green','Brown','Cream','Beige','Pink','Yellow','Maroon','Navy'].map(c=>`<label class="chip"><input type="checkbox" value="${c}"> ${c}</label>`).join('')}
-      <input class="inp" id="pfColorMore" placeholder="+ custom (comma-separated)" style="max-width:220px;">
+    <div class="strong mb-8">Variants <small class="dim" style="font-weight:400;">— edit color, size or stock directly, or add a new variant below</small></div>
+    <div class="tbl-wrap mb-12"><table>
+      <thead><tr><th>Color</th><th>Size</th><th>Stock</th><th></th></tr></thead>
+      <tbody id="pfVarEditBody"></tbody>
+    </table></div>
+    <div class="row">
+      <input class="inp" id="pfNewVarColor" placeholder="New color">
+      <input class="inp" id="pfNewVarSize" placeholder="New size">
+      <input class="inp" id="pfNewVarStock" type="number" min="0" value="1" placeholder="Stock">
+      <button class="btn ghost sm" id="pfNewVarAdd">＋ Add Variant</button>
     </div>
-    <div class="mb-8"><span class="dim">Sizes:</span></div>
-    <div class="chips mb-12" id="pfSizes">
-      ${['28','30','32','34','36','38','40','S','M','L','XL','XXL','Free'].map(c=>`<label class="chip"><input type="checkbox" value="${c}"> ${c}</label>`).join('')}
-      <input class="inp" id="pfSizeMore" placeholder="+ custom (e.g. M/28, L/30)" style="max-width:220px;">
+    ` : `
+    <div class="divider"></div>
+    <div class="strong mb-8">Variants <small class="dim" style="font-weight:400;">— pick a color/size below or type your own, then press ＋</small></div>
+    <div class="mb-8"><span class="dim">Colors — quick add:</span></div>
+    <div class="chips mb-8" id="pfColorPresets">
+      ${COLOR_PRESETS.map(c=>`<span class="chip" data-preset-color="${c}">${c}</span>`).join('')}
     </div>
+    <div class="row mb-8">
+      <input class="inp" id="pfColorInput" placeholder="Type a color and press +">
+      <button class="btn ghost sm" id="pfColorAddBtn">＋ Add</button>
+    </div>
+    <div class="chips mb-12" id="pfColorChips"></div>
+
+    <div class="mb-8"><span class="dim">Sizes — quick add:</span></div>
+    <div class="chips mb-8" id="pfSizePresets">
+      ${SIZE_PRESETS.map(c=>`<span class="chip" data-preset-size="${c}">${c}</span>`).join('')}
+    </div>
+    <div class="row mb-8">
+      <input class="inp" id="pfSizeInput" placeholder="Type a size and press +">
+      <button class="btn ghost sm" id="pfSizeAddBtn">＋ Add</button>
+    </div>
+    <div class="chips mb-12" id="pfSizeChips"></div>
+
     <div class="field"><label>Default stock per variant</label><input class="inp" id="pfVarStock" type="number" min="0" value="1"></div>
-    <div id="pfPreview" class="hint"></div>
+    <div id="pfPreview" class="hint mb-8"></div>
+    <div class="tbl-wrap" id="pfPreviewTblWrap" style="display:none;"><table>
+      <thead><tr><th>Color</th><th>Size</th><th>Stock</th></tr></thead>
+      <tbody id="pfPreviewTblBody"></tbody>
+    </table></div>
     `}
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label: isEdit?'Save Changes':'Create Product', kind:'ok', on: () => saveProduct(existing) }
   ]);
 
-  // Live combination preview
-  if(!isEdit){
-    const updatePreview = () => {
-      const colors = getChecked('pfColors', 'pfColorMore');
-      const sizes = getChecked('pfSizes', 'pfSizeMore');
-      $('#pfPreview').textContent = colors.length && sizes.length
-        ? colors.length + ' × ' + sizes.length + ' = ' + (colors.length*sizes.length) + ' variants create honge'
-        : 'At least ek color aur ek size choose karein';
-    };
-    $('#pfColors').addEventListener('change', updatePreview);
-    $('#pfSizes').addEventListener('change', updatePreview);
-    $('#pfColorMore').addEventListener('input', updatePreview);
-    $('#pfSizeMore').addEventListener('input', updatePreview);
-    // toggle "on" class for visual
-    $('#pfColors').addEventListener('change', e => e.target.closest('.chip')?.classList.toggle('on', e.target.checked));
-    $('#pfSizes').addEventListener('change', e => e.target.closest('.chip')?.classList.toggle('on', e.target.checked));
+  if(isEdit){
+    renderEditVariants(existing);
+    $('#pfNewVarAdd').addEventListener('click', () => addVariantInline(existing));
+  }else{
+    wireVariantBuilder();
   }
 }
-function getChecked(chipContainerId, extraInputId){
-  const boxes = $$('#'+chipContainerId+' input[type=checkbox]');
-  const out = boxes.filter(b => b.checked).map(b => b.value);
-  const extra = $('#'+extraInputId)?.value || '';
-  extra.split(',').map(s=>s.trim()).filter(Boolean).forEach(v => { if(!out.includes(v)) out.push(v); });
-  return out;
+
+// New-product variant builder: presets + typed custom entries both add to
+// the same chip list; each chip can be removed with the × on it.
+function wireVariantBuilder(){
+  const addColor = (val) => {
+    val = String(val||'').trim();
+    if(!val || pfColorList.includes(val)) return;
+    pfColorList.push(val);
+    renderPfChips();
+  };
+  const addSize = (val) => {
+    val = String(val||'').trim();
+    if(!val || pfSizeList.includes(val)) return;
+    pfSizeList.push(val);
+    renderPfChips();
+  };
+  $('#pfColorPresets').addEventListener('click', e => {
+    const c = e.target.closest('[data-preset-color]'); if(!c) return;
+    addColor(c.dataset.presetColor);
+  });
+  $('#pfSizePresets').addEventListener('click', e => {
+    const c = e.target.closest('[data-preset-size]'); if(!c) return;
+    addSize(c.dataset.presetSize);
+  });
+  $('#pfColorAddBtn').addEventListener('click', () => { addColor($('#pfColorInput').value); $('#pfColorInput').value=''; $('#pfColorInput').focus(); });
+  $('#pfSizeAddBtn').addEventListener('click', () => { addSize($('#pfSizeInput').value); $('#pfSizeInput').value=''; $('#pfSizeInput').focus(); });
+  $('#pfColorInput').addEventListener('keyup', e => { if(e.key==='Enter'){ addColor($('#pfColorInput').value); $('#pfColorInput').value=''; } });
+  $('#pfSizeInput').addEventListener('keyup', e => { if(e.key==='Enter'){ addSize($('#pfSizeInput').value); $('#pfSizeInput').value=''; } });
+  $('#pfVarStock').addEventListener('input', renderPfChips);
+  renderPfChips();
+}
+function renderPfChips(){
+  const colorBox = $('#pfColorChips');
+  const sizeBox = $('#pfSizeChips');
+  if(colorBox){
+    colorBox.innerHTML = pfColorList.map((c,i)=>`<span class="chip on">${c} <b data-rm-color="${i}" style="cursor:pointer;margin-left:4px;">×</b></span>`).join('');
+    colorBox.onclick = e => { const b=e.target.closest('[data-rm-color]'); if(!b) return; pfColorList.splice(+b.dataset.rmColor,1); renderPfChips(); };
+  }
+  if(sizeBox){
+    sizeBox.innerHTML = pfSizeList.map((s,i)=>`<span class="chip on">${s} <b data-rm-size="${i}" style="cursor:pointer;margin-left:4px;">×</b></span>`).join('');
+    sizeBox.onclick = e => { const b=e.target.closest('[data-rm-size]'); if(!b) return; pfSizeList.splice(+b.dataset.rmSize,1); renderPfChips(); };
+  }
+  const preview = $('#pfPreview');
+  const tblWrap = $('#pfPreviewTblWrap');
+  const tblBody = $('#pfPreviewTblBody');
+  if(!preview) return;
+  if(pfColorList.length && pfSizeList.length){
+    preview.textContent = pfColorList.length + ' colors × ' + pfSizeList.length + ' sizes = ' + (pfColorList.length*pfSizeList.length) + ' variants will be created. Adjust stock per row if needed:';
+    const def = Number($('#pfVarStock')?.value || 1);
+    tblWrap.style.display = 'block';
+    tblBody.innerHTML = '';
+    pfColorList.forEach(c => {
+      pfSizeList.forEach(s => {
+        const key = c+'||'+s;
+        if(pfStockOverride[key] === undefined) pfStockOverride[key] = def;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${c}</td><td>${s}</td><td><input class="inp" type="number" min="0" data-key="${key}" value="${pfStockOverride[key]}" style="max-width:80px;"></td>`;
+        tblBody.appendChild(tr);
+      });
+    });
+    tblBody.onchange = e => {
+      const inp = e.target.closest('input[data-key]'); if(!inp) return;
+      pfStockOverride[inp.dataset.key] = Number(inp.value||0);
+    };
+  }else{
+    preview.textContent = 'Add at least one color and one size to build variants.';
+    tblWrap.style.display = 'none';
+    tblBody.innerHTML = '';
+  }
+}
+
+// Existing-product variant editor: every field except UID can be changed
+// directly from this table (Color, Size, Stock), plus add/remove variants.
+function renderEditVariants(existing){
+  const body = $('#pfVarEditBody');
+  if(!body) return;
+  const variants = existing.variants || [];
+  body.innerHTML = variants.map(v => `
+    <tr data-vid="${v.VariantID}">
+      <td><input class="inp" data-f="Color" value="${v.Color||''}" style="min-width:70px;"></td>
+      <td><input class="inp" data-f="Size" value="${v.Size||''}" style="min-width:60px;"></td>
+      <td><input class="inp" type="number" min="0" data-f="Stock" value="${v.Stock||0}" style="max-width:80px;"></td>
+      <td>
+        <button class="btn ghost sm" data-a="save">Save</button>
+        <button class="btn bad sm" data-a="del">×</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="4" class="empty">No variants yet — add one below</td></tr>';
+  body.onclick = async e => {
+    const btn = e.target.closest('button'); if(!btn) return;
+    const tr = btn.closest('tr'); const vid = tr.dataset.vid;
+    if(btn.dataset.a === 'save'){
+      const Color = tr.querySelector('[data-f="Color"]').value.trim();
+      const Size = tr.querySelector('[data-f="Size"]').value.trim();
+      const Stock = Number(tr.querySelector('[data-f="Stock"]').value||0);
+      if(!Color || !Size){ toast('Color and Size cannot be empty', 'bad'); return; }
+      const r = await apiPost('updateVariant', { variantID: vid, Color, Size, Stock });
+      if(!r.success){ toast(r.error, 'bad'); return; }
+      toast('Variant updated', 'ok');
+      await pullAll();
+      const fresh = state.data.products.find(x=>x.ProductID===existing.ProductID);
+      if(fresh){ existing.variants = fresh.variants; renderEditVariants(existing); }
+    }
+    if(btn.dataset.a === 'del'){
+      if(!confirm('Remove this variant? This action cannot be undone.')) return;
+      const r = await apiPost('deleteVariant', { variantID: vid });
+      if(!r.success){ toast(r.error, 'bad'); return; }
+      toast('Variant removed', 'ok');
+      await pullAll();
+      const fresh = state.data.products.find(x=>x.ProductID===existing.ProductID);
+      if(fresh){ existing.variants = fresh.variants; renderEditVariants(existing); }
+    }
+  };
+}
+async function addVariantInline(existing){
+  const Color = $('#pfNewVarColor').value.trim();
+  const Size = $('#pfNewVarSize').value.trim();
+  const Stock = Number($('#pfNewVarStock').value||0);
+  if(!Color || !Size){ toast('Color and Size are both required', 'bad'); return; }
+  const r = await apiPost('addVariant', { ProductID: existing.ProductID, UID: existing.UID, Color, Size, Stock, SalePrice: existing.SalePrice, BatchNumber: existing.BatchNumber });
+  if(!r.success){ toast(r.error, 'bad'); return; }
+  toast('Variant added', 'ok');
+  $('#pfNewVarColor').value=''; $('#pfNewVarSize').value=''; $('#pfNewVarStock').value=1;
+  await pullAll();
+  const fresh = state.data.products.find(x=>x.ProductID===existing.ProductID);
+  if(fresh){ existing.variants = fresh.variants; renderEditVariants(existing); }
 }
 async function saveProduct(existing){
   const isEdit = !!existing;
   const uid = $('#pfUID').value.trim();
   const name = $('#pfName').value.trim();
   const batch = $('#pfBatch').value.trim();
-  if(!uid || !name){ toast('UID aur Name zaruri hai', 'bad'); return; }
-  if(!batch){ toast('Batch Number zaruri hai', 'bad'); return; }
+  if(!name){ toast('Product name is required', 'bad'); return; }
+  if(!batch){ toast('Batch number is required', 'bad'); return; }
 
   const body = {
     UID: uid, Name: name,
-    Category: $('#pfCat').value, Type: $('#pfType').value, Fit: $('#pfFit').value,
+    Category: $('#pfCat').value.trim(), Type: $('#pfType').value.trim(), Fit: $('#pfFit').value.trim(),
     FabricType: $('#pfFab').value, Material: $('#pfMat').value, Shade: $('#pfShade').value,
     Gender: $('#pfGender').value, Brand: $('#pfBrand').value,
     BatchNumber: batch,
@@ -1899,31 +2056,45 @@ async function saveProduct(existing){
     body.productID = existing.ProductID;
     const r = await apiPost('updateProduct', body);
     if(!r.success){ toast(r.error, 'bad'); return; }
-    toast('Updated', 'ok');
-  }else{
-    body.Barcode = uid + '-' + rnd().toUpperCase();
-    const r = await apiPost('addProduct', body);
-    if(!r.success){ toast(r.error, 'bad'); return; }
-    const pid = r.data.product.ProductID;
-    // Now variants: create every color × size combo
-    const colors = getChecked('pfColors', 'pfColorMore');
-    const sizes = getChecked('pfSizes', 'pfSizeMore');
-    const stk = Number($('#pfVarStock').value||1);
-    if(colors.length && sizes.length){
-      let ok = 0;
-      for(const c of colors){
-        for(const s of sizes){
-          const vr = await apiPost('addVariant', {
-            ProductID: pid, UID: uid, Color: c, Size: s, Stock: stk,
-            SalePrice: body.SalePrice, BatchNumber: batch
-          });
-          if(vr.success) ok++;
-        }
+    toast('Product updated', 'ok');
+    closeModal();
+    await pullAll();
+    return;
+  }
+
+  body.Barcode = uid + '-' + rnd().toUpperCase();
+  const r = await apiPost('addProduct', body);
+  if(!r.success){ toast(r.error, 'bad'); return; }
+  const pid = r.data.product.ProductID;
+
+  if(pfColorList.length && pfSizeList.length){
+    const combos = [];
+    pfColorList.forEach(c => pfSizeList.forEach(s => combos.push({ c, s })));
+    let ok = 0;
+    const failed = [];
+    for(const combo of combos){
+      const key = combo.c+'||'+combo.s;
+      const stk = pfStockOverride[key] !== undefined ? pfStockOverride[key] : Number($('#pfVarStock')?.value||1);
+      let vr = await apiPost('addVariant', {
+        ProductID: pid, UID: uid, Color: combo.c, Size: combo.s, Stock: stk,
+        SalePrice: body.SalePrice, BatchNumber: batch
+      });
+      if(!vr.success){
+        // Transient network/lock issues happen under load — retry once before giving up.
+        vr = await apiPost('addVariant', {
+          ProductID: pid, UID: uid, Color: combo.c, Size: combo.s, Stock: stk,
+          SalePrice: body.SalePrice, BatchNumber: batch
+        });
       }
-      toast('Product + '+ok+' variants created', 'ok');
-    }else{
-      toast('Product created (koi variant nahi)', 'ok');
+      if(vr.success) ok++; else failed.push(combo.c+'/'+combo.s);
     }
+    if(failed.length){
+      toast('Product created. '+ok+' variants saved — '+failed.length+' failed ('+failed.join(', ')+'). Add these from Edit Product.', 'warn');
+    }else{
+      toast('Product created with '+ok+' variants', 'ok');
+    }
+  }else{
+    toast('Product created (no variants added)', 'ok');
   }
   closeModal();
   await pullAll();
