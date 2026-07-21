@@ -11,6 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 :root{
   --bg:#f6f6f4; --panel:#ffffff; --line:#e4e4e0;
@@ -568,6 +569,16 @@ tr:hover td{background:#faf9f4;}
         <div class="row">
           <div class="stat"><div class="lab">Opening Total</div><div class="val" id="openTotal">₹0</div></div>
           <button class="btn" id="btnSaveOpen">Save Opening</button>
+        </div>
+      </div>
+
+      <div class="pane">
+        <h3>🗂️ Existing Cash In Hand <small>Pehle ka cash jo dukaan me pehle se rakha hai — ek baar set karein</small></h3>
+        <div class="tag-info mb-12">Yeh Opening/Closing se alag hai. System jo bills/cash-in-out se track karta hai woh sahi hai — bas jo cash aapke paas <b>system shuru karne se pehle se</b> rakha tha, uska note-wise breakdown yahan tap karke daaliye. Save karte hi yeh drawer ka current balance ban jaayega (upar/niche ka tracking usi se aage chalega). Jab bhi drawer count galat lage, isse dobara sahi kar sakte hain.</div>
+        <div class="denom-grid mb-12" id="denomExisting"></div>
+        <div class="row">
+          <div class="stat"><div class="lab">Existing Cash Total</div><div class="val" id="existingTotal">₹0</div></div>
+          <button class="btn ok" id="btnSaveExisting">Set as Current Drawer Balance</button>
         </div>
       </div>
 
