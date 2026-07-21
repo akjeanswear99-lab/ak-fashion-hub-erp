@@ -205,7 +205,7 @@ tr:hover td{background:#faf9f4;}
     </div>
     <div class="form-err" id="lgErr"></div>
     <button class="btn blk" id="lgBtn">Sign in</button>
-    <div class="hint mt-16 text-c">First-time login? Password blank rakhein — admin ke saath auto set ho jayega.</div>
+    <div class="hint mt-16 text-c">First login: leave the password field blank. It will be set automatically for the admin account.</div>
   </div>
 </div>
 
@@ -346,12 +346,18 @@ tr:hover td{background:#faf9f4;}
           <div class="mb-8" id="posCoinLine" style="display:none;"><span class="dim">Coin</span><span id="posCoinView" style="float:right;">-₹0</span></div>
           <div class="lg strong"><span>Grand Total</span><span id="posTotal" style="float:right;">₹0</span></div>
 
-          <!-- Cash tendered → auto change breakdown -->
+          <!-- Actual notes received from customer — not an assumed breakdown -->
           <div class="field mt-8" id="posTenderedWrap">
-            <label>Customer ne diya (₹)</label>
-            <input class="inp" id="posTendered" type="number" min="0" placeholder="Auto ho jayega jab enter karo">
+            <label>Notes Received from Customer</label>
+            <div class="denom-grid" id="posRecvDenom"></div>
+            <div class="hint mt-8">Total received: <b id="posRecvTotal">₹0</b></div>
           </div>
-          <div id="changeBox" class="tag-note" style="display:none;font-size:12px;"></div>
+          <div id="changeBox" class="tag-note" style="display:none;"></div>
+          <div class="field mt-8" id="posChangeDenomWrap" style="display:none;">
+            <label>Notes You Are Giving Back as Change <small class="dim" style="font-weight:400;">— edit to match exactly what you hand over</small></label>
+            <div class="denom-grid" id="posChangeDenom"></div>
+            <div class="hint mt-8">Total change: <b id="posChangeTotal">₹0</b></div>
+          </div>
 
           <div class="row mt-16">
             <button class="btn ok blk" id="btnComplete">✓ Complete Sale</button>
@@ -368,7 +374,7 @@ tr:hover td{background:#faf9f4;}
     <!-- ===== PRODUCTS ===== -->
     <div class="screen" id="scr-products">
       <div class="pane">
-        <h3>Product Catalog <small><button class="btn sm" id="btnAddProd">＋ Add Product</button></small></h3>
+        <h3>Product Catalog <small><button class="btn sm" id="btnAddProd">＋ Add Product</button> <button class="btn ghost sm" id="btnScanEditProd">📷 Scan to Edit</button></small></h3>
         <div class="row mb-12">
           <input class="inp" id="prodSearch" placeholder="Search by name, UID, brand, category, batch...">
         </div>
@@ -463,15 +469,20 @@ tr:hover td{background:#faf9f4;}
         </table></div>
       </div>
       <div class="pane">
-        <h3>Add Purchase</h3>
+        <h3>Add Purchase <small>Select the supplier and product — every variant of that product loads automatically below</small></h3>
         <div class="grid-3 mb-12">
           <div class="field"><label>Supplier</label><select class="inp" id="puSupplier"></select></div>
-          <div class="field"><label>Product UID</label><input class="inp" id="puUID" placeholder="AKFH000001"></div>
-          <div class="field"><label>Variant (color-size)</label><select class="inp" id="puVariant"></select></div>
-          <div class="field"><label>Quantity</label><input class="inp" id="puQty" type="number" min="1" value="1"></div>
-          <div class="field"><label>Unit Cost (₹)</label><input class="inp" id="puCost" type="number" min="0" value="0"></div>
+          <div class="field"><label>Product</label><select class="inp" id="puUID"><option value="">Select product</option></select></div>
+          <div class="field"><label>Purchase Date</label><input class="inp" id="puDate" type="date"></div>
+        </div>
+        <div class="grid-2 mb-12">
+          <div class="field"><label>Unit Cost (₹) <small class="dim" style="font-weight:400;">applies to all lines below</small></label><input class="inp" id="puCost" type="number" min="0" value="0"></div>
           <div class="field"><label>Invoice #</label><input class="inp" id="puInv"></div>
         </div>
+        <div class="tbl-wrap mb-12"><table>
+          <thead><tr><th>Color</th><th>Size</th><th>Current Stock</th><th>Qty Received</th></tr></thead>
+          <tbody id="puVariantBody"><tr><td colspan="4" class="empty">Select a product to load its variants</td></tr></tbody>
+        </table></div>
         <button class="btn" id="btnAddPu">Record Purchase</button>
       </div>
     </div>
@@ -805,6 +816,10 @@ const state = {
   denomOpen: {},
   denomClose: {},
   tenderedDenoms: {},         // denomination-wise breakdown of CHANGE to give back in POS (for display)
+  cashShortfall: false,       // true when Cash received < total — blocks Complete Sale until resolved
+  posReceivedDenoms: {},      // actual notes the customer handed over, entered by staff (not assumed)
+  posChangeDenoms: {},        // actual notes being handed back as change, entered/adjusted by staff
+  posLastChangeAmt: null,     // last change amount a suggestion was generated for (avoids re-typing loss)
   chart: null,
   pendingSubmit: false        // duplicate-click guard
 };
@@ -1037,9 +1052,9 @@ function applyRolePerms(){
 }
 const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1 };
 function accessDeniedHTML(){
-  return '<div class="pane"><div class="empty">🔒 Ye section sirf Admin ke liye hai.<br>'
-       + 'Agar aap admin hain aur phir bhi yeh dikh raha hai, toh Staff sheet me apni row check karein — '
-       + 'Role column me exactly <b>admin</b> likha hona chahiye.</div></div>';
+  return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
+       + 'If you are an administrator and still see this message, please verify that the Role column for your account '
+       + 'in the Staff sheet is set exactly to <b>admin</b>.</div></div>';
 }
 
 function wireLogin(){
@@ -1063,8 +1078,16 @@ async function doLogin(){
 }
 function wireHeader(){
   $('#btnLogout').addEventListener('click', () => {
-    localStorage.removeItem(SESS_KEY);
-    state.user = null; showLogin();
+    openModal('Confirm Logout', `
+      <p>Are you sure you want to log out of this session?</p>
+    `, [
+      { label:'Cancel', kind:'ghost', on: closeModal },
+      { label:'Logout', kind:'bad', on: () => {
+        closeModal();
+        localStorage.removeItem(SESS_KEY);
+        state.user = null; showLogin();
+      }}
+    ]);
   });
   $('#btnRefresh').addEventListener('click', pullAll);
   $('#btnSideToggle').addEventListener('click', () => {
@@ -1240,9 +1263,8 @@ function wirePOS(){
     }
     else showSuggest($('#posScan').value.trim());
   });
-  $('#btnClearCart').addEventListener('click', () => { state.cart=[]; state.activeCoin=null; refreshCart(); });
+  $('#btnClearCart').addEventListener('click', () => { state.cart=[]; state.activeCoin=null; resetPosCashInputs(); refreshCart(); });
   $('#posDisc').addEventListener('input', refreshCart);
-  $('#posTendered').addEventListener('input', refreshCart);
   $('#btnComplete').addEventListener('click', completeSale);
   $('#btnPrintLast').addEventListener('click', () => state.lastBill ? printBill(state.lastBill) : toast('No recent bill', 'warn'));
   $('#btnWhatsappLast').addEventListener('click', whatsappLastBill);
@@ -1259,12 +1281,47 @@ function wirePOS(){
     addToCartByScan(code);
   }, { continuous:true }));
   $('#posPay').addEventListener('change', updateUpiQr);
+  buildPosReceivedGrid();
+  buildPosChangeGrid();
+}
+// Note-count grid the customer actually handed over — no assumptions, staff
+// enters exactly what was received. Typing here recalculates the bill via
+// refreshCart(), which in turn re-evaluates shortfall / change.
+function buildPosReceivedGrid(){
+  const el = $('#posRecvDenom'); if(!el) return;
+  el.innerHTML = DENOMS.map(d => `<div class="cell"><b>₹${d}</b><input type="number" min="0" value="${state.posReceivedDenoms[d]||0}" data-denom="${d}"></div>`).join('');
+  el.oninput = () => {
+    el.querySelectorAll('input').forEach(inp => { state.posReceivedDenoms[inp.dataset.denom] = Number(inp.value||0); });
+    refreshCart();
+  };
+}
+// Note-count grid for the change handed back — pre-filled with a suggested
+// breakdown when the change amount changes, but always editable so it can
+// match the exact notes actually taken from the drawer.
+function buildPosChangeGrid(){
+  const el = $('#posChangeDenom'); if(!el) return;
+  el.innerHTML = DENOMS.map(d => `<div class="cell"><b>₹${d}</b><input type="number" min="0" value="${state.posChangeDenoms[d]||0}" data-denom="${d}"></div>`).join('');
+  el.oninput = () => {
+    el.querySelectorAll('input').forEach(inp => { state.posChangeDenoms[inp.dataset.denom] = Number(inp.value||0); });
+    const total = DENOMS.reduce((s,d)=> s+(state.posChangeDenoms[d]||0)*d, 0);
+    $('#posChangeTotal').textContent = fmt(total);
+  };
+}
+function resetPosCashInputs(){
+  state.posReceivedDenoms = {}; state.posChangeDenoms = {}; state.posLastChangeAmt = null;
+  state.tenderedDenoms = {}; state.cashShortfall = false;
+  buildPosReceivedGrid(); buildPosChangeGrid();
+  $('#posRecvTotal').textContent = fmt(0);
+  $('#posChangeTotal').textContent = fmt(0);
+  $('#changeBox').style.display = 'none';
+  $('#posChangeDenomWrap').style.display = 'none';
 }
 function updateUpiQr(){
   const mode = $('#posPay').value;
   const showQr = (mode === 'UPI' || mode === 'Online');
   $('#posTenderedWrap').style.display = (mode==='Cash' || mode==='Mixed') ? 'block' : 'none';
   $('#changeBox').style.display = 'none';
+  $('#posChangeDenomWrap').style.display = 'none';
   if(showQr && state.cfg.upiQR){
     $('#upiQrImg').src = state.cfg.upiQR;
     $('#upiQrBox').style.display = 'block';
@@ -1310,6 +1367,10 @@ function findByCode(code){
 }
 function addToCartByScan(code){
   if(!code) return;
+  // A scanned code might be a printed bill's own barcode — show its details
+  // instead of failing as "product not found".
+  const billHit = findBillByCode(code);
+  if(billHit){ openBillDetailsModal(billHit); return; }
   const hit = findByCode(code);
   if(!hit){ toast('Product not found: '+code, 'bad'); return; }
   if(hit.variant){
@@ -1318,14 +1379,32 @@ function addToCartByScan(code){
     openScanDetails(hit.product);
   }
 }
+// Read-only bill lookup — shown when a bill's printed barcode is scanned anywhere.
+function openBillDetailsModal(b){
+  const full = billWithItems(b);
+  const rows = (full.items||[]).map(it => `<tr><td>${it.Name}</td><td>${it.Color||''} ${it.Size||''}</td><td>${it.Quantity}</td><td>${fmt(it.Price)}</td><td>${fmt(it.LineTotal)}</td></tr>`).join('');
+  openModal('Bill • '+(b.BillNumber||''), `
+    <div class="grid-2 mb-12">
+      <div><b>Bill #:</b> ${b.BillNumber||''}<br><b>Date:</b> ${(b.CreatedDate||'').substr(0,16).replace('T',' ')}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
+      <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Total:</b> ${fmt(b.Total)}</div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Item</th><th>Var</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="empty">No line items found</td></tr>'}</tbody>
+    </table></div>
+  `, [
+    { label:'Close', kind:'ghost', on: closeModal },
+    { label:'🖨 Print', kind:'ok', on: () => printBill(full) }
+  ]);
+}
 function addToCartByProduct(p){
-  if(!(p.variants||[]).length){ toast('Iss product ke variants nahi bane', 'warn'); return; }
+  if(!(p.variants||[]).length){ toast('This product has no variants yet', 'warn'); return; }
   if(p.variants.length===1){ pushToCart(p, p.variants[0]); return; }
   openScanDetails(p);
 }
 function pushToCart(p, v){
-  if(!v){ toast('Variant select karein', 'warn'); return; }
-  if(Number(v.Stock||0) < 1){ toast('Stock zero — cannot add', 'bad'); return; }
+  if(!v){ toast('Select a variant', 'warn'); return; }
+  if(Number(v.Stock||0) < 1){ toast('Out of stock — cannot add', 'bad'); return; }
   const key = v.VariantID;
   const ex = state.cart.find(c => c.VariantID===key);
   const price = Number(v.SalePrice || p.SalePrice || 0);
@@ -1360,7 +1439,7 @@ function refreshCart(){
       </div>
       <div class="qty-ctrl">
         <button data-a="dec" data-i="${i}">–</button>
-        <span>${c.Quantity}</span>
+        <input type="number" min="1" max="${c.MaxStock}" value="${c.Quantity}" data-a="qtyval" data-i="${i}" style="width:40px;text-align:center;border:none;background:transparent;font-weight:600;">
         <button data-a="inc" data-i="${i}">+</button>
       </div>
       <div class="strong text-r">${fmt(line)}</div>
@@ -1378,6 +1457,15 @@ function refreshCart(){
     if(b.dataset.a==='del'){ state.cart.splice(i,1); }
     refreshCart();
   };
+  box.onchange = e => {
+    const inp = e.target.closest('input[data-a="qtyval"]'); if(!inp) return;
+    const i = +inp.dataset.i;
+    let v = Math.floor(Number(inp.value||1));
+    if(isNaN(v) || v < 1) v = 1;
+    if(v > state.cart[i].MaxStock){ toast('Only '+state.cart[i].MaxStock+' in stock', 'warn'); v = state.cart[i].MaxStock; }
+    state.cart[i].Quantity = v;
+    refreshCart();
+  };
   const disc = Number($('#posDisc').value||0);
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
   const total = Math.max(0, sub - disc - coinUse);
@@ -1388,10 +1476,12 @@ function refreshCart(){
     $('#posCoinLine').style.display='block';
     $('#posCoinView').textContent = '-'+fmt(coinUse);
   }else{ $('#posCoinLine').style.display='none'; }
-  updateChangeBox(total);
+  updatePosCashCalc(total);
 }
 
-// Break a number into ₹500/200/100/50/20/10 counts for cash return
+// Break a number into ₹500/200/100/50/20/10 counts — used only as a starting
+// SUGGESTION for the change grid; the actual notes always come from what
+// staff enters, never assumed silently.
 function breakChange(amt){
   const notes = [500,200,100,50,20,10];
   const out = {};
@@ -1405,32 +1495,76 @@ function breakChange(amt){
 function denomText(obj){
   return Object.keys(obj).sort((a,c)=>c-a).map(n => '₹'+n+' × '+obj[n]).join('  •  ');
 }
-function updateChangeBox(total){
-  const t = Number($('#posTendered').value || 0);
+// Uses the actual "Notes Received" grid (not an assumed number) to work out
+// whether the customer has paid enough, and — if there's change due — shows
+// an editable "Notes Given Back" grid pre-filled with a suggested breakdown
+// that staff can correct to match exactly what was taken from the drawer.
+function updatePosCashCalc(total){
+  const payMode = $('#posPay').value;
+  const recv = DENOMS.reduce((s,d)=> s + (Number(state.posReceivedDenoms[d])||0)*d, 0);
   const box = $('#changeBox');
-  if(!t || t < total){ box.style.display = 'none'; state.tenderedDenoms = {}; return; }
-  const change = t - total;
-  const b = breakChange(change);
-  state.tenderedDenoms = b.notes; // change-to-give breakdown, used only for the on-screen hint
-  const parts = denomText(b.notes);
+  const changeWrap = $('#posChangeDenomWrap');
+  const recvTotalEl = $('#posRecvTotal');
+  if(recvTotalEl) recvTotalEl.textContent = fmt(recv);
+
+  if(!recv){
+    box.style.display = 'none';
+    changeWrap.style.display = 'none';
+    state.cashShortfall = false;
+    return;
+  }
+  if(payMode==='Cash' && recv < total){
+    // Customer has handed over less than the bill total — block the sale
+    // and show exactly how much more is still owed, before Complete Sale.
+    state.cashShortfall = true;
+    const shortBy = total - recv;
+    box.style.display = 'block';
+    box.className = 'tag-info';
+    box.innerHTML = '<b>⚠ Short by ₹' + Math.round(shortBy) + '</b> — please collect ₹' + Math.round(shortBy) + ' more from the customer before completing the sale.';
+    changeWrap.style.display = 'none';
+    return;
+  }
+  state.cashShortfall = false;
+  const change = recv - total;
   box.style.display = 'block';
-  box.innerHTML = '<b>Return ₹' + Math.round(change) + '</b>' + (parts ? ' — ' + parts : ' (coin/change nahi hai denom me)');
+  box.className = 'tag-note';
+  if(change > 0){
+    box.innerHTML = '<b>Change due: ₹' + Math.round(change) + '</b> — enter exactly which notes you hand back below.';
+    changeWrap.style.display = 'block';
+    if(state.posLastChangeAmt !== change){
+      state.posLastChangeAmt = change;
+      const suggestion = breakChange(change).notes;
+      DENOMS.forEach(d => { state.posChangeDenoms[d] = suggestion[d]||0; });
+      buildPosChangeGrid();
+      $('#posChangeTotal').textContent = fmt(change);
+    }
+  }else{
+    box.innerHTML = '<b>Exact amount received — no change due.</b>';
+    changeWrap.style.display = 'none';
+    DENOMS.forEach(d => { state.posChangeDenoms[d] = 0; });
+    state.posLastChangeAmt = 0;
+  }
 }
 async function checkCoin(){
   const code = $('#posCoin').value.trim();
-  if(!code){ toast('Coin code daaliye', 'warn'); return; }
+  if(!code){ toast('Enter a coin code', 'warn'); return; }
   const w = (state.data.wallet||[]).find(x => String(x.WalletID)===code);
-  if(!w){ toast('Coin nahi mila (sync try karein)', 'bad'); return; }
+  if(!w){ toast('Coin not found — try syncing first', 'bad'); return; }
   if(String(w.Status)!=='Active'){ toast('Coin status: '+w.Status, 'bad'); return; }
-  if(new Date(w.ExpiryDate) < new Date()){ toast('Coin expire ho chuka', 'bad'); return; }
+  if(new Date(w.ExpiryDate) < new Date()){ toast('This coin has expired', 'bad'); return; }
   state.activeCoin = w;
   $('#coinApplyBox').style.display='block';
-  $('#coinApplyBox').innerHTML = `Coin <b>${w.WalletID}</b> — ₹${w.RemainingAmount} balance. Bill se auto minus hoga.`;
+  $('#coinApplyBox').innerHTML = `Coin <b>${w.WalletID}</b> — ₹${w.RemainingAmount} balance available. It will be deducted from the bill automatically.`;
   refreshCart();
 }
 async function completeSale(){
-  if(state.pendingSubmit){ toast('Ek bill process ho raha hai — thoda ruko', 'warn'); return; }
-  if(!state.cart.length){ toast('Cart empty', 'warn'); return; }
+  if(state.pendingSubmit){ toast('A bill is already being processed — please wait', 'warn'); return; }
+  if(!state.cart.length){ toast('Cart is empty', 'warn'); return; }
+  const payModeCheck = $('#posPay').value;
+  if(payModeCheck==='Cash' && state.cashShortfall){
+    toast('The amount received is less than the bill total — please collect the remaining amount first', 'bad');
+    return;
+  }
   state.pendingSubmit = true;
   const btn = $('#btnComplete'); btn.disabled = true; btn.textContent = 'Saving…';
 
@@ -1439,8 +1573,19 @@ async function completeSale(){
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
   const total = Math.max(0, sub - disc - coinUse);
   const payMode = $('#posPay').value;
-  const tendered = Number($('#posTendered').value||0);
-  const changeGiven = (payMode==='Cash' && tendered > total) ? (tendered - total) : 0;
+
+  // Use exactly what was entered in the note grids — never assumed.
+  // If staff didn't enter any notes (e.g. exact-cash convenience case),
+  // fall back to treating the payment as exact with no note tracking.
+  let receivedBreak = {};
+  DENOMS.forEach(d => { if(state.posReceivedDenoms[d]) receivedBreak[d] = Number(state.posReceivedDenoms[d]); });
+  let tendered = DENOMS.reduce((s,d)=> s + (receivedBreak[d]||0)*d, 0);
+  if(payMode==='Cash' && tendered===0){ tendered = total; }
+
+  let changeBreak = {};
+  DENOMS.forEach(d => { if(state.posChangeDenoms[d]) changeBreak[d] = Number(state.posChangeDenoms[d]); });
+  const changeGiven = DENOMS.reduce((s,d)=> s + (changeBreak[d]||0)*d, 0);
+
   const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const payload = {
     BillID: billID,
@@ -1476,17 +1621,14 @@ async function completeSale(){
 
   // ------- Cash Drawer / Galla logging + note-wise auto-tracking -------
   if(payMode === 'Cash'){
-    const tenderedAmt = tendered > 0 ? tendered : total;
-    const receivedBreak = breakChange(tenderedAmt).notes;   // notes assumed received from customer
-    const changeBreak = changeGiven > 0 ? breakChange(changeGiven).notes : {}; // notes handed back
     const receivedNoteText = denomText(receivedBreak);
     apiPost('addCashTxn', {
       Date: dayKey(nowISO()),
       Time: new Date().toTimeString().substr(0,8),
-      Type: 'IN', Amount: tenderedAmt,
+      Type: 'IN', Amount: tendered,
       Reference: 'BILL-'+(r.data.billNumber||billID),
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Cash sale' + (receivedNoteText ? ' — Customer diya: '+receivedNoteText : '')
+      Description: 'Cash sale' + (receivedNoteText ? ' — Received: '+receivedNoteText : '')
     });
     if(changeGiven > 0){
       const changeNoteText = denomText(changeBreak);
@@ -1496,10 +1638,11 @@ async function completeSale(){
         Type: 'OUT', Amount: changeGiven,
         Reference: 'CHANGE-'+(r.data.billNumber||billID),
         StaffID: state.user.staffID, StaffName: state.user.name,
-        Description: 'Change returned' + (changeNoteText ? ' — Diya: '+changeNoteText : '')
+        Description: 'Change returned' + (changeNoteText ? ' — Given: '+changeNoteText : '')
       });
     }
-    // Note-wise drawer count updates automatically — no manual counting needed.
+    // Note-wise drawer count updates automatically from exactly what was
+    // entered above — no manual counting needed at day's end.
     const netDelta = {};
     DENOMS.forEach(d => { netDelta[d] = (receivedBreak[d]||0) - (changeBreak[d]||0); });
     apiPost('updateDrawerDenoms', {
@@ -1519,11 +1662,12 @@ async function completeSale(){
   }
 
   // reset
-  state.cart=[]; state.activeCoin=null; state.tenderedDenoms={};
+  state.cart=[]; state.activeCoin=null;
+  resetPosCashInputs();
   $('#posCoin').value=''; $('#posCoinLine').style.display='none';
   $('#coinApplyBox').style.display='none';
   $('#posDisc').value=0;
-  $('#posCustMob').value=''; $('#posCustName').value=''; $('#posTendered').value='';
+  $('#posCustMob').value=''; $('#posCustName').value='';
   refreshCart();
   printBill(state.lastBill);
   pullAll();
@@ -1748,6 +1892,11 @@ function openScanDetails(p){
 function wireProducts(){
   $('#btnAddProd').addEventListener('click', () => openProductForm(null));
   $('#prodSearch').addEventListener('input', renderProducts);
+  $('#btnScanEditProd').addEventListener('click', ()=> openCamScanner(code=>{
+    const hit = findByCode(code);
+    if(hit && hit.product){ openProductForm(hit.product); }
+    else{ toast('No product matches that barcode', 'bad'); }
+  }));
 }
 function renderProducts(){
   const term = ($('#prodSearch').value||'').toLowerCase();
@@ -2100,8 +2249,8 @@ async function saveProduct(existing){
   await pullAll();
 }
 async function deleteProduct(p){
-  if(!confirm('Delete '+p.Name+'? Iske saare variants bhi delete honge.')) return;
-  const ok = await requirePin('Product delete karne ke liye PIN daaliye');
+  if(!confirm('Delete '+p.Name+'? All variants associated with this product will also be permanently removed.')) return;
+  const ok = await requirePin('Enter PIN to delete this product');
   if(!ok) return;
   const r = await apiPost('deleteProduct', { productID: p.ProductID, staffID: state.user.staffID });
   if(!r.success){ toast(r.error, 'bad'); return; }
@@ -2149,7 +2298,7 @@ function renderInventory(){
       <td>${[v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ')||'—'}</td>
       <td>
         <button class="btn ghost sm" data-a="view" data-p="${p.ProductID}">👁</button>
-        ${isAdmin ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'">Stock ±</button>' : ''}
+        ${isAdmin ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'" data-cur="'+(v.Stock||0)+'" data-name="'+escapeHtml(p.Name+' — '+(v.Color||'')+' '+(v.Size||''))+'">Set Stock</button>' : ''}
       </td>`;
     tb.appendChild(tr);
   });
@@ -2160,17 +2309,36 @@ function renderInventory(){
       if(p) openScanDetails(p);
     }
     if(b.dataset.a==='adj'){
-      const change = prompt('Stock change (+ ya –)? e.g. +5 ya -1');
-      if(!change) return;
-      const n = Number(change);
-      if(!n){ toast('Invalid', 'bad'); return; }
-      const r = await apiPost('updateStock', { variantID: b.dataset.v, qtyChange: n, staffID: state.user.staffID });
-      if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Stock updated', 'ok');
-      pullAll();
+      openSetStockDialog(b.dataset.v, b.dataset.name, Number(b.dataset.cur||0));
     }
   };
   if(!rows.length) tb.innerHTML = '<tr><td colspan="'+(isAdmin?9:8)+'" class="empty">No inventory rows</td></tr>';
+}
+
+// Direct-value stock editor — enter the exact stock count you counted,
+// instead of typing a +/- delta. The delta sent to the server is computed
+// automatically from the difference.
+function openSetStockDialog(variantID, label, currentStock){
+  openModal('Set Stock — '+label, `
+    <div class="field">
+      <label>Current stock: ${currentStock}</label>
+      <input class="inp" id="stkNewVal" type="number" min="0" value="${currentStock}" style="font-size:20px;text-align:center;font-weight:700;" autofocus>
+    </div>
+    <div class="hint mt-8">Enter the exact stock count you have on hand — the change will be applied automatically.</div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Save', kind:'ok', on: async () => {
+      const newVal = Number($('#stkNewVal').value);
+      if(isNaN(newVal) || newVal < 0){ toast('Enter a valid stock number', 'bad'); return; }
+      const delta = newVal - currentStock;
+      if(delta === 0){ closeModal(); return; }
+      const r = await apiPost('updateStock', { variantID, qtyChange: delta, staffID: state.user.staffID });
+      if(!r.success){ toast(r.error, 'bad'); return; }
+      toast('Stock updated to '+newVal, 'ok');
+      closeModal();
+      pullAll();
+    }}
+  ]);
 }
 
 /* ============ CUSTOMERS ============ */
@@ -2248,17 +2416,22 @@ function openCustomerForm(c){
 function wireSuppliers(){
   $('#btnAddSup').addEventListener('click', ()=> openSupplierForm(null));
   $('#btnAddPu').addEventListener('click', addPurchase);
+  $('#puDate').value = dayKey(nowISO());
   $('#puUID').addEventListener('change', ()=>{
-    const uid = $('#puUID').value.trim();
+    const uid = $('#puUID').value;
     const p = (state.data.products||[]).find(x => String(x.UID)===uid);
-    const sel = $('#puVariant'); sel.innerHTML = '';
-    if(p){
-      (p.variants||[]).forEach(v => {
-        const o = document.createElement('option'); o.value = v.VariantID;
-        o.textContent = (v.Color||'')+' / '+(v.Size||'') + ' (stock '+v.Stock+')';
-        sel.appendChild(o);
-      });
+    const body = $('#puVariantBody');
+    if(!p || !(p.variants||[]).length){
+      body.innerHTML = '<tr><td colspan="4" class="empty">This product has no variants yet — add variants from Edit Product first</td></tr>';
+      return;
     }
+    body.innerHTML = p.variants.map(v => `
+      <tr data-vid="${v.VariantID}">
+        <td>${v.Color||''}</td>
+        <td>${v.Size||''}</td>
+        <td>${v.Stock||0}</td>
+        <td><input class="inp" type="number" min="0" value="0" data-qty style="max-width:90px;"></td>
+      </tr>`).join('');
   });
 }
 function renderSuppliers(){
@@ -2283,6 +2456,11 @@ function renderSuppliers(){
   };
   const sel = $('#puSupplier'); sel.innerHTML = '<option value="">Select supplier</option>';
   (state.data.suppliers||[]).forEach(s => { const o=document.createElement('option'); o.value=s.SupplierID; o.textContent=s.Name; sel.appendChild(o); });
+  const psel = $('#puUID');
+  const keepUid = psel.value;
+  psel.innerHTML = '<option value="">Select product</option>';
+  (state.data.products||[]).forEach(p => { const o=document.createElement('option'); o.value=p.UID; o.textContent=p.UID+' — '+p.Name; psel.appendChild(o); });
+  if(keepUid){ psel.value = keepUid; }
 }
 function openSupplierForm(s){
   const isEdit=!!s; s=s||{};
@@ -2336,22 +2514,39 @@ function openSupplierProfile(s){
 }
 async function addPurchase(){
   const supId = $('#puSupplier').value;
-  const uid = $('#puUID').value.trim();
-  const vid = $('#puVariant').value;
-  const qty = Number($('#puQty').value||0);
+  const uid = $('#puUID').value;
   const cost = Number($('#puCost').value||0);
-  if(!supId || !uid || !vid || qty<=0){ toast('Sab fields fill karein', 'bad'); return; }
+  const invNum = $('#puInv').value;
+  const date = $('#puDate').value || dayKey(nowISO());
+  if(!supId || !uid){ toast('Select a supplier and a product', 'bad'); return; }
   const prod = state.data.products.find(x => String(x.UID)===uid);
-  const v = prod?.variants.find(x => x.VariantID===vid);
-  const r = await apiPost('addPurchase', {
-    SupplierID: supId, ProductID: prod?.ProductID, UID: uid, VariantID: vid,
-    Color: v?.Color, Size: v?.Size,
-    Quantity: qty, UnitCost: cost, TotalCost: qty*cost,
-    InvoiceNumber: $('#puInv').value, StaffID: state.user.staffID
-  });
-  if(!r.success){ toast(r.error, 'bad'); return; }
-  toast('Purchase logged', 'ok');
-  $('#puQty').value=1; $('#puCost').value=0; $('#puInv').value='';
+  if(!prod){ toast('Product not found', 'bad'); return; }
+  const rows = $$('#puVariantBody tr[data-vid]');
+  const lines = rows.map(tr => ({
+    vid: tr.dataset.vid,
+    qty: Number(tr.querySelector('[data-qty]')?.value || 0)
+  })).filter(l => l.qty > 0);
+  if(!lines.length){ toast('Enter a received quantity for at least one variant', 'bad'); return; }
+
+  let ok = 0;
+  const failed = [];
+  for(const line of lines){
+    const v = prod.variants.find(x => x.VariantID === line.vid);
+    if(!v) continue;
+    const r = await apiPost('addPurchase', {
+      SupplierID: supId, ProductID: prod.ProductID, UID: uid, VariantID: line.vid,
+      Color: v.Color, Size: v.Size,
+      Quantity: line.qty, UnitCost: cost, TotalCost: line.qty*cost,
+      InvoiceNumber: invNum, Date: date, StaffID: state.user.staffID
+    });
+    if(r.success) ok++; else failed.push((v.Color||'')+'/'+(v.Size||''));
+  }
+  if(failed.length){
+    toast(ok+' variant(s) recorded, '+failed.length+' failed ('+failed.join(', ')+')', 'warn');
+  }else{
+    toast('Purchase recorded across '+ok+' variant(s)', 'ok');
+  }
+  $('#puCost').value=0; $('#puInv').value='';
   pullAll();
 }
 
@@ -2395,7 +2590,7 @@ function renderWallet(){
     if(!w) return;
     if(b.dataset.a==='wa') sendCoinWhatsapp(w);
     if(b.dataset.a==='cancel'){
-      if(!confirm('Coin cancel karein? Ye action wapas nahi hoga.')) return;
+      if(!confirm('Cancel this coin? This action cannot be undone.')) return;
       const r = await apiPost('cancelWallet', { WalletID: w.WalletID, StaffID: state.user.staffID });
       if(r.success){ toast('Coin cancelled', 'ok'); pullAll(); } else toast(r.error, 'bad');
     }
@@ -3235,7 +3430,7 @@ async function cashInOut(type){
   const amt = Number(prompt(type==='IN' ? 'Cash IN amount (₹):' : 'Cash OUT amount (₹):')||0);
   if(amt<=0) return;
   if(type === 'OUT'){
-    const ok = await requirePin('Cash OUT ke liye PIN daaliye');
+    const ok = await requirePin('Enter PIN to authorize Cash Out');
     if(!ok) return;
   }
   const desc = prompt('Notes / reason:')||'';
@@ -3523,9 +3718,9 @@ function requirePin(reason){
     // Admins with a session already skip PIN
     if(!state.user){ resolve(false); return; }
     openModal('🔐 Verify PIN', `
-      <p class="dim mb-8">${reason || 'Sensitive action — 4-digit PIN daaliye:'}</p>
+      <p class="dim mb-8">${reason || 'Enter your 4-digit PIN to continue:'}</p>
       <input class="inp mono" id="pinIn" type="password" maxlength="4" style="font-size:22px;letter-spacing:8px;text-align:center;" autofocus>
-      <div class="hint mt-8">PIN Staff Management screen me set kar sakte ho. Blank = skip agar staff ka PIN set nahi hai.</div>
+      <div class="hint mt-8">A PIN can be set from the Staff Management screen. If no PIN has been set for this account, verification will be skipped automatically.</div>
     `, [
       { label:'Cancel', kind:'ghost', on: () => { closeModal(); resolve(false); } },
       { label:'Verify', kind:'ok', on: async () => {
