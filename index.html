@@ -148,10 +148,19 @@ tr:hover td{background:#faf9f4;}
 .chip.on{background:#111;color:#fff;border-color:#111;}
 .hint{font-size:11px;color:var(--muted);margin-top:4px;}
 
-/* denom grid */
+/* denom grid — tap-to-add note counter */
 .denom-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.denom-grid .cell{background:#fafaf7;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;}
-.denom-grid .cell b{display:block;font-size:12px;color:var(--sub);}
+.denom-grid .cell{background:#fafaf7;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;position:relative;}
+.denom-grid .cell b.dtap{display:block;font-size:16px;color:var(--ink);cursor:pointer;user-select:none;padding:6px 0 2px;border-radius:6px;transition:background .1s;}
+.denom-grid .cell b.dtap:active{background:#ecebe4;}
+.denom-grid .cell .dqty-ctrl{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px;}
+.denom-grid .cell .dqty-ctrl button{border:1px solid var(--line);background:#fff;width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:14px;line-height:1;}
+.denom-grid .cell .dqty-ctrl button:active{background:#eee;}
+.denom-grid .cell .dqtyval{min-width:22px;font-weight:800;font-size:15px;}
+.denom-grid .cell .dclr{position:absolute;top:3px;right:5px;border:none;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 4px;}
+.denom-grid .cell .dclr:hover{color:var(--bad);}
+.denom-grid .cell .dhint{font-size:9px;color:var(--muted);margin-top:2px;}
+/* legacy numeric denom input (still used in a couple of read-only contexts) */
 .denom-grid .cell input{width:100%;text-align:center;font-weight:700;font-size:15px;border:none;background:transparent;padding:6px 0;}
 
 /* thermal print (2x3 tag) */
@@ -197,7 +206,7 @@ tr:hover td{background:#faf9f4;}
     </div>
     <div class="field">
       <label>Mobile Number</label>
-      <input class="inp" id="lgMobile" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit mobile" autocomplete="username">
+      <input class="inp" id="lgMobile" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit mobile">
     </div>
     <div class="field">
       <label>Password</label>
@@ -530,12 +539,13 @@ tr:hover td{background:#faf9f4;}
               <label class="chip on"><input type="checkbox" id="tShowMRP" checked> MRP</label>
               <label class="chip on"><input type="checkbox" id="tShowSP" checked> Sale ₹</label>
               <label class="chip on"><input type="checkbox" id="tShowName" checked> Name</label>
+              <label class="chip on"><input type="checkbox" id="tShowSize" checked> Size</label>
               <label class="chip"><input type="checkbox" id="tShowBatch"> Batch</label>
             </div>
           </div>
         </div>
 
-        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print 4×6 inch page par hoga aur har page par sirf 4 stickers (2×2 grid) aayenge — agar 20-30 tags hain toh utne hi 4×6 pages apne aap ban jaayenge. Color/Size ka text tag pe print nahi hota — sirf barcode scan karne par milega.</div>
+        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print 4×6 inch page par hoga aur har page par 6 stickers (2×3 grid) aayenge, taaki page ki wastage kam ho — agar 20-30 tags hain toh utne hi 4×6 pages apne aap ban jaayenge. Size ab tag pe MRP ke upar bold me dikhega.</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -985,6 +995,21 @@ async function apiPost(action, data, opts){
   }
 }
 
+// Fire-and-forget POST with automatic retries in the background — used so the
+// UI never has to block/wait on a slow Sheet write. Caller gets a Promise it
+// can optionally await, but normal flow is: call this, move on immediately.
+async function apiPostBG(action, data, retries){
+  retries = retries == null ? 2 : retries;
+  let lastErr = null;
+  for(let attempt=0; attempt<=retries; attempt++){
+    const r = await apiPost(action, data, { fromQueue: attempt>0 });
+    if(r.success) return r;
+    lastErr = r.error;
+    if(attempt < retries) await new Promise(res => setTimeout(res, 400 + attempt*400));
+  }
+  return { success:false, error: lastErr||'Failed after retries' };
+}
+
 /* ------- init ------- */
 window.addEventListener('DOMContentLoaded', () => {
   loadCfg(); loadSess(); loadCache();
@@ -1292,28 +1317,56 @@ function wirePOS(){
   buildPosReceivedGrid();
   buildPosChangeGrid();
 }
-// Note-count grid the customer actually handed over — no assumptions, staff
-// enters exactly what was received. Typing here recalculates the bill via
-// refreshCart(), which in turn re-evaluates shortfall / change.
-function buildPosReceivedGrid(){
-  const el = $('#posRecvDenom'); if(!el) return;
-  el.innerHTML = DENOMS.map(d => `<div class="cell"><b>₹${d}</b><input type="number" min="0" value="${state.posReceivedDenoms[d]||0}" data-denom="${d}"></div>`).join('');
-  el.oninput = () => {
-    el.querySelectorAll('input').forEach(inp => { state.posReceivedDenoms[inp.dataset.denom] = Number(inp.value||0); });
-    refreshCart();
+
+/* ------- denomination click-to-add grids (shared by all 4 note-count UIs) -------
+   Every place in the app where staff need to record a note-wise breakdown
+   (Opening Cash, Closing Cash, POS "Notes Received", POS "Notes Given as
+   Change") now uses the SAME tap-to-add control: tap the ₹ amount once and
+   its count goes up by 1, tap again for 2, and so on — no typing needed.
+   A small +/- stepper next to the count is there for quick correction, and
+   the × in the corner resets that note back to 0. */
+function renderDenomGrid(container, stateObj, onChange){
+  if(!container) return;
+  container.innerHTML = DENOMS.map(d => `
+    <div class="cell" data-denom="${d}">
+      <button class="dclr" data-act="clear" title="Reset ₹${d}">×</button>
+      <b class="dtap" data-act="add">₹${d}</b>
+      <div class="dqty-ctrl">
+        <button data-act="dec">–</button>
+        <span class="dqtyval">${stateObj[d]||0}</span>
+        <button data-act="inc">+</button>
+      </div>
+      <div class="dhint">tap ₹${d} to add a note</div>
+    </div>
+  `).join('');
+  container.onclick = e => {
+    const cell = e.target.closest('.cell[data-denom]'); if(!cell) return;
+    const d = cell.dataset.denom;
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    let v = Number(stateObj[d]||0);
+    if(act === 'clear') v = 0;
+    else if(act === 'dec') v = Math.max(0, v-1);
+    else v = v + 1; // tapping the ₹ label or anywhere else on the cell adds one note
+    stateObj[d] = v;
+    cell.querySelector('.dqtyval').textContent = v;
+    onChange();
   };
 }
+
+// Note-count grid the customer actually handed over — no assumptions, staff
+// taps in exactly what was received. Every tap recalculates the bill via
+// refreshCart(), which in turn re-evaluates shortfall / change.
+function buildPosReceivedGrid(){
+  renderDenomGrid($('#posRecvDenom'), state.posReceivedDenoms, refreshCart);
+}
 // Note-count grid for the change handed back — pre-filled with a suggested
-// breakdown when the change amount changes, but always editable so it can
-// match the exact notes actually taken from the drawer.
+// breakdown when the change amount changes, but always tap-adjustable so it
+// can match the exact notes actually taken from the drawer.
 function buildPosChangeGrid(){
-  const el = $('#posChangeDenom'); if(!el) return;
-  el.innerHTML = DENOMS.map(d => `<div class="cell"><b>₹${d}</b><input type="number" min="0" value="${state.posChangeDenoms[d]||0}" data-denom="${d}"></div>`).join('');
-  el.oninput = () => {
-    el.querySelectorAll('input').forEach(inp => { state.posChangeDenoms[inp.dataset.denom] = Number(inp.value||0); });
+  renderDenomGrid($('#posChangeDenom'), state.posChangeDenoms, () => {
     const total = DENOMS.reduce((s,d)=> s+(state.posChangeDenoms[d]||0)*d, 0);
     $('#posChangeTotal').textContent = fmt(total);
-  };
+  });
 }
 function resetPosCashInputs(){
   state.posReceivedDenoms = {}; state.posChangeDenoms = {}; state.posLastChangeAmt = null;
@@ -1489,7 +1542,7 @@ function refreshCart(){
 
 // Break a number into ₹500/200/100/50/20/10 counts — used only as a starting
 // SUGGESTION for the change grid; the actual notes always come from what
-// staff enters, never assumed silently.
+// staff taps in, never assumed silently.
 function breakChange(amt){
   const notes = [500,200,100,50,20,10];
   const out = {};
@@ -1505,8 +1558,8 @@ function denomText(obj){
 }
 // Uses the actual "Notes Received" grid (not an assumed number) to work out
 // whether the customer has paid enough, and — if there's change due — shows
-// an editable "Notes Given Back" grid pre-filled with a suggested breakdown
-// that staff can correct to match exactly what was taken from the drawer.
+// a tap-adjustable "Notes Given Back" grid pre-filled with a suggested
+// breakdown that staff can correct to match exactly what was taken from the drawer.
 function updatePosCashCalc(total){
   const payMode = $('#posPay').value;
   const recv = DENOMS.reduce((s,d)=> s + (Number(state.posReceivedDenoms[d])||0)*d, 0);
@@ -1537,7 +1590,7 @@ function updatePosCashCalc(total){
   box.style.display = 'block';
   box.className = 'tag-note';
   if(change > 0){
-    box.innerHTML = '<b>Change due: ₹' + Math.round(change) + '</b> — enter exactly which notes you hand back below.';
+    box.innerHTML = '<b>Change due: ₹' + Math.round(change) + '</b> — tap the notes below to match exactly what you hand back.';
     changeWrap.style.display = 'block';
     if(state.posLastChangeAmt !== change){
       state.posLastChangeAmt = change;
@@ -2136,6 +2189,9 @@ function renderPfChips(){
 
 // Existing-product variant editor: every field except UID can be changed
 // directly from this table (Color, Size, Stock), plus add/remove variants.
+// Edits are applied OPTIMISTICALLY to the local table first (so staff can
+// keep typing the next variant immediately) and the save to the Sheet runs
+// in the background with automatic retries — no "please wait" blocking.
 function renderEditVariants(existing){
   const body = $('#pfVarEditBody');
   if(!body) return;
@@ -2150,7 +2206,7 @@ function renderEditVariants(existing){
         <button class="btn bad sm" data-a="del">×</button>
       </td>
     </tr>`).join('') || '<tr><td colspan="4" class="empty">No variants yet — add one below</td></tr>';
-  body.onclick = async e => {
+  body.onclick = e => {
     const btn = e.target.closest('button'); if(!btn) return;
     const tr = btn.closest('tr'); const vid = tr.dataset.vid;
     if(btn.dataset.a === 'save'){
@@ -2158,33 +2214,53 @@ function renderEditVariants(existing){
       const Size = tr.querySelector('[data-f="Size"]').value.trim();
       const Stock = Number(tr.querySelector('[data-f="Stock"]').value||0);
       if(!Color || !Size){ toast('Color and Size cannot be empty', 'bad'); return; }
-      const r = await apiPost('updateVariant', { variantID: vid, Color, Size, Stock });
-      if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Variant updated', 'ok');
-      await pullAll();
-      const fresh = state.data.products.find(x=>x.ProductID===existing.ProductID);
-      if(fresh){ existing.variants = fresh.variants; renderEditVariants(existing); }
+      // Optimistic local update — reflects instantly, no waiting on the Sheet.
+      const v = variants.find(x => x.VariantID === vid);
+      if(v){ v.Color = Color; v.Size = Size; v.Stock = Stock; }
+      toast('Saving…', 'ok');
+      apiPostBG('updateVariant', { variantID: vid, Color, Size, Stock }).then(r => {
+        if(!r.success){ toast('Variant save failed — will retry on next sync: '+r.error, 'bad'); }
+        else{ toast('Variant saved', 'ok'); pullAll(); }
+      });
     }
     if(btn.dataset.a === 'del'){
       if(!confirm('Remove this variant? This action cannot be undone.')) return;
-      const r = await apiPost('deleteVariant', { variantID: vid });
-      if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Variant removed', 'ok');
-      await pullAll();
-      const fresh = state.data.products.find(x=>x.ProductID===existing.ProductID);
-      if(fresh){ existing.variants = fresh.variants; renderEditVariants(existing); }
+      const idx = variants.findIndex(x => x.VariantID === vid);
+      if(idx > -1) variants.splice(idx,1);
+      renderEditVariants(existing); // instant local refresh
+      apiPostBG('deleteVariant', { variantID: vid }).then(r => {
+        if(!r.success){ toast('Delete failed on server: '+r.error, 'bad'); pullAll(); }
+        else{ toast('Variant removed', 'ok'); pullAll(); }
+      });
     }
   };
 }
+// Adds a variant instantly to the local list/table so staff can carry on
+// typing the next variant right away, while the actual Sheet write happens
+// in the background (with retries). The temp row is reconciled with the
+// real VariantID once pullAll() completes.
 async function addVariantInline(existing){
   const Color = $('#pfNewVarColor').value.trim();
   const Size = $('#pfNewVarSize').value.trim();
   const Stock = Number($('#pfNewVarStock').value||0);
   if(!Color || !Size){ toast('Color and Size are both required', 'bad'); return; }
-  const r = await apiPost('addVariant', { ProductID: existing.ProductID, UID: existing.UID, Color, Size, Stock, SalePrice: existing.SalePrice, BatchNumber: existing.BatchNumber });
-  if(!r.success){ toast(r.error, 'bad'); return; }
-  toast('Variant added', 'ok');
+  if(!existing.variants) existing.variants = [];
+  const tempID = 'TEMP_'+rnd();
+  existing.variants.push({ VariantID: tempID, Color, Size, Stock });
+  renderEditVariants(existing);
+  // clear the inputs immediately so the next variant can be typed without delay
   $('#pfNewVarColor').value=''; $('#pfNewVarSize').value=''; $('#pfNewVarStock').value=1;
+  $('#pfNewVarColor').focus();
+  toast('Adding variant…', 'ok');
+  const r = await apiPostBG('addVariant', { ProductID: existing.ProductID, UID: existing.UID, Color, Size, Stock, SalePrice: existing.SalePrice, BatchNumber: existing.BatchNumber });
+  if(!r.success){
+    toast('Variant "'+Color+'/'+Size+'" failed to save: '+r.error, 'bad');
+    const idx = existing.variants.findIndex(x => x.VariantID === tempID);
+    if(idx>-1) existing.variants.splice(idx,1);
+    renderEditVariants(existing);
+    return;
+  }
+  toast('Variant saved: '+Color+'/'+Size, 'ok');
   await pullAll();
   const fresh = state.data.products.find(x=>x.ProductID===existing.ProductID);
   if(fresh){ existing.variants = fresh.variants; renderEditVariants(existing); }
@@ -2220,41 +2296,51 @@ async function saveProduct(existing){
   }
 
   body.Barcode = uid + '-' + rnd().toUpperCase();
+  const btnSave = document.querySelector('#dlgFoot .btn.ok');
+  if(btnSave){ btnSave.disabled = true; btnSave.textContent = 'Creating…'; }
   const r = await apiPost('addProduct', body);
+  if(btnSave){ btnSave.disabled = false; btnSave.textContent = 'Create Product'; }
   if(!r.success){ toast(r.error, 'bad'); return; }
   const pid = r.data.product.ProductID;
+
+  // Close the modal immediately — variants are saved in the BACKGROUND so
+  // staff never have to sit and wait for the Sheet to finish writing each
+  // one. Colors × Sizes still saved one at a time (avoids Sheet lock
+  // contention) but with more retries, and progress is shown via toasts.
+  closeModal();
+  toast('Product created — saving variants in background…', 'ok');
+  await pullAll();
 
   if(pfColorList.length && pfSizeList.length){
     const combos = [];
     pfColorList.forEach(c => pfSizeList.forEach(s => combos.push({ c, s })));
-    let ok = 0;
-    const failed = [];
-    for(const combo of combos){
-      const key = combo.c+'||'+combo.s;
-      const stk = pfStockOverride[key] !== undefined ? pfStockOverride[key] : Number($('#pfVarStock')?.value||1);
-      let vr = await apiPost('addVariant', {
-        ProductID: pid, UID: uid, Color: combo.c, Size: combo.s, Stock: stk,
-        SalePrice: body.SalePrice, BatchNumber: batch
-      });
-      if(!vr.success){
-        // Transient network/lock issues happen under load — retry once before giving up.
-        vr = await apiPost('addVariant', {
-          ProductID: pid, UID: uid, Color: combo.c, Size: combo.s, Stock: stk,
-          SalePrice: body.SalePrice, BatchNumber: batch
-        });
-      }
-      if(vr.success) ok++; else failed.push(combo.c+'/'+combo.s);
-    }
-    if(failed.length){
-      toast('Product created. '+ok+' variants saved — '+failed.length+' failed ('+failed.join(', ')+'). Add these from Edit Product.', 'warn');
-    }else{
-      toast('Product created with '+ok+' variants', 'ok');
-    }
+    saveVariantsInBackground(pid, uid, batch, body.SalePrice, combos, pfStockOverride, Number($('#pfVarStock')?.value||1));
   }else{
     toast('Product created (no variants added)', 'ok');
   }
-  closeModal();
-  await pullAll();
+}
+// Runs after the modal is already closed — saves every color/size combo one
+// at a time in the background with up to 2 retries each, so a slow Sheet
+// never blocks the staff from moving on to the next task. Reports a final
+// summary toast and refreshes data once done.
+async function saveVariantsInBackground(pid, uid, batch, salePrice, combos, stockOverride, defaultStock){
+  let ok = 0;
+  const failed = [];
+  for(const combo of combos){
+    const key = combo.c+'||'+combo.s;
+    const stk = stockOverride[key] !== undefined ? stockOverride[key] : defaultStock;
+    const vr = await apiPostBG('addVariant', {
+      ProductID: pid, UID: uid, Color: combo.c, Size: combo.s, Stock: stk,
+      SalePrice: salePrice, BatchNumber: batch
+    }, 2);
+    if(vr.success) ok++; else failed.push(combo.c+'/'+combo.s);
+  }
+  if(failed.length){
+    toast(ok+' variants saved — '+failed.length+' failed ('+failed.join(', ')+'). Open Edit Product to add these manually.', 'warn');
+  }else{
+    toast('All '+ok+' variants saved for '+uid, 'ok');
+  }
+  pullAll();
 }
 async function deleteProduct(p){
   if(!confirm('Delete '+p.Name+'? All variants associated with this product will also be permanently removed.')) return;
@@ -2340,10 +2426,11 @@ function openSetStockDialog(variantID, label, currentStock){
       if(isNaN(newVal) || newVal < 0){ toast('Enter a valid stock number', 'bad'); return; }
       const delta = newVal - currentStock;
       if(delta === 0){ closeModal(); return; }
-      const r = await apiPost('updateStock', { variantID, qtyChange: delta, staffID: state.user.staffID });
+      closeModal();
+      toast('Saving stock…', 'ok');
+      const r = await apiPostBG('updateStock', { variantID, qtyChange: delta, staffID: state.user.staffID });
       if(!r.success){ toast(r.error, 'bad'); return; }
       toast('Stock updated to '+newVal, 'ok');
-      closeModal();
       pullAll();
     }}
   ]);
@@ -3292,18 +3379,22 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // Build a full print job from the current queue and open the browser print dialog.
-// Fixed layout: every page is 4in x 6in and holds exactly 4 stickers (2x2 grid).
-// If more than 4 tags are queued, the extras automatically flow onto more
-// 4x6in pages (page-break-after keeps each page separate when printing).
-// Tags: no full dashed outline — just two tiny top corner marks so the
-// cutting edge is visible. Color/Size text is NOT printed — it only shows
-// up once the tag is scanned.
+// Fixed layout: every page is 4in x 6in and holds exactly 6 stickers (2 columns
+// x 3 rows), which keeps the tags a practical price-tag size while using far
+// less blank page space than a 2x2 layout. If more than 6 tags are queued,
+// the extras automatically flow onto more 4x6in pages (page-break-after keeps
+// each page separate when printing).
+// Shop name prints at the very top of every tag, then product name, then
+// SIZE in bold right above the MRP line, then a bigger scannable barcode,
+// then MRP (struck through) and a large, prominent sale price.
 function printStickerSheet(){
   const size = $('#tagSize').value;         // small | medium | large — controls font scale only
   const showMRP   = $('#tShowMRP').checked;
   const showSP    = $('#tShowSP').checked;
   const showName  = $('#tShowName').checked;
+  const showSize  = $('#tShowSize') ? $('#tShowSize').checked : true;
   const showBatch = $('#tShowBatch').checked;
+  const shopName  = state.cfg.shopName || state.cfg.billHeader || 'AK FASHION HUB';
 
   // Flatten queue into individual sticker specs
   const stickers = [];
@@ -3320,12 +3411,13 @@ function printStickerSheet(){
   });
   if(!stickers.length){ toast('Sticker qty daaliye', 'warn'); return; }
 
-  const fsMap = { small: 10, medium: 12, large: 14 };
-  const fs = fsMap[size] || 12;
+  const fsMap = { small: 9, medium: 10, large: 12 };
+  const fs = fsMap[size] || 10;
 
-  // Group into pages of 4 (2x2 grid) — 20-30 tags simply become 5-8 pages.
+  // Group into pages of 6 (2 cols x 3 rows) — 20-30 tags simply become
+  // 4-5 pages instead of 5-8, cutting page wastage noticeably.
   const pages = [];
-  for(let i=0; i<stickers.length; i+=4) pages.push(stickers.slice(i, i+4));
+  for(let i=0; i<stickers.length; i+=6) pages.push(stickers.slice(i, i+6));
 
   let globalIdx = 0;
   const pagesHtml = pages.map(chunk => {
@@ -3333,14 +3425,16 @@ function printStickerSheet(){
       const { p, v } = s;
       const idx = globalIdx++;
       const price = fmt(v.SalePrice || p.SalePrice);
+      const sizeLabel = v.Size || '';
       return `
         <div class="stk">
-          <span class="corner tl"></span><span class="corner tr"></span>
+          <div class="stk-shop">${escapeHtml(shopName)}</div>
           ${showName ? '<div class="stk-name">' + escapeHtml(p.Name) + '</div>' : ''}
           ${showBatch ? '<div class="stk-batch">B:' + escapeHtml(v.BatchNumber || p.BatchNumber || '') + '</div>' : ''}
           <div class="stk-dm"><canvas id="stkdm-${idx}"></canvas></div>
+          ${(showSize && sizeLabel) ? '<div class="stk-size">SIZE: ' + escapeHtml(sizeLabel) + '</div>' : ''}
           ${showMRP ? '<div class="stk-mrp">MRP <s>' + fmt(p.MRP) + '</s></div>' : ''}
-          ${showSP  ? '<div class="stk-sp">' + price + '</div>' : ''}
+          ${showSP  ? '<div class="stk-sp">₹' + price + '</div>' : ''}
         </div>`;
     }).join('');
     return `<div class="stk-page">${cells}</div>`;
@@ -3348,26 +3442,27 @@ function printStickerSheet(){
 
   const sheetHtml = `
     <style>
-      @page { size: 4in 6in; margin: 2mm; }
+      @page { size: 4in 6in; margin: 1.5mm; }
       .stk-page {
         width:4in; height:6in; box-sizing:border-box;
-        display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2mm;
+        display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:1.5mm;
         page-break-after: always;
       }
       .stk-page:last-child{ page-break-after: auto; }
-      .stk { position:relative; padding:2mm 1.5mm; overflow:hidden;
-              font-family:'Courier New', monospace; font-size:${fs}px;
+      .stk { position:relative; padding:1.5mm 1mm; overflow:hidden;
+              font-family:'Manrope', Arial, sans-serif; font-size:${fs}px;
               display:flex; flex-direction:column; align-items:center; justify-content:center;
-              text-align:center; line-height:1.15; box-sizing:border-box; }
-      .stk .corner{ position:absolute; top:0; width:2mm; height:2mm; }
-      .stk .corner.tl{ left:0; border-top:0.35mm solid #000; border-left:0.35mm solid #000; }
-      .stk .corner.tr{ right:0; border-top:0.35mm solid #000; border-right:0.35mm solid #000; }
-      .stk-name { font-weight:800; font-size:${fs}px; }
+              text-align:center; line-height:1.15; box-sizing:border-box;
+              border:0.3mm solid #000; border-radius:1.2mm; }
+      .stk-shop { font-weight:800; font-size:${fs-1}px; letter-spacing:.3px; text-transform:uppercase;
+                  border-bottom:0.3mm solid #000; width:92%; padding-bottom:0.8mm; margin-bottom:0.8mm; }
+      .stk-name { font-weight:700; font-size:${fs}px; }
       .stk-batch { font-size:${fs-2}px; color:#333; }
-      .stk-dm { margin:1.2mm 0; }
-      .stk-dm canvas { width:20mm; height:20mm; }
-      .stk-mrp { font-size:${fs-1}px; color:#555; }
-      .stk-sp { font-weight:900; font-size:${fs+8}px; }
+      .stk-dm { margin:0.8mm 0; }
+      .stk-dm canvas { width:17mm; height:17mm; }
+      .stk-size { font-weight:800; font-size:${fs+1}px; background:#111; color:#fff; padding:0.5mm 2mm; border-radius:3mm; margin-bottom:0.8mm; letter-spacing:.4px; }
+      .stk-mrp { font-size:${fs}px; color:#555; }
+      .stk-sp { font-weight:900; font-size:${fs+9}px; margin-top:0.3mm; }
     </style>
     ${pagesHtml}
   `;
@@ -3378,7 +3473,7 @@ function printStickerSheet(){
         bwipjs.toCanvas('stkdm-' + idx, {
           bcid: 'datamatrix',
           text: s.v.Barcode || s.v.VariantBarcode || s.p.UID,
-          scale: 5,
+          scale: 6,
           includetext: false
         });
       }catch(e){ console.error('barcode draw failed', e); }
@@ -3393,22 +3488,21 @@ function printTag(pid, vid){
   const v = p ? p.variants.find(x => x.VariantID === vid) : null;
   if(!p || !v) return;
   const code = v.Barcode || v.VariantBarcode || p.UID;
+  const shopName = state.cfg.shopName || state.cfg.billHeader || 'AK FASHION HUB';
   const html = `
-    <style>.tag1{width:34mm;padding:2mm;font-family:'Courier New',monospace;text-align:center;position:relative;}
-    .tag1 .corner{position:absolute;top:0;width:2mm;height:2mm;}
-    .tag1 .corner.tl{left:0;border-top:0.35mm solid #000;border-left:0.35mm solid #000;}
-    .tag1 .corner.tr{right:0;border-top:0.35mm solid #000;border-right:0.35mm solid #000;}
+    <style>.tag1{width:38mm;padding:2mm;font-family:'Manrope',Arial,sans-serif;text-align:center;position:relative;border:0.3mm solid #000;border-radius:1.2mm;}
     </style>
     <div class="tag1">
-      <span class="corner tl"></span><span class="corner tr"></span>
-      <div style="font-weight:800;font-size:12px;">${escapeHtml(p.Name)}</div>
+      <div style="font-weight:800;font-size:9px;letter-spacing:.3px;text-transform:uppercase;border-bottom:0.3mm solid #000;padding-bottom:1mm;margin-bottom:1mm;">${escapeHtml(shopName)}</div>
+      <div style="font-weight:700;font-size:12px;">${escapeHtml(p.Name)}</div>
       <div style="font-size:9px;">B:${escapeHtml(v.BatchNumber || p.BatchNumber || '—')}</div>
       <canvas id="pt" style="width:20mm;height:20mm;margin:2mm 0;"></canvas>
-      <div style="text-decoration:line-through;color:#666;font-size:11px;">${fmt(p.MRP)}</div>
-      <div style="font-size:22px;font-weight:900;">${fmt(v.SalePrice||p.SalePrice)}</div>
+      ${v.Size ? '<div style="font-weight:800;font-size:12px;background:#111;color:#fff;display:inline-block;padding:0.5mm 3mm;border-radius:3mm;margin-bottom:1.5mm;">SIZE: '+escapeHtml(v.Size)+'</div>' : ''}
+      <div style="text-decoration:line-through;color:#666;font-size:11px;">MRP ${fmt(p.MRP)}</div>
+      <div style="font-size:24px;font-weight:900;">₹${fmt(v.SalePrice||p.SalePrice)}</div>
     </div>`;
   printHTML(html, () => {
-    try{ bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 5, includetext: false }); }catch(e){ console.error('barcode draw failed', e); }
+    try{ bwipjs.toCanvas('pt', { bcid: 'datamatrix', text: code, scale: 6, includetext: false }); }catch(e){ console.error('barcode draw failed', e); }
   });
 }
 
@@ -3420,28 +3514,15 @@ function wireCash(){
   $('#btnCashOut').addEventListener('click', () => cashInOut('OUT'));
 }
 function buildDenomInputs(){
-  const mkGrid = (id, target) => {
-    const el = $(id);
-    if(!el) return;
-    el.innerHTML = DENOMS.map(d => `
-      <div class="cell">
-        <b>₹${d}</b>
-        <input type="number" min="0" value="0" data-denom="${d}" data-target="${target}">
-      </div>
-    `).join('');
-    el.addEventListener('input', () => {
-      let total = 0;
-      el.querySelectorAll('input').forEach(inp => {
-        total += Number(inp.value||0) * Number(inp.dataset.denom);
-      });
-      const val = target==='open' ? state.denomOpen : state.denomClose;
-      el.querySelectorAll('input').forEach(inp => { val[inp.dataset.denom] = Number(inp.value||0); });
-      $(target==='open' ? '#openTotal' : '#closeTotal').textContent = fmt(total);
-      if(target==='close') updateClosingCalc();
-    });
-  };
-  mkGrid('#denomOpen','open');
-  mkGrid('#denomClose','close');
+  renderDenomGrid($('#denomOpen'), state.denomOpen, () => {
+    const total = DENOMS.reduce((s,d)=> s + (state.denomOpen[d]||0)*d, 0);
+    $('#openTotal').textContent = fmt(total);
+  });
+  renderDenomGrid($('#denomClose'), state.denomClose, () => {
+    const total = DENOMS.reduce((s,d)=> s + (state.denomClose[d]||0)*d, 0);
+    $('#closeTotal').textContent = fmt(total);
+    updateClosingCalc();
+  });
 }
 function updateClosingCalc(){
   const closing = DENOMS.reduce((s,d)=>s + (state.denomClose[d]||0)*d, 0);
