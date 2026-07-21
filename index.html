@@ -275,7 +275,9 @@ tr:hover td{background:#faf9f4;}
       <div class="grid-2">
         <div class="pane">
           <h3>Sales — last 14 days <small id="dashSalesRange"></small></h3>
-          <canvas id="dashChart" height="160"></canvas>
+          <div style="position:relative;height:260px;">
+            <canvas id="dashChart"></canvas>
+          </div>
         </div>
         <div class="pane">
           <h3>Recent Bills</h3>
@@ -430,6 +432,7 @@ tr:hover td{background:#faf9f4;}
         <h3>Wallet / Coins <small><button class="btn sm" id="btnIssueCoin">＋ Issue New Coin</button></small></h3>
         <div class="row mb-12">
           <input class="inp" id="walletSearch" placeholder="Coin code, mobile ya customer name se search">
+          <button class="btn ghost sm" id="btnWalletScan">📷 Scan Bill</button>
           <select class="inp" id="walletFilter" style="max-width:180px;">
             <option value="">All</option>
             <option value="Active">Active</option>
@@ -451,6 +454,7 @@ tr:hover td{background:#faf9f4;}
         <h3>Customers <small><button class="btn sm" id="btnAddCust">＋ Add Customer</button></small></h3>
         <div class="row mb-12">
           <input class="inp" id="custSearch" placeholder="Search by name or mobile...">
+          <button class="btn ghost sm" id="btnCustScan">📷 Scan Bill</button>
         </div>
         <div class="tbl-wrap"><table id="custTbl">
           <thead><tr><th>Name</th><th>Mobile</th><th>City</th><th>Spend</th><th>Points</th><th>Due</th><th>Coins</th><th>Last Buy</th><th></th></tr></thead>
@@ -463,6 +467,10 @@ tr:hover td{background:#faf9f4;}
     <div class="screen" id="scr-suppliers">
       <div class="pane">
         <h3>Suppliers <small><button class="btn sm" id="btnAddSup">＋ Add Supplier</button></small></h3>
+        <div class="row mb-12">
+          <input class="inp" id="supSearch" placeholder="Search supplier by name or mobile...">
+          <button class="btn ghost sm" id="btnSupScan">📷 Scan Product Tag</button>
+        </div>
         <div class="tbl-wrap"><table id="supTbl">
           <thead><tr><th>Name</th><th>Mobile</th><th>City</th><th>GSTIN</th><th>Purchases</th><th></th></tr></thead>
           <tbody></tbody>
@@ -527,7 +535,7 @@ tr:hover td{background:#faf9f4;}
           </div>
         </div>
 
-        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print pe ek page pe multiple stickers grid me aayenge. Color/Size ka text tag pe print nahi hota — sirf barcode scan karne par milega. DataMatrix 2×2cm fixed hai, corner par sirf chhote edge-marks aate hain (poora border nahi).</div>
+        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print 4×6 inch page par hoga aur har page par sirf 4 stickers (2×2 grid) aayenge — agar 20-30 tags hain toh utne hi 4×6 pages apne aap ban jaayenge. Color/Size ka text tag pe print nahi hota — sirf barcode scan karne par milega.</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -2345,6 +2353,11 @@ function openSetStockDialog(variantID, label, currentStock){
 function wireCustomers(){
   $('#btnAddCust').addEventListener('click', ()=> openCustomerForm(null));
   $('#custSearch').addEventListener('input', renderCustomers);
+  $('#btnCustScan').addEventListener('click', ()=> openCamScanner(code=>{
+    const bill = findBillByCode(code);
+    if(bill){ openBillDetailsModal(bill); return; }
+    toast('Ye barcode kisi bill se match nahi hua', 'bad');
+  }));
 }
 function renderCustomers(){
   const term = ($('#custSearch').value||'').toLowerCase();
@@ -2417,6 +2430,8 @@ function wireSuppliers(){
   $('#btnAddSup').addEventListener('click', ()=> openSupplierForm(null));
   $('#btnAddPu').addEventListener('click', addPurchase);
   $('#puDate').value = dayKey(nowISO());
+  $('#supSearch').addEventListener('input', renderSuppliers);
+  $('#btnSupScan').addEventListener('click', ()=> openCamScanner(code => scanSupplierByProduct(code)));
   $('#puUID').addEventListener('change', ()=>{
     const uid = $('#puUID').value;
     const p = (state.data.products||[]).find(x => String(x.UID)===uid);
@@ -2434,9 +2449,47 @@ function wireSuppliers(){
       </tr>`).join('');
   });
 }
+// Scan a product's tag/barcode to jump straight to the supplier(s) who
+// supplied it, showing purchase dates, contact number, and full history.
+function scanSupplierByProduct(code){
+  const hit = findByCode(code);
+  if(!hit || !hit.product){ toast('Ye barcode kisi product se match nahi hua', 'bad'); return; }
+  const p = hit.product;
+  const purchases = (state.data.purchases||[]).filter(pu => String(pu.ProductID)===String(p.ProductID) || String(pu.UID)===String(p.UID));
+  if(!purchases.length){ toast('Iss product ke liye koi purchase / supplier record nahi mila', 'warn'); return; }
+  purchases.sort((a,b)=> String(b.Date).localeCompare(String(a.Date)));
+  const supplierIds = [...new Set(purchases.map(pu=>String(pu.SupplierID)))];
+  if(supplierIds.length === 1){
+    const s = (state.data.suppliers||[]).find(x=>String(x.SupplierID)===supplierIds[0]);
+    if(s){ openSupplierProfile(s); return; }
+  }
+  // Multiple suppliers have supplied this product — let staff pick one.
+  const rows = supplierIds.map(sid => {
+    const s = (state.data.suppliers||[]).find(x=>String(x.SupplierID)===sid);
+    const latest = purchases.find(pu=>String(pu.SupplierID)===sid);
+    return `<tr>
+      <td>${s ? s.Name : sid}</td>
+      <td>${s ? s.Mobile : '—'}</td>
+      <td>${(latest.Date||'').substr(0,10)}</td>
+      <td><button class="btn sm" data-sid="${sid}">View</button></td>
+    </tr>`;
+  }).join('');
+  openModal('Supplier(s) for '+p.Name, `
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Supplier</th><th>Mobile</th><th>Last Purchase</th><th></th></tr></thead>
+      <tbody id="supPickBody">${rows}</tbody>
+    </table></div>
+  `, [{ label:'Close', kind:'ghost', on: closeModal }]);
+  $('#supPickBody').addEventListener('click', e => {
+    const b = e.target.closest('button[data-sid]'); if(!b) return;
+    const s = (state.data.suppliers||[]).find(x=>String(x.SupplierID)===b.dataset.sid);
+    if(s){ closeModal(); openSupplierProfile(s); }
+  });
+}
 function renderSuppliers(){
+  const term = ($('#supSearch')?.value||'').toLowerCase();
   const tb = $('#supTbl tbody'); tb.innerHTML='';
-  (state.data.suppliers||[]).forEach(s => {
+  (state.data.suppliers||[]).filter(s => !term || (s.Name||'').toLowerCase().includes(term) || String(s.Mobile||'').includes(term)).forEach(s => {
     const buys = (state.data.purchases||[]).filter(p => String(p.SupplierID)===String(s.SupplierID)).length;
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -2555,6 +2608,44 @@ function wireWallet(){
   $('#btnIssueCoin').addEventListener('click', () => openIssueCoinForm({}));
   $('#walletSearch').addEventListener('input', renderWallet);
   $('#walletFilter').addEventListener('change', renderWallet);
+  $('#btnWalletScan').addEventListener('click', ()=> openCamScanner(code => scanForWalletCoin(code)));
+}
+// Scan a bill's printed barcode to see whether a store coin was issued
+// against it — shows the coin details if one exists, tells you clearly
+// if not (with a quick shortcut to issue one).
+function scanForWalletCoin(code){
+  const bill = findBillByCode(code);
+  if(!bill){ toast('Ye barcode kisi bill se match nahi hua', 'bad'); return; }
+  const coins = (state.data.wallet||[]).filter(w =>
+    String(w.LinkedBillID||'') === String(bill.BillID) ||
+    (bill.CustomerMobile && String(w.CustomerMobile||'')===String(bill.CustomerMobile))
+  );
+  if(!coins.length){
+    openModal('Bill • '+(bill.BillNumber||''), `
+      <div class="tag-info">Is bill (#${bill.BillNumber||''}) ke against koi coin issue nahi hua hai.</div>
+      <div class="mt-12"><b>Customer:</b> ${bill.CustomerName||'—'}<br><b>Mobile:</b> ${bill.CustomerMobile||'—'}<br><b>Total:</b> ${fmt(bill.Total)}</div>
+    `, [
+      { label:'Close', kind:'ghost', on: closeModal },
+      { label:'＋ Issue Coin', kind:'ok', on: () => { closeModal(); openIssueCoinForm({ mobile: bill.CustomerMobile, name: bill.CustomerName, billID: bill.BillID }); } }
+    ]);
+    return;
+  }
+  const rows = coins.map(w => `
+    <tr>
+      <td class="mono">${w.WalletID}</td>
+      <td>${fmt(w.Amount)}</td>
+      <td>${fmt(w.RemainingAmount)}</td>
+      <td>${(w.IssueDate||'').substr(0,10)}</td>
+      <td>${(w.ExpiryDate||'').substr(0,10)}</td>
+      <td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'||w.Status==='Cancelled'?'bad':'warn')}">${w.Status}</span></td>
+    </tr>`).join('');
+  openModal('Coin(s) — Bill '+(bill.BillNumber||''), `
+    <div class="mb-12"><b>Customer:</b> ${bill.CustomerName||'—'}<br><b>Mobile:</b> ${bill.CustomerMobile||'—'}</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Code</th><th>Amount</th><th>Remaining</th><th>Issued</th><th>Expires</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `, [{ label:'Close', kind:'ghost', on: closeModal }]);
 }
 function renderWallet(){
   const term = ($('#walletSearch').value||'').toLowerCase();
@@ -3200,12 +3291,15 @@ window.addEventListener('DOMContentLoaded', () => {
   if(btnPrn) btnPrn.addEventListener('click', printStickerSheet);
 });
 
-// Build a full print sheet from the current queue and open the browser print dialog.
-// Tags: no full dashed outline anymore — just two tiny top corner marks so the
-// cutting edge is visible. Color/Size text is NOT printed — it only shows up
-// once the tag is scanned. DataMatrix is fixed at 2cm × 2cm and price is bigger.
+// Build a full print job from the current queue and open the browser print dialog.
+// Fixed layout: every page is 4in x 6in and holds exactly 4 stickers (2x2 grid).
+// If more than 4 tags are queued, the extras automatically flow onto more
+// 4x6in pages (page-break-after keeps each page separate when printing).
+// Tags: no full dashed outline — just two tiny top corner marks so the
+// cutting edge is visible. Color/Size text is NOT printed — it only shows
+// up once the tag is scanned.
 function printStickerSheet(){
-  const size = $('#tagSize').value;         // small | medium | large
+  const size = $('#tagSize').value;         // small | medium | large — controls font scale only
   const showMRP   = $('#tShowMRP').checked;
   const showSP    = $('#tShowSP').checked;
   const showName  = $('#tShowName').checked;
@@ -3226,48 +3320,56 @@ function printStickerSheet(){
   });
   if(!stickers.length){ toast('Sticker qty daaliye', 'warn'); return; }
 
-  const dims = {
-    small:  { w:'30mm', h:'34mm', fs:10 },
-    medium: { w:'34mm', h:'40mm', fs:12 },
-    large:  { w:'50mm', h:'75mm', fs:14 }
-  }[size];
+  const fsMap = { small: 10, medium: 12, large: 14 };
+  const fs = fsMap[size] || 12;
 
-  const cellsHtml = stickers.map((s, idx) => {
-    const { p, v } = s;
-    const price = fmt(v.SalePrice || p.SalePrice);
-    return `
-      <div class="stk" style="width:${dims.w};min-height:${dims.h};">
-        <span class="corner tl"></span><span class="corner tr"></span>
-        ${showName ? '<div class="stk-name">' + escapeHtml(p.Name) + '</div>' : ''}
-        ${showBatch ? '<div class="stk-batch">B:' + escapeHtml(v.BatchNumber || p.BatchNumber || '') + '</div>' : ''}
-        <div class="stk-dm">
-          <canvas id="stkdm-${idx}"></canvas>
-        </div>
-        ${showMRP ? '<div class="stk-mrp">MRP <s>' + fmt(p.MRP) + '</s></div>' : ''}
-        ${showSP  ? '<div class="stk-sp">' + price + '</div>' : ''}
-      </div>`;
+  // Group into pages of 4 (2x2 grid) — 20-30 tags simply become 5-8 pages.
+  const pages = [];
+  for(let i=0; i<stickers.length; i+=4) pages.push(stickers.slice(i, i+4));
+
+  let globalIdx = 0;
+  const pagesHtml = pages.map(chunk => {
+    const cells = chunk.map(s => {
+      const { p, v } = s;
+      const idx = globalIdx++;
+      const price = fmt(v.SalePrice || p.SalePrice);
+      return `
+        <div class="stk">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          ${showName ? '<div class="stk-name">' + escapeHtml(p.Name) + '</div>' : ''}
+          ${showBatch ? '<div class="stk-batch">B:' + escapeHtml(v.BatchNumber || p.BatchNumber || '') + '</div>' : ''}
+          <div class="stk-dm"><canvas id="stkdm-${idx}"></canvas></div>
+          ${showMRP ? '<div class="stk-mrp">MRP <s>' + fmt(p.MRP) + '</s></div>' : ''}
+          ${showSP  ? '<div class="stk-sp">' + price + '</div>' : ''}
+        </div>`;
+    }).join('');
+    return `<div class="stk-page">${cells}</div>`;
   }).join('');
 
   const sheetHtml = `
     <style>
-      .stk-sheet { display:flex; flex-wrap:wrap; gap:2mm; padding:2mm; }
-      .stk { position:relative; border:none; padding:2mm 1.5mm; overflow:visible;
-              font-family:'Courier New', monospace; font-size:${dims.fs}px;
+      @page { size: 4in 6in; margin: 2mm; }
+      .stk-page {
+        width:4in; height:6in; box-sizing:border-box;
+        display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2mm;
+        page-break-after: always;
+      }
+      .stk-page:last-child{ page-break-after: auto; }
+      .stk { position:relative; padding:2mm 1.5mm; overflow:hidden;
+              font-family:'Courier New', monospace; font-size:${fs}px;
               display:flex; flex-direction:column; align-items:center; justify-content:center;
               text-align:center; line-height:1.15; box-sizing:border-box; }
-      /* tiny top-corner edge marks — replaces the old full dashed outline */
       .stk .corner{ position:absolute; top:0; width:2mm; height:2mm; }
       .stk .corner.tl{ left:0; border-top:0.35mm solid #000; border-left:0.35mm solid #000; }
       .stk .corner.tr{ right:0; border-top:0.35mm solid #000; border-right:0.35mm solid #000; }
-      .stk-name { font-weight:800; font-size:${dims.fs}px; }
-      .stk-batch { font-size:${dims.fs-2}px; color:#333; }
+      .stk-name { font-weight:800; font-size:${fs}px; }
+      .stk-batch { font-size:${fs-2}px; color:#333; }
       .stk-dm { margin:1.2mm 0; }
       .stk-dm canvas { width:20mm; height:20mm; }
-      .stk-mrp { font-size:${dims.fs-1}px; color:#555; }
-      .stk-sp { font-weight:900; font-size:${dims.fs+8}px; }
-      @page { margin: 4mm; }
+      .stk-mrp { font-size:${fs-1}px; color:#555; }
+      .stk-sp { font-weight:900; font-size:${fs+8}px; }
     </style>
-    <div class="stk-sheet">${cellsHtml}</div>
+    ${pagesHtml}
   `;
   printHTML(sheetHtml, () => {
     // canvases now exist in the DOM — draw every DataMatrix before print() fires
