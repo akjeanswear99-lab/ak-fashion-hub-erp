@@ -300,14 +300,14 @@ tr:hover td{background:#faf9f4;}
     <div class="screen" id="scr-pos">
       <div class="pos-grid">
         <div class="pane">
-          <h3>Cart <small id="posHint">Scan barcode / UID ya search se add karein</small></h3>
+          <h3>Cart <small id="posHint">Scan a barcode / UID or search below to add items</small></h3>
           <div class="row mb-12">
             <input class="inp" id="posScan" placeholder="Scan or type UID / Barcode / Product name" autofocus>
             <button class="btn ghost sm" id="btnScanCam">📷 Camera</button>
           </div>
           <div id="posSuggest" class="mb-12"></div>
           <div id="cartBox">
-            <div class="empty">Cart empty — kuch scan karein</div>
+            <div class="empty">Cart is empty — scan an item to begin</div>
           </div>
         </div>
 
@@ -342,7 +342,7 @@ tr:hover td{background:#faf9f4;}
           <!-- UPI QR when payment mode = UPI -->
           <div id="upiQrBox" style="display:none;text-align:center;padding:12px;background:#fafaf7;border:1px solid var(--line);border-radius:8px;margin-top:8px;">
             <img id="upiQrImg" style="max-width:180px;border-radius:6px;">
-            <div class="hint mt-8">Customer ko yeh QR scan karwayein</div>
+            <div class="hint mt-8">Ask the customer to scan this QR code</div>
           </div>
           <div class="field mt-8">
             <label>Redeem Coin (optional)</label>
@@ -428,7 +428,7 @@ tr:hover td{background:#faf9f4;}
       <div class="pane">
         <h3>Return / Exchange</h3>
         <div class="row mb-12">
-          <input class="inp" id="retSearch" placeholder="Bill number, mobile ya scanned barcode">
+          <input class="inp" id="retSearch" placeholder="Bill number, mobile or scanned barcode">
           <button class="btn ghost sm" id="btnRetScan">📷 Scan Tag</button>
           <button class="btn sm" id="btnRetSearch">Search</button>
         </div>
@@ -441,7 +441,7 @@ tr:hover td{background:#faf9f4;}
       <div class="pane">
         <h3>Wallet / Coins <small><button class="btn sm" id="btnIssueCoin">＋ Issue New Coin</button></small></h3>
         <div class="row mb-12">
-          <input class="inp" id="walletSearch" placeholder="Coin code, mobile ya customer name se search">
+          <input class="inp" id="walletSearch" placeholder="Search by coin code, mobile or customer name">
           <button class="btn ghost sm" id="btnWalletScan">📷 Scan Bill</button>
           <select class="inp" id="walletFilter" style="max-width:180px;">
             <option value="">All</option>
@@ -519,7 +519,7 @@ tr:hover td{background:#faf9f4;}
     <!-- ===== TAGS + BARCODE STICKERS ===== -->
     <div class="screen" id="scr-tags">
       <div class="pane">
-        <h3>Barcode / Price Sticker Generator <small>DataMatrix — kapde ke small tag pe fit</small></h3>
+        <h3>Barcode / Price Sticker Generator <small>DataMatrix — sized to fit small garment tags</small></h3>
 
         <div class="grid-3 mb-12">
           <div class="field">
@@ -546,7 +546,7 @@ tr:hover td{background:#faf9f4;}
           </div>
         </div>
 
-        <div class="tag-info mb-12">Har variant ke saamne quantity daaliye — utne stickers print honge. Print 4×6 inch page par hoga aur har page par 6 stickers (2×3 grid) aayenge, taaki page ki wastage kam ho — agar 20-30 tags hain toh utne hi 4×6 pages apne aap ban jaayenge. Size ab tag pe MRP ke upar bold me dikhega.</div>
+        <div class="tag-info mb-12">Enter the quantity next to each variant — that many stickers will be printed. Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid), which keeps paper wastage low — for example, 20-30 tags will automatically fill just a handful of 4×6 pages. The SIZE now prints as a bold, high-contrast badge above the MRP line so it stands out clearly on the tag.</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -564,7 +564,7 @@ tr:hover td{background:#faf9f4;}
     <!-- ===== CASH ===== -->
     <div class="screen" id="scr-cash">
       <div class="pane">
-        <h3>💰 Opening Cash <small>Shift ke start me denominations count karein</small></h3>
+        <h3>💰 Opening Cash <small>Count denominations at the start of the shift</small></h3>
         <div class="denom-grid mb-12" id="denomOpen"></div>
         <div class="row">
           <div class="stat"><div class="lab">Opening Total</div><div class="val" id="openTotal">₹0</div></div>
@@ -573,8 +573,8 @@ tr:hover td{background:#faf9f4;}
       </div>
 
       <div class="pane">
-        <h3>🗂️ Existing Cash In Hand <small>Pehle ka cash jo dukaan me pehle se rakha hai — ek baar set karein</small></h3>
-        <div class="tag-info mb-12">Yeh Opening/Closing se alag hai. System jo bills/cash-in-out se track karta hai woh sahi hai — bas jo cash aapke paas <b>system shuru karne se pehle se</b> rakha tha, uska note-wise breakdown yahan tap karke daaliye. Save karte hi yeh drawer ka current balance ban jaayega (upar/niche ka tracking usi se aage chalega). Jab bhi drawer count galat lage, isse dobara sahi kar sakte hain.</div>
+        <h3>🗂️ Existing Cash In Hand <small>Cash already kept at the shop before this system was set up — set once</small></h3>
+        <div class="tag-info mb-12">This is different from Opening/Closing. The amounts the system tracks from bills and cash-in/out are already accurate — this section is only for entering the note-wise breakdown of cash that was <b>already in the shop before the system was started</b>. As soon as you save it, it becomes the current drawer balance (all further tracking builds on top of this). Use this again any time the drawer count needs to be corrected.</div>
         <div class="denom-grid mb-12" id="denomExisting"></div>
         <div class="row">
           <div class="stat"><div class="lab">Existing Cash Total</div><div class="val" id="existingTotal">₹0</div></div>
@@ -589,7 +589,7 @@ tr:hover td{background:#faf9f4;}
           <div class="stat"><div class="lab">Today In</div><div class="val" id="drawIn">₹0</div></div>
           <div class="stat"><div class="lab">Today Out</div><div class="val" id="drawOut">₹0</div></div>
         </div>
-        <div class="strong mb-8">Note-wise Live Count <small class="dim" style="font-weight:400;">— bill/cash-in-out se apne aap update hota hai</small></div>
+        <div class="strong mb-8">Note-wise Live Count <small class="dim" style="font-weight:400;">— updates automatically from bills / cash in-out</small></div>
         <div class="tbl-wrap mb-12"><table id="denomLiveTbl">
           <thead><tr><th>Note</th><th>Qty</th><th>Value</th></tr></thead>
           <tbody></tbody>
@@ -661,7 +661,7 @@ tr:hover td{background:#faf9f4;}
     <div class="screen" id="scr-attendance">
       <div class="grid-2">
       <div class="pane">
-        <h3>🕐 Staff Attendance <small>Punch IN aur OUT log karo</small></h3>
+        <h3>🕐 Staff Attendance <small>Log staff punch IN and OUT times</small></h3>
         <div class="grid-3 mb-12">
           <div class="field">
             <label>Staff</label>
@@ -676,7 +676,7 @@ tr:hover td{background:#faf9f4;}
             <button class="btn bad blk" id="btnPunchOut">🔴 Punch OUT</button>
           </div>
         </div>
-        <div class="field mb-12"><label>Notes (optional)</label><input class="inp" id="attNotes" placeholder="Late aya, half-day..."></div>
+        <div class="field mb-12"><label>Notes (optional)</label><input class="inp" id="attNotes" placeholder="Late arrival, half-day..."></div>
         <div class="strong mb-8">Today's Log</div>
         <div class="tbl-wrap"><table id="attTbl">
           <thead><tr><th>Staff</th><th>Date</th><th>IN</th><th>OUT</th><th>Hours</th><th>Notes</th></tr></thead>
@@ -685,14 +685,14 @@ tr:hover td{background:#faf9f4;}
       </div>
 
       <div class="pane">
-        <h3>💵 Galla (Cash Drawer) Summary <small>Aaj ka overview</small></h3>
+        <h3>💵 Cash Drawer Summary <small>Today's overview</small></h3>
         <div class="grid-2 mb-12">
           <div class="stat"><div class="lab">Opening</div><div class="val" id="attCashOpen">₹0</div></div>
           <div class="stat"><div class="lab">Current Balance</div><div class="val" id="attCashNow">₹0</div></div>
-          <div class="stat"><div class="lab">Total Aaya (In)</div><div class="val" id="attCashIn">₹0</div></div>
-          <div class="stat"><div class="lab">Total Gaya (Out)</div><div class="val" id="attCashOut">₹0</div></div>
+          <div class="stat"><div class="lab">Total In</div><div class="val" id="attCashIn">₹0</div></div>
+          <div class="stat"><div class="lab">Total Out</div><div class="val" id="attCashOut">₹0</div></div>
         </div>
-        <div class="strong mb-8">Aaj ki Galla Entries</div>
+        <div class="strong mb-8">Today's Cash Drawer Entries</div>
         <div class="tbl-wrap"><table id="attCashTbl">
           <thead><tr><th>Time</th><th>Type</th><th>Ref</th><th>Amount</th><th>Notes</th></tr></thead>
           <tbody></tbody>
@@ -726,7 +726,7 @@ tr:hover td{background:#faf9f4;}
               <input type="file" id="setLogoFile" accept="image/*" style="max-width:220px;">
               <button class="btn ghost sm" id="btnClearLogo">Remove</button>
             </div>
-            <div class="hint mt-8">Yeh logo login page, sidebar, browser tab icon aur printed bill — sab jagah automatically use hoga.</div>
+            <div class="hint mt-8">This logo is used automatically everywhere — the login page, sidebar, browser tab icon, and printed bills.</div>
           </div>
         </div>
         <button class="btn sm" id="btnSaveShop">Save Profile</button>
@@ -742,7 +742,7 @@ tr:hover td{background:#faf9f4;}
           <div>
             <input type="file" id="setUpiFile" accept="image/*">
             <button class="btn ghost sm mt-8" id="btnClearUpi">Remove</button>
-            <div class="hint mt-8">Ye QR bill screen me "UPI" ya "Online" payment mode chunte hi customer ko dikhega aur bill print pe bhi aayega.</div>
+            <div class="hint mt-8">This QR is shown to the customer as soon as "UPI" or "Online" payment mode is selected on the bill screen, and is also printed on the bill.</div>
           </div>
         </div>
       </div>
@@ -768,7 +768,7 @@ tr:hover td{background:#faf9f4;}
         <div class="grid-3 mb-12">
           <div class="field"><label>Return Window (days)</label><input class="inp" id="setRetDays" type="number" min="0" value="3"></div>
         </div>
-        <div class="hint mb-8">Bill date se itne din tak hi item return/exchange allowed maana jaayega. Returns screen me scan karte hi yeh auto-check hoga.</div>
+        <div class="hint mb-8">Returns/exchanges will be considered allowed only within this many days of the bill date. The Returns screen checks this automatically as soon as an item is scanned.</div>
         <button class="btn sm" id="btnSaveRetDays">Save Return Policy</button>
       </div>
 
@@ -776,7 +776,7 @@ tr:hover td{background:#faf9f4;}
         <h3>Razorpay (Online Payment)</h3>
         <div class="field"><label>Razorpay Key ID</label><input class="inp" id="setRzKey" placeholder="rzp_live_xxx or rzp_test_xxx"></div>
         <button class="btn sm" id="btnSaveRz">Save Key</button>
-        <div class="hint mt-8">Key add karne ke baad POS me "UPI (Razorpay)" option kaam karega — customer online payment link se paisa denga.</div>
+        <div class="hint mt-8">Once this key is added, the "UPI (Razorpay)" option in POS will work — the customer will be able to pay via an online payment link.</div>
       </div>
 
       <div class="pane">
@@ -787,7 +787,7 @@ tr:hover td{background:#faf9f4;}
             <input type="file" id="restoreFile" accept="application/json" style="display:none;">
           </label>
         </div>
-        <div class="hint mt-8">Restore sirf local cache replace karega — Sheet ka data unchanged rahega. Full recovery ke liye Google Sheet ka native version history use karein.</div>
+        <div class="hint mt-8">Restoring only replaces the local cache — the Google Sheet data stays unchanged. For full recovery, use the Google Sheet's native version history.</div>
       </div>
       <div class="pane" id="paneMasterPw">
         <h3>🔐 Master Password</h3>
@@ -984,7 +984,7 @@ async function apiGet(action){
 }
 async function apiPost(action, data, opts){
   opts = opts || {};
-  if(!state.cfg.apiUrl){ return { success:false, error:'API URL missing (Settings me set karein)' }; }
+  if(!state.cfg.apiUrl){ return { success:false, error:'API URL missing (set it under Settings)' }; }
   try{
     const r = await fetch(state.cfg.apiUrl, {
       method:'POST',
@@ -1000,7 +1000,7 @@ async function apiPost(action, data, opts){
   }catch(err){
     if(!opts.fromQueue){
       queueAdd(action, data);
-      return { success:false, error:'Offline — record queued (auto-sync jab internet aayega)' };
+      return { success:false, error:'Offline — record queued (will auto-sync once internet is back)' };
     }
     return { success:false, error: err.message };
   }
@@ -1109,7 +1109,7 @@ async function doLogin(){
   const m = $('#lgMobile').value.trim();
   const p = $('#lgPass').value;
   const err = $('#lgErr'); err.textContent = '';
-  if(m.length < 10){ err.textContent = 'Sahi mobile daaliye'; return; }
+  if(m.length < 10){ err.textContent = 'Please enter a valid mobile number'; return; }
   const btn = $('#lgBtn'); btn.disabled = true; btn.textContent = 'Signing in…';
   const r = await apiPost('login', { mobile: m, password: p });
   btn.disabled = false; btn.textContent = 'Sign in';
@@ -1165,7 +1165,7 @@ async function pullAll(){
     render(currentScreen());
     toast('Synced from Sheet', 'ok');
   }else{
-    toast(r?.error || 'Sheet load failed — showing cached', 'warn');
+    toast(r?.error || 'Sheet load failed — showing cached data', 'warn');
   }
 }
 function currentScreen(){
@@ -1400,7 +1400,7 @@ function updateUpiQr(){
   }else{
     $('#upiQrBox').style.display = 'none';
     if(showQr && !state.cfg.upiQR){
-      toast('UPI QR set nahi hai — Settings me upload karein', 'warn');
+      toast('UPI QR not set — please upload it in Settings', 'warn');
     }
   }
 }
@@ -1493,7 +1493,7 @@ function pushToCart(p, v){
 function refreshCart(){
   const box = $('#cartBox');
   if(!state.cart.length){
-    box.innerHTML = '<div class="empty">Cart empty — kuch scan karein</div>';
+    box.innerHTML = '<div class="empty">Cart is empty — scan an item to begin</div>';
     $('#posSub').textContent = fmt(0); $('#posTotal').textContent = fmt(0); $('#posDiscView').textContent='-₹0';
     return;
   }
@@ -1833,23 +1833,26 @@ function printBill(b){
     }catch(e){ console.error('bill barcode draw failed', e); }
   });
 }
+// Opens WhatsApp directly to the customer's own number with the bill message
+// pre-filled and ready to Send — wa.me/<countrycode><number> always opens
+// that exact contact's chat window with the text box pre-populated.
 function whatsappLastBill(){
   if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
   const b = state.lastBill;
-  const msg = `${state.cfg.shopName}\nInvoice: ${b.BillNumber}\nAmount Paid: ₹${b.Total}\nPayment Mode: ${b.PaymentMode}\n\nThank you for shopping with us! We look forward to serving you again.`;
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
-  if(!mob){ toast('Customer mobile chahiye', 'warn'); return; }
+  if(!mob || mob.length !== 10){ toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn'); return; }
+  const msg = `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
   window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
 
 /* ------- customer history modal ------- */
 async function viewCustomerHistory(){
   const m = $('#posCustMob').value.replace(/\D/g,'');
-  if(m.length !== 10){ toast('10 digit mobile daaliye', 'warn'); return; }
+  if(m.length !== 10){ toast('Please enter a valid 10-digit mobile number', 'warn'); return; }
   toast('Loading customer…');
   const r = await apiPost('getCustomerHistory', { mobile: m });
   if(!r.success){ toast(r.error||'Load failed', 'bad'); return; }
-  if(!r.data.found){ toast('Naya customer — koi history nahi', 'warn'); return; }
+  if(!r.data.found){ toast('New customer — no history found', 'warn'); return; }
   const c = r.data.customer, st = r.data.stats;
   const rows = (r.data.bills||[]).slice(0,20).map(b=>{
     const its = (b.items||[]).map(i=>i.Name+' ('+i.Quantity+')').join(', ');
@@ -1866,6 +1869,22 @@ async function viewCustomerHistory(){
     <tr><td class="mono">${w.WalletID}</td><td>${fmt(w.Amount)}</td><td>${fmt(w.RemainingAmount)}</td>
     <td>${(w.ExpiryDate||'').substr(0,10)}</td><td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'?'bad':'warn')}">${w.Status}</span></td></tr>
   `).join('');
+  // Pre-orders placed by this customer — pulled straight from the local
+  // pre-orders cache so their status/history shows alongside bills & coins.
+  const custPreorders = (state.data.preorders||[]).filter(po =>
+    String(po.CustomerMobile||'').replace(/\D/g,'') === m
+  ).sort((a,b)=> String(b.CreatedDate||'').localeCompare(String(a.CreatedDate||'')));
+  const preRows = custPreorders.map(po => `
+    <tr>
+      <td>${(po.CreatedDate||'').substr(0,10)}</td>
+      <td class="mono">${po.OrderNumber||''}</td>
+      <td>${po.ProductName||''}</td>
+      <td>${(po.Color||'')+' '+(po.Size||'')}</td>
+      <td>${po.Quantity||0}</td>
+      <td>${fmt(po.TotalAmount)}</td>
+      <td>${fmt(po.PendingAmount)}</td>
+      <td><span class="pill ${po.Status==='Paid'?'ok':(po.Status==='Cancelled'?'bad':'warn')}">${po.Status||''}</span></td>
+    </tr>`).join('');
   openModal('Customer • '+(c.Name||m), `
     <div class="grid-3 mb-16">
       <div class="stat"><div class="lab">Total Spend</div><div class="val">${fmt(st.totalSpend)}</div></div>
@@ -1879,6 +1898,10 @@ async function viewCustomerHistory(){
     <div class="tbl-wrap mb-16"><table>
       <thead><tr><th>Date</th><th>Bill#</th><th>Items</th><th>Total</th><th>Mode</th><th></th></tr></thead>
       <tbody id="custHistBills">${rows||'<tr><td colspan="6" class="empty">No bills</td></tr>'}</tbody></table></div>
+    <div class="strong mb-8">Pre-Orders</div>
+    <div class="tbl-wrap mb-16"><table>
+      <thead><tr><th>Date</th><th>Order#</th><th>Product</th><th>Var</th><th>Qty</th><th>Total</th><th>Pending</th><th>Status</th></tr></thead>
+      <tbody>${preRows||'<tr><td colspan="8" class="empty">No pre-orders</td></tr>'}</tbody></table></div>
     <div class="strong mb-8">Coins</div>
     <div class="tbl-wrap"><table>
       <thead><tr><th>Code</th><th>Amount</th><th>Remaining</th><th>Expires</th><th>Status</th></tr></thead>
@@ -2013,7 +2036,7 @@ function renderProducts(){
     if(b.dataset.a==='edit') openProductForm(p);
     if(b.dataset.a==='del') deleteProduct(p);
   };
-  if(!list.length) tb.innerHTML = '<tr><td colspan="10" class="empty">No products yet — Add Product se start karein</td></tr>';
+  if(!list.length) tb.innerHTML = '<tr><td colspan="10" class="empty">No products yet — use Add Product to get started</td></tr>';
 }
 
 const CAT_LIST  = ['Bottom Wear','Top Wear','Ethnic','Dress','Winter Wear','Accessories','Other'];
@@ -2074,15 +2097,16 @@ function openProductForm(existing){
 
     ${isEdit ? `
     <div class="divider"></div>
-    <div class="strong mb-8">Variants <small class="dim" style="font-weight:400;">— edit color, size or stock directly, or add a new variant below</small></div>
+    <div class="strong mb-8">Variants <small class="dim" style="font-weight:400;">— edit color, size, stock or storage location directly, or add a new variant below</small></div>
     <div class="tbl-wrap mb-12"><table>
-      <thead><tr><th>Color</th><th>Size</th><th>Stock</th><th></th></tr></thead>
+      <thead><tr><th>Color</th><th>Size</th><th>Stock</th><th>Location <small class="dim" style="font-weight:400;">(Floor/Rack/Shelf)</small></th><th></th></tr></thead>
       <tbody id="pfVarEditBody"></tbody>
     </table></div>
     <div class="row">
       <input class="inp" id="pfNewVarColor" placeholder="New color">
       <input class="inp" id="pfNewVarSize" placeholder="New size">
       <input class="inp" id="pfNewVarStock" type="number" min="0" value="1" placeholder="Stock">
+      <input class="inp" id="pfNewVarLoc" placeholder="Location e.g. Floor1/RackA/Shelf2">
       <button class="btn ghost sm" id="pfNewVarAdd">＋ Add Variant</button>
     </div>
     ` : `
@@ -2108,7 +2132,10 @@ function openProductForm(existing){
     </div>
     <div class="chips mb-12" id="pfSizeChips"></div>
 
-    <div class="field"><label>Default stock per variant</label><input class="inp" id="pfVarStock" type="number" min="0" value="1"></div>
+    <div class="grid-2">
+      <div class="field"><label>Default stock per variant</label><input class="inp" id="pfVarStock" type="number" min="0" value="1"></div>
+      <div class="field"><label>Storage Location <small class="dim" style="font-weight:400;">applies to all variants</small></label><input class="inp" id="pfVarLoc" placeholder="e.g. Floor1/RackA/Shelf2"></div>
+    </div>
     <div id="pfPreview" class="hint mb-8"></div>
     <div class="tbl-wrap" id="pfPreviewTblWrap" style="display:none;"><table>
       <thead><tr><th>Color</th><th>Size</th><th>Stock</th></tr></thead>
@@ -2199,24 +2226,28 @@ function renderPfChips(){
 }
 
 // Existing-product variant editor: every field except UID can be changed
-// directly from this table (Color, Size, Stock), plus add/remove variants.
-// Edits are applied OPTIMISTICALLY to the local table first (so staff can
-// keep typing the next variant immediately) and the save to the Sheet runs
-// in the background with automatic retries — no "please wait" blocking.
+// directly from this table (Color, Size, Stock, Location), plus add/remove
+// variants. Edits are applied OPTIMISTICALLY to the local table first (so
+// staff can keep typing the next variant immediately) and the save to the
+// Sheet runs in the background with automatic retries — no blocking wait.
 function renderEditVariants(existing){
   const body = $('#pfVarEditBody');
   if(!body) return;
   const variants = existing.variants || [];
-  body.innerHTML = variants.map(v => `
+  body.innerHTML = variants.map(v => {
+    const loc = v.Location || [v.Floor,v.Rack,v.Shelf].filter(Boolean).join('/');
+    return `
     <tr data-vid="${v.VariantID}">
       <td><input class="inp" data-f="Color" value="${v.Color||''}" style="min-width:70px;"></td>
       <td><input class="inp" data-f="Size" value="${v.Size||''}" style="min-width:60px;"></td>
       <td><input class="inp" type="number" min="0" data-f="Stock" value="${v.Stock||0}" style="max-width:80px;"></td>
+      <td><input class="inp" data-f="Location" value="${loc||''}" placeholder="Floor/Rack/Shelf" style="min-width:120px;"></td>
       <td>
         <button class="btn ghost sm" data-a="save">Save</button>
         <button class="btn bad sm" data-a="del">×</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="4" class="empty">No variants yet — add one below</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty">No variants yet — add one below</td></tr>';
   body.onclick = e => {
     const btn = e.target.closest('button'); if(!btn) return;
     const tr = btn.closest('tr'); const vid = tr.dataset.vid;
@@ -2224,12 +2255,13 @@ function renderEditVariants(existing){
       const Color = tr.querySelector('[data-f="Color"]').value.trim();
       const Size = tr.querySelector('[data-f="Size"]').value.trim();
       const Stock = Number(tr.querySelector('[data-f="Stock"]').value||0);
+      const Location = tr.querySelector('[data-f="Location"]').value.trim();
       if(!Color || !Size){ toast('Color and Size cannot be empty', 'bad'); return; }
       // Optimistic local update — reflects instantly, no waiting on the Sheet.
       const v = variants.find(x => x.VariantID === vid);
-      if(v){ v.Color = Color; v.Size = Size; v.Stock = Stock; }
+      if(v){ v.Color = Color; v.Size = Size; v.Stock = Stock; v.Location = Location; }
       toast('Saving…', 'ok');
-      apiPostBG('updateVariant', { variantID: vid, Color, Size, Stock }).then(r => {
+      apiPostBG('updateVariant', { variantID: vid, Color, Size, Stock, Location }).then(r => {
         if(!r.success){ toast('Variant save failed — will retry on next sync: '+r.error, 'bad'); }
         else{ toast('Variant saved', 'ok'); pullAll(); }
       });
@@ -2254,16 +2286,18 @@ async function addVariantInline(existing){
   const Color = $('#pfNewVarColor').value.trim();
   const Size = $('#pfNewVarSize').value.trim();
   const Stock = Number($('#pfNewVarStock').value||0);
+  const Location = $('#pfNewVarLoc') ? $('#pfNewVarLoc').value.trim() : '';
   if(!Color || !Size){ toast('Color and Size are both required', 'bad'); return; }
   if(!existing.variants) existing.variants = [];
   const tempID = 'TEMP_'+rnd();
-  existing.variants.push({ VariantID: tempID, Color, Size, Stock });
+  existing.variants.push({ VariantID: tempID, Color, Size, Stock, Location });
   renderEditVariants(existing);
   // clear the inputs immediately so the next variant can be typed without delay
   $('#pfNewVarColor').value=''; $('#pfNewVarSize').value=''; $('#pfNewVarStock').value=1;
+  if($('#pfNewVarLoc')) $('#pfNewVarLoc').value='';
   $('#pfNewVarColor').focus();
   toast('Adding variant…', 'ok');
-  const r = await apiPostBG('addVariant', { ProductID: existing.ProductID, UID: existing.UID, Color, Size, Stock, SalePrice: existing.SalePrice, BatchNumber: existing.BatchNumber });
+  const r = await apiPostBG('addVariant', { ProductID: existing.ProductID, UID: existing.UID, Color, Size, Stock, Location, SalePrice: existing.SalePrice, BatchNumber: existing.BatchNumber });
   if(!r.success){
     toast('Variant "'+Color+'/'+Size+'" failed to save: '+r.error, 'bad');
     const idx = existing.variants.findIndex(x => x.VariantID === tempID);
@@ -2325,7 +2359,8 @@ async function saveProduct(existing){
   if(pfColorList.length && pfSizeList.length){
     const combos = [];
     pfColorList.forEach(c => pfSizeList.forEach(s => combos.push({ c, s })));
-    saveVariantsInBackground(pid, uid, batch, body.SalePrice, combos, pfStockOverride, Number($('#pfVarStock')?.value||1));
+    const loc = $('#pfVarLoc') ? $('#pfVarLoc').value.trim() : '';
+    saveVariantsInBackground(pid, uid, batch, body.SalePrice, combos, pfStockOverride, Number($('#pfVarStock')?.value||1), loc);
   }else{
     toast('Product created (no variants added)', 'ok');
   }
@@ -2334,7 +2369,7 @@ async function saveProduct(existing){
 // at a time in the background with up to 2 retries each, so a slow Sheet
 // never blocks the staff from moving on to the next task. Reports a final
 // summary toast and refreshes data once done.
-async function saveVariantsInBackground(pid, uid, batch, salePrice, combos, stockOverride, defaultStock){
+async function saveVariantsInBackground(pid, uid, batch, salePrice, combos, stockOverride, defaultStock, location){
   let ok = 0;
   const failed = [];
   for(const combo of combos){
@@ -2342,7 +2377,7 @@ async function saveVariantsInBackground(pid, uid, batch, salePrice, combos, stoc
     const stk = stockOverride[key] !== undefined ? stockOverride[key] : defaultStock;
     const vr = await apiPostBG('addVariant', {
       ProductID: pid, UID: uid, Color: combo.c, Size: combo.s, Stock: stk,
-      SalePrice: salePrice, BatchNumber: batch
+      Location: location || '', SalePrice: salePrice, BatchNumber: batch
     }, 2);
     if(vr.success) ok++; else failed.push(combo.c+'/'+combo.s);
   }
@@ -2382,7 +2417,7 @@ function renderInventory(){
   let totalU = 0;
   (state.data.products||[]).forEach(p => {
     (p.variants||[]).forEach(v => {
-      const line = [p.UID, p.Name, v.Color, v.Size, v.BatchNumber||p.BatchNumber||''].join(' ').toLowerCase();
+      const line = [p.UID, p.Name, v.Color, v.Size, v.BatchNumber||p.BatchNumber||'', v.Location||''].join(' ').toLowerCase();
       if(term && !line.includes(term)) return;
       totalU += Number(v.Stock||0);
       rows.push({ p, v });
@@ -2391,6 +2426,7 @@ function renderInventory(){
   $('#invTotalUnits').textContent = totalU;
   const tb = $('#invTbl tbody'); tb.innerHTML='';
   rows.slice(0, 500).forEach(({p,v}) => {
+    const loc = v.Location || [v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ');
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="mono">${p.UID}</td>
@@ -2400,7 +2436,7 @@ function renderInventory(){
       <td>${v.BatchNumber || p.BatchNumber || '—'}</td>
       ${isAdmin ? '<td>'+fmt(p.CostPrice)+'</td>' : ''}
       <td><b>${v.Stock}</b></td>
-      <td>${[v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ')||'—'}</td>
+      <td>${loc||'—'}</td>
       <td>
         <button class="btn ghost sm" data-a="view" data-p="${p.ProductID}">👁</button>
         ${isAdmin ? '<button class="btn ghost sm" data-a="adj" data-v="'+v.VariantID+'" data-cur="'+(v.Stock||0)+'" data-name="'+escapeHtml(p.Name+' — '+(v.Color||'')+' '+(v.Size||''))+'">Set Stock</button>' : ''}
@@ -2454,7 +2490,7 @@ function wireCustomers(){
   $('#btnCustScan').addEventListener('click', ()=> openCamScanner(code=>{
     const bill = findBillByCode(code);
     if(bill){ openBillDetailsModal(bill); return; }
-    toast('Ye barcode kisi bill se match nahi hua', 'bad');
+    toast('This barcode did not match any bill', 'bad');
   }));
 }
 function renderCustomers(){
@@ -2512,7 +2548,7 @@ function openCustomerForm(c){
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label: isEdit?'Save':'Add', kind:'ok', on: async () => {
       const name = $('#cfName').value.trim(), mob = $('#cfMob').value.replace(/\D/g,'');
-      if(!name || mob.length !== 10){ toast('Name aur 10-digit mobile chahiye', 'bad'); return; }
+      if(!name || mob.length !== 10){ toast('Name and a valid 10-digit mobile number are required', 'bad'); return; }
       const body = { Name: name, Mobile: mob, City: $('#cfCity').value, Email: $('#cfEmail').value, Address: $('#cfAddr').value };
       if(isEdit){ body.customerID = c.CustomerID; }
       const r = await apiPost(isEdit?'updateCustomer':'addCustomer', body);
@@ -2551,10 +2587,10 @@ function wireSuppliers(){
 // supplied it, showing purchase dates, contact number, and full history.
 function scanSupplierByProduct(code){
   const hit = findByCode(code);
-  if(!hit || !hit.product){ toast('Ye barcode kisi product se match nahi hua', 'bad'); return; }
+  if(!hit || !hit.product){ toast('This barcode did not match any product', 'bad'); return; }
   const p = hit.product;
   const purchases = (state.data.purchases||[]).filter(pu => String(pu.ProductID)===String(p.ProductID) || String(pu.UID)===String(p.UID));
-  if(!purchases.length){ toast('Iss product ke liye koi purchase / supplier record nahi mila', 'warn'); return; }
+  if(!purchases.length){ toast('No purchase / supplier record found for this product', 'warn'); return; }
   purchases.sort((a,b)=> String(b.Date).localeCompare(String(a.Date)));
   const supplierIds = [...new Set(purchases.map(pu=>String(pu.SupplierID)))];
   if(supplierIds.length === 1){
@@ -2713,14 +2749,14 @@ function wireWallet(){
 // if not (with a quick shortcut to issue one).
 function scanForWalletCoin(code){
   const bill = findBillByCode(code);
-  if(!bill){ toast('Ye barcode kisi bill se match nahi hua', 'bad'); return; }
+  if(!bill){ toast('This barcode did not match any bill', 'bad'); return; }
   const coins = (state.data.wallet||[]).filter(w =>
     String(w.LinkedBillID||'') === String(bill.BillID) ||
     (bill.CustomerMobile && String(w.CustomerMobile||'')===String(bill.CustomerMobile))
   );
   if(!coins.length){
     openModal('Bill • '+(bill.BillNumber||''), `
-      <div class="tag-info">Is bill (#${bill.BillNumber||''}) ke against koi coin issue nahi hua hai.</div>
+      <div class="tag-info">No coin has been issued against this bill (#${bill.BillNumber||''}).</div>
       <div class="mt-12"><b>Customer:</b> ${bill.CustomerName||'—'}<br><b>Mobile:</b> ${bill.CustomerMobile||'—'}<br><b>Total:</b> ${fmt(bill.Total)}</div>
     `, [
       { label:'Close', kind:'ghost', on: closeModal },
@@ -2788,7 +2824,7 @@ function renderWallet(){
 }
 function sendCoinWhatsapp(w){
   const mob = String(w.CustomerMobile||'').replace(/\D/g,'');
-  if(!mob){ toast('Mobile missing', 'bad'); return; }
+  if(!mob){ toast('Mobile number missing', 'bad'); return; }
   const msg = `Dear ${w.CustomerName||'Customer'},\n\n${state.cfg.shopName} has issued you a store-credit coupon worth ₹${w.Amount}.\n\nCoupon Code: ${w.WalletID}\nBalance: ₹${w.RemainingAmount}\nValid Until: ${(w.ExpiryDate||'').substr(0,10)}\n\nPlease share this code on your next visit — the amount will be automatically applied to your bill.\n\nThank you for shopping with us!`;
   window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
@@ -2817,7 +2853,7 @@ function openIssueCoinForm(pref){
     { label:'Issue Coin', kind:'ok', on: async () => {
       const mob = $('#ciMob').value.replace(/\D/g,'');
       const amt = Number($('#ciAmt').value||0);
-      if(mob.length !== 10 || amt<=0){ toast('Mobile aur amount check karein', 'bad'); return; }
+      if(mob.length !== 10 || amt<=0){ toast('Please check the mobile number and amount', 'bad'); return; }
       const r = await apiPost('issueWallet', {
         CustomerMobile: mob,
         CustomerName: $('#ciName').value.trim(),
@@ -2833,7 +2869,7 @@ function openIssueCoinForm(pref){
       toast('Coin issued: '+w.WalletID, 'ok');
       closeModal();
       // Auto-open WhatsApp
-      if(confirm('Coin details WhatsApp pe bhejein?')) sendCoinWhatsapp(w);
+      if(confirm('Send coin details via WhatsApp?')) sendCoinWhatsapp(w);
       pullAll();
     }}
   ]);
@@ -2885,7 +2921,7 @@ function scanForReturn(code){
   const billHit = findBillByCode(code);
   if(billHit){ showBillForReturn(billHit); return; }
   const sales = findSalesByCode(code);
-  if(!sales.length){ $('#retResult').innerHTML = '<div class="pane"><div class="empty">Ye item kabhi becha nahi gaya — koi bill nahi mila.</div></div>'; return; }
+  if(!sales.length){ $('#retResult').innerHTML = '<div class="pane"><div class="empty">This item was never sold — no matching bill was found.</div></div>'; return; }
   if(sales.length === 1){
     showBillForReturn(sales[0].bill, sales[0].item.VariantID);
     return;
@@ -2899,16 +2935,16 @@ function scanForReturn(code){
       <td>${bill.BillNumber||''}</td>
       <td>${bill.CustomerName||bill.CustomerMobile||'—'}</td>
       <td>${item.Quantity}</td>
-      <td>${days} din pehle</td>
-      <td><span class="pill ${elig?'ok':'bad'}">${elig?'Return OK':'Window khatam'}</span></td>
+      <td>${days} days ago</td>
+      <td><span class="pill ${elig?'ok':'bad'}">${elig?'Return OK':'Window Closed'}</span></td>
       <td><button class="btn sm ok" data-bill="${bill.BillID}" data-vid="${item.VariantID}">Select</button></td>
     </tr>`;
   }).join('');
   $('#retResult').innerHTML = `
     <div class="pane">
-      <div class="strong mb-8">Ye item ${sales.length} alag bills me becha gaya hai — sahi bill select karein:</div>
+      <div class="strong mb-8">This item was sold in ${sales.length} different bills — please select the correct one:</div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Qty</th><th>Kitne din pehle</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Qty</th><th>Days Ago</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div>`;
@@ -2961,9 +2997,9 @@ function showBillForReturn(b, highlightVariantID){
   $('#retResult').innerHTML = `
     <div class="pane">
       <div class="${elig?'tag-note':'tag-info'} mb-12">
-        <b>${elig ? '✅ Return/Exchange allowed' : '⚠️ Return window khatam'}</b><br>
-        Bill date: ${(b.CreatedDate||'').substr(0,10)} — ${days} din pehle becha gaya (Policy: ${windowDays} din ke andar).
-        ${elig ? '' : ' Is bill ka return normally allowed nahi hai — agar phir bhi karna hai toh manually process karein.'}
+        <b>${elig ? '✅ Return/Exchange allowed' : '⚠️ Return window closed'}</b><br>
+        Bill date: ${(b.CreatedDate||'').substr(0,10)} — sold ${days} days ago (Policy: within ${windowDays} days).
+        ${elig ? '' : ' A return on this bill is not normally allowed — if it still needs to be processed, do so manually.'}
       </div>
       <div class="grid-2 mb-12">
         <div><b>Bill:</b> ${b.BillNumber}<br><b>Bill ID:</b> <span class="mono">${b.BillID}</span><br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
@@ -3012,7 +3048,7 @@ function showBillForReturn(b, highlightVariantID){
       const q = Number(x.value||0);
       if(q>0) lines.push({ vid: x.dataset.vid, qty: q });
     });
-    if(!lines.length){ toast('Return qty daaliye', 'warn'); return; }
+    if(!lines.length){ toast('Please enter a return quantity', 'warn'); return; }
     let totalRefund = 0;
     const returnedLines = [];
     for(const l of lines){
@@ -3101,14 +3137,16 @@ function renderPreorders(){
       <td><span class="pill ${p.Status==='Paid'?'ok':(p.Status==='Cancelled'?'bad':'warn')}">${p.Status}</span></td>
       <td>
         ${p.Status==='Active' ? '<button class="btn sm ok" data-a="pay" data-id="'+p.PreOrderID+'">＋ Pay</button>' : ''}
+        <button class="btn sm ghost" data-a="notify" data-id="${p.PreOrderID}">📱 Notify</button>
         ${p.Status==='Active' ? '<button class="btn sm bad" data-a="cancel" data-id="'+p.PreOrderID+'">×</button>' : ''}
       </td>`;
     tb.appendChild(tr);
   });
   tb.onclick = async e => {
     const b = e.target.closest('button'); if(!b) return;
+    const po = (state.data.preorders||[]).find(x => x.PreOrderID === b.dataset.id);
     if(b.dataset.a==='pay'){
-      const amt = Number(prompt('Kitna paisa collect kiya?')||0);
+      const amt = Number(prompt('How much amount was collected?')||0);
       if(!amt) return;
       const r = await apiPost('collectPreorderPayment', { preorderID: b.dataset.id, amount: amt });
       if(r.success){ toast('Payment logged', 'ok'); pullAll(); } else toast(r.error, 'bad');
@@ -3118,8 +3156,23 @@ function renderPreorders(){
       const r = await apiPost('cancelPreorder', { preorderID: b.dataset.id });
       if(r.success){ toast('Cancelled', 'ok'); pullAll(); }
     }
+    if(b.dataset.a==='notify'){
+      if(po) sendPreorderArrivalWhatsapp(po);
+    }
   };
   if(!state.data.preorders?.length) tb.innerHTML = '<tr><td colspan="11" class="empty">No pre-orders</td></tr>';
+}
+// Sends a professional English WhatsApp notification letting the customer
+// know their pre-ordered item has arrived, along with today's date as the
+// notification date and a request to collect it — opens directly in the
+// customer's own WhatsApp chat, pre-filled and ready to Send.
+function sendPreorderArrivalWhatsapp(po){
+  const mob = String(po.CustomerMobile||'').replace(/\D/g,'');
+  if(!mob || mob.length !== 10){ toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn'); return; }
+  const today = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+  const variant = [po.Color, po.Size].filter(Boolean).join(' / ');
+  const msg = `Dear ${po.CustomerName||'Customer'},\n\nGreat news! Your pre-ordered item has arrived at ${state.cfg.shopName}.\n\nOrder Number: ${po.OrderNumber||''}\nProduct: ${po.ProductName||''}${variant ? ' ('+variant+')' : ''}\nQuantity: ${po.Quantity||1}\nPending Amount: ${fmt(po.PendingAmount)}\nNotified On: ${today}\n\nKindly visit us at your earliest convenience to collect your order. Please let us know if you have any questions.\n\nThank you for your patience.\n\nWarm regards,\n${state.cfg.shopName}`;
+  window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
 function openPreForm(){
   openModal('New Pre-Order', `
@@ -3150,7 +3203,7 @@ function openPreForm(){
         PaidAmount: Number($('#prPaid').value||0), Notes: $('#prNotes').value,
         StaffID: state.user.staffID
       };
-      if(!body.CustomerName || body.CustomerMobile.length!==10 || !body.ProductName){ toast('Zaroori fields fill karein', 'bad'); return; }
+      if(!body.CustomerName || body.CustomerMobile.length!==10 || !body.ProductName){ toast('Please fill in all required fields', 'bad'); return; }
       const r = await apiPost('addPreorder', body);
       if(!r.success){ toast(r.error, 'bad'); return; }
       toast('Pre-order created', 'ok'); closeModal(); pullAll();
@@ -3222,7 +3275,7 @@ function openStaffForm(s){
         Permissions: $('#stRole').value === 'admin' ? 'all' : 'billing',
         PIN: $('#stPIN').value, Password: $('#stPass').value
       };
-      if(!body.Name || body.Mobile.length !== 10){ toast('Name aur 10-digit mobile chahiye', 'bad'); return; }
+      if(!body.Name || body.Mobile.length !== 10){ toast('Name and a valid 10-digit mobile number are required', 'bad'); return; }
       const r = await apiPost(isEdit?'updateStaff':'addStaff',
         isEdit ? Object.assign({ staffID: s.StaffID }, body) : body);
       if(!r.success){ toast(r.error, 'bad'); return; }
@@ -3296,7 +3349,7 @@ function renderReports(){
   (state.data.products||[]).forEach(p => (p.variants||[]).forEach(v => {
     if(!soldVids.has(v.VariantID) && Number(v.Stock||0) > 0) dead.push({ p, v });
   }));
-  $('#repDead tbody').innerHTML = dead.slice(0,50).map(({p,v}) => `<tr><td class="mono">${p.UID}</td><td>${p.Name}</td><td>${(v.Color||'')+' '+(v.Size||'')}</td><td>${v.Stock}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Sab items sell ho rahe hain 🎉</td></tr>';
+  $('#repDead tbody').innerHTML = dead.slice(0,50).map(({p,v}) => `<tr><td class="mono">${p.UID}</td><td>${p.Name}</td><td>${(v.Color||'')+' '+(v.Size||'')}</td><td>${v.Stock}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">All items are selling well 🎉</td></tr>';
 
   // returns
   const rets30 = (state.data.returns||[]).filter(r => new Date(r.CreatedDate) >= thirtyAgo);
@@ -3396,8 +3449,9 @@ window.addEventListener('DOMContentLoaded', () => {
 // the extras automatically flow onto more 4x6in pages (page-break-after keeps
 // each page separate when printing).
 // Shop name prints at the very top of every tag, then product name, then
-// SIZE in bold right above the MRP line, then a bigger scannable barcode,
-// then MRP (struck through) and a large, prominent sale price.
+// SIZE in a bold, high-contrast dark badge right above the MRP line, then a
+// bigger scannable barcode, then MRP (struck through) and a large, prominent
+// sale price.
 function printStickerSheet(){
   const size = $('#tagSize').value;         // small | medium | large — controls font scale only
   const showMRP   = $('#tShowMRP').checked;
@@ -3420,7 +3474,7 @@ function printStickerSheet(){
     if(!hit) return;
     for(let i=0;i<qty;i++) stickers.push(hit);
   });
-  if(!stickers.length){ toast('Sticker qty daaliye', 'warn'); return; }
+  if(!stickers.length){ toast('Please enter a sticker quantity', 'warn'); return; }
 
   const fsMap = { small: 9, medium: 10, large: 12 };
   const fs = fsMap[size] || 10;
@@ -3471,7 +3525,7 @@ function printStickerSheet(){
       .stk-batch { font-size:${fs-2}px; color:#333; }
       .stk-dm { margin:0.8mm 0; }
       .stk-dm canvas { width:17mm; height:17mm; }
-      .stk-size { font-weight:800; font-size:${fs+1}px; background:#111; color:#fff; padding:0.5mm 2mm; border-radius:3mm; margin-bottom:0.8mm; letter-spacing:.4px; }
+      .stk-size { font-weight:900; font-size:${fs+2}px; background:#000; color:#fff; padding:0.6mm 2.4mm; border-radius:3mm; margin-bottom:0.8mm; letter-spacing:.5px; box-shadow:0 0 0 0.3mm #000; }
       .stk-mrp { font-size:${fs}px; color:#555; }
       .stk-sp { font-weight:900; font-size:${fs+9}px; margin-top:0.3mm; }
     </style>
@@ -3508,7 +3562,7 @@ function printTag(pid, vid){
       <div style="font-weight:700;font-size:12px;">${escapeHtml(p.Name)}</div>
       <div style="font-size:9px;">B:${escapeHtml(v.BatchNumber || p.BatchNumber || '—')}</div>
       <canvas id="pt" style="width:20mm;height:20mm;margin:2mm 0;"></canvas>
-      ${v.Size ? '<div style="font-weight:800;font-size:12px;background:#111;color:#fff;display:inline-block;padding:0.5mm 3mm;border-radius:3mm;margin-bottom:1.5mm;">SIZE: '+escapeHtml(v.Size)+'</div>' : ''}
+      ${v.Size ? '<div style="font-weight:900;font-size:13px;background:#000;color:#fff;display:inline-block;padding:0.6mm 3.2mm;border-radius:3mm;margin-bottom:1.5mm;">SIZE: '+escapeHtml(v.Size)+'</div>' : ''}
       <div style="text-decoration:line-through;color:#666;font-size:11px;">MRP ${fmt(p.MRP)}</div>
       <div style="font-size:24px;font-weight:900;">₹${fmt(v.SalePrice||p.SalePrice)}</div>
     </div>`;
@@ -3652,7 +3706,7 @@ function wireAttendance(){
 }
 async function punch(kind){
   const sid = $('#attStaff').value;
-  if(!sid){ toast('Staff select karein', 'warn'); return; }
+  if(!sid){ toast('Please select a staff member', 'warn'); return; }
   const s = state.data.staff.find(x => x.StaffID === sid);
   const now = new Date();
   const rec = {
@@ -3707,7 +3761,7 @@ function renderAttendance(){
   });
   if(!Object.keys(byStaff).length) tb.innerHTML = '<tr><td colspan="6" class="empty">No punches today</td></tr>';
 
-  // ---- Galla (cash drawer) summary panel on the Attendance screen ----
+  // ---- Cash Drawer summary panel on the Attendance screen ----
   const cashToday = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-'));
   const inAmt = cashToday.filter(t=>t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const outAmt = cashToday.filter(t=>t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
@@ -3725,7 +3779,7 @@ function renderAttendance(){
       <td>${t.Type||''}</td><td>${t.Reference||''}</td><td>${fmt(t.Amount)}</td><td>${t.Description||''}</td>`;
     atb.appendChild(tr);
   });
-  if(!cashToday.length) atb.innerHTML = '<tr><td colspan="5" class="empty">Aaj koi galla entry nahi</td></tr>';
+  if(!cashToday.length) atb.innerHTML = '<tr><td colspan="5" class="empty">No cash drawer entries today</td></tr>';
 }
 function diffHours(hIn, hOut){
   const [a,b] = hIn.split(':').map(Number), [c,d] = hOut.split(':').map(Number);
@@ -3752,7 +3806,7 @@ function wireSettings(){
   $('#setShopAddr').value = state.cfg.shopAddress || '';
   if(state.cfg.shopLogo){ $('#setLogoPrev').src = state.cfg.shopLogo; $('#setLogoPrev').style.display = 'inline-block'; }
   $('#setLogoFile').addEventListener('change', e => readImage(e.target.files[0], dataURL => {
-    state.cfg.shopLogo = dataURL; $('#setLogoPrev').src = dataURL; $('#setLogoPrev').style.display='inline-block'; saveCfg(); applyBrandLogo(); toast('Logo saved — sab jagah update ho gaya', 'ok');
+    state.cfg.shopLogo = dataURL; $('#setLogoPrev').src = dataURL; $('#setLogoPrev').style.display='inline-block'; saveCfg(); applyBrandLogo(); toast('Logo saved — updated everywhere', 'ok');
   }));
   $('#btnClearLogo').addEventListener('click', () => {
     state.cfg.shopLogo = ''; $('#setLogoPrev').src=''; $('#setLogoPrev').style.display='none'; saveCfg(); applyBrandLogo(); toast('Logo removed');
@@ -3788,7 +3842,7 @@ function wireSettings(){
   $('#setRetDays').value = state.cfg.returnWindowDays != null ? state.cfg.returnWindowDays : 3;
   $('#btnSaveRetDays').addEventListener('click', () => {
     state.cfg.returnWindowDays = Math.max(0, Number($('#setRetDays').value||0));
-    saveCfg(); toast('Return policy saved: '+state.cfg.returnWindowDays+' din', 'ok');
+    saveCfg(); toast('Return policy saved: '+state.cfg.returnWindowDays+' days', 'ok');
   });
 
   // Razorpay
@@ -3813,13 +3867,13 @@ function wireSettings(){
       saveCache();
       toast('Local cache restored (Sheet unchanged)', 'ok');
       render(currentScreen());
-    }catch(err){ toast('Restore fail: '+err.message, 'bad'); }
+    }catch(err){ toast('Restore failed: '+err.message, 'bad'); }
   });
 
   // Master password
   $('#btnPwChange').addEventListener('click', async () => {
     const p1 = $('#pwNew').value, p2 = $('#pwNew2').value;
-    if(p1.length < 6 || p1 !== p2){ toast('Password check karein (min 6 aur match)', 'bad'); return; }
+    if(p1.length < 6 || p1 !== p2){ toast('Please check the password (min 6 characters and matching)', 'bad'); return; }
     const r = await apiPost('updateStaff', {
       staffID: state.user.staffID, Password: p1
     });
@@ -3865,7 +3919,7 @@ function openCamScanner(onCode, opts){
     <div id="camBox"></div>
     <div class="row mt-8">
       <button class="btn ghost sm" id="btnTorch">🔦 Torch ON</button>
-      <span class="hint">${continuous ? 'Camera khuli rahegi — jitne chaho scan karo, khatam hone par Done dabao' : 'Camera permission zaruri hai'}</span>
+      <span class="hint">${continuous ? 'Camera will stay open — scan as many items as needed, then tap Done' : 'Camera permission is required'}</span>
     </div>
   `, [
     { label: continuous ? 'Done' : 'Cancel', kind:'ghost', on: () => { stopCam(); closeModal(); } }
@@ -3894,13 +3948,13 @@ function stopCam(){
   if(camScanner){ camScanner.stop().catch(()=>{}); camScanner=null; }
 }
 async function toggleTorch(){
-  if(!camScanner){ toast('Camera nahi chalu', 'warn'); return; }
+  if(!camScanner){ toast('Camera is not running', 'warn'); return; }
   try{
     camTorch = !camTorch;
     await camScanner.applyVideoConstraints({ advanced: [{ torch: camTorch }] });
     document.querySelector('#btnTorch').textContent = camTorch ? '🔦 Torch OFF' : '🔦 Torch ON';
   }catch(err){
-    toast('Iss device pe torch nahi hai', 'warn');
+    toast('Torch is not available on this device', 'warn');
     camTorch = false;
   }
 }
@@ -3921,7 +3975,7 @@ function requirePin(reason){
         const pin = document.querySelector('#pinIn').value;
         const r = await apiPost('verifyPin', { staffID: state.user.staffID, pin });
         if(r.success && r.data && r.data.matched){ closeModal(); resolve(true); }
-        else { toast('Galat PIN', 'bad'); }
+        else { toast('Incorrect PIN', 'bad'); }
       }}
     ]);
     setTimeout(() => { const el = document.querySelector('#pinIn'); if(el) el.focus(); }, 50);
