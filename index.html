@@ -1275,7 +1275,7 @@ function renderDash(){
 
   // recent bills
   const tb = $('#dashBills tbody'); tb.innerHTML='';
-  bills.slice().reverse().slice(0,10).forEach(b=>{
+  bills.slice().reverse().forEach(b=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${b.BillNumber||''}</td><td>${b.CustomerName||b.CustomerMobile||'—'}</td>
       <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>
@@ -1412,7 +1412,7 @@ function showSuggest(term){
     (p.UID||'').toLowerCase().includes(t) ||
     (p.Name||'').toLowerCase().includes(t) ||
     (p.Barcode||'').toLowerCase().includes(t)
-  ).slice(0,6);
+  );
   if(!list.length) return;
   list.forEach(p=>{
     const div = document.createElement('div');
@@ -1854,7 +1854,7 @@ async function viewCustomerHistory(){
   if(!r.success){ toast(r.error||'Load failed', 'bad'); return; }
   if(!r.data.found){ toast('New customer — no history found', 'warn'); return; }
   const c = r.data.customer, st = r.data.stats;
-  const rows = (r.data.bills||[]).slice(0,20).map(b=>{
+  const rows = (r.data.bills||[]).map(b=>{
     const its = (b.items||[]).map(i=>i.Name+' ('+i.Quantity+')').join(', ');
     return `<tr>
       <td>${(b.CreatedDate||'').substr(0,10)}</td>
@@ -2425,7 +2425,7 @@ function renderInventory(){
   });
   $('#invTotalUnits').textContent = totalU;
   const tb = $('#invTbl tbody'); tb.innerHTML='';
-  rows.slice(0, 500).forEach(({p,v}) => {
+  rows.forEach(({p,v}) => {
     const loc = v.Location || [v.Floor,v.Rack,v.Shelf].filter(Boolean).join(' / ');
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -2927,7 +2927,7 @@ function scanForReturn(code){
     return;
   }
   // Multiple past sales of this exact variant — let staff pick the right one.
-  const rows = sales.slice(0,15).map(({item,bill}) => {
+  const rows = sales.map(({item,bill}) => {
     const days = daysSince(bill.CreatedDate);
     const elig = isReturnEligible(bill.CreatedDate);
     return `<tr>
@@ -3332,7 +3332,7 @@ function renderReports(){
     agg[k].qty += Number(it.Quantity||0);
     agg[k].rev += Number(it.LineTotal||0);
   });
-  const top = Object.values(agg).sort((a,b)=>b.qty-a.qty).slice(0,10);
+  const top = Object.values(agg).sort((a,b)=>b.qty-a.qty);
   $('#repTop tbody').innerHTML = top.map(t => `<tr><td>${t.name}</td><td>${t.variant}</td><td>${t.qty}</td><td>${fmt(t.rev)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No sales in 30d</td></tr>';
 
   // low stock
@@ -3383,7 +3383,10 @@ function renderTags(){
     });
   });
   const tb = $('#tagList'); tb.innerHTML='';
-  rows.slice(0, 200).forEach(({p, v}, i) => {
+  // No cap here — every variant that matches the filter must be listed so it
+  // can get a print quantity. Previously this was capped at 200 rows, which
+  // silently hid any variant beyond that from the Tag Printing screen.
+  rows.forEach(({p, v}, i) => {
     const qty = tagQty[v.VariantID] || 0;
     const tr = document.createElement('tr');
     tr.innerHTML = `
