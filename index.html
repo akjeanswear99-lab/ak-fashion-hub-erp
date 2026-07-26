@@ -546,7 +546,7 @@ tr:hover td{background:#faf9f4;}
           </div>
         </div>
 
-        <div class="tag-info mb-12">Every variant is listed automatically with its print quantity pre-filled to match its current stock — for example, a variant with 3 in stock starts at 3 tags, and a size with 2 in stock starts at 2 tags. Adjust any row's quantity by hand if needed. Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid), which keeps paper wastage low. The SIZE prints as a bold, high-contrast badge above the MRP line so it stands out clearly on the tag.</div>
+        <div class="tag-info mb-12">Every variant is listed automatically, starting at 0 tags. Tap "＋1 to All Visible" to add one tag per press for every variant shown, or type an exact quantity directly into any row (e.g. enter 3 for a variant with 3 in stock). Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid), which keeps paper wastage low. The SIZE prints as a bold, high-contrast badge above the MRP line so it stands out clearly on the tag.</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -3386,11 +3386,6 @@ function renderTags(){
   // can get a print quantity. Previously this was capped at 200 rows, which
   // silently hid any variant beyond that from the Tag Printing screen.
   rows.forEach(({p, v}, i) => {
-    // Default the print quantity to the variant's current stock count — so
-    // every unit in stock automatically gets a tag queued up (e.g. 3 in
-    // stock = 3 tags). Staff can still edit any row's quantity by hand;
-    // once they do, that manual value is remembered instead of the stock count.
-    if(tagQty[v.VariantID] === undefined){ tagQty[v.VariantID] = Number(v.Stock||0); }
     const qty = tagQty[v.VariantID] || 0;
     const tr = document.createElement('tr');
     tr.innerHTML = `
