@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>AK Fashion Hub</title>
 <meta name="theme-color" content="#111">
+<link rel="manifest" id="webManifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AK Fashion Hub">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/bwip-js/dist/bwip-js-min.js"></script>
@@ -546,7 +551,7 @@ tr:hover td{background:#faf9f4;}
           </div>
         </div>
 
-        <div class="tag-info mb-12">Every variant is listed automatically, starting at 0 tags. Tap "＋1 to All Visible" to add one tag per press for every variant shown, or type an exact quantity directly into any row (e.g. enter 3 for a variant with 3 in stock). Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid), which keeps paper wastage low. The SIZE prints as a bold, high-contrast badge above the MRP line so it stands out clearly on the tag.</div>
+        <div class="tag-info mb-12">Every variant is listed here starting at 0 tags. Type a quantity directly, or tap "＋1 to All Visible" to add one per press. From the <b>Products</b> screen, tapping 🏷 on a product automatically queues only the stock that hasn't been printed yet — e.g. click a product with sizes 30 (stock 2) and 32 (stock 3), and 2 and 3 tags come up ready to print. Anything already printed earlier is remembered and skipped, so re-clicking only pulls in newly added stock. Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid) to keep paper wastage low. SIZE prints as a bold, high-contrast badge above the MRP line.</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -822,6 +827,7 @@ const CFG_KEY = 'akfh:cfg';
 const SESS_KEY = 'akfh:sess';
 const CACHE_KEY = 'akfh:cache';
 const QUEUE_KEY = 'akfh:queue';
+const PRINTED_TAGS_KEY = 'akfh:printedTagQty'; // { variantID: totalTagsAlreadyPrinted }
 
 const state = {
   cfg: {
@@ -1023,7 +1029,7 @@ async function apiPostBG(action, data, retries){
 
 /* ------- init ------- */
 window.addEventListener('DOMContentLoaded', () => {
-  loadCfg(); loadSess(); loadCache();
+  loadCfg(); loadSess(); loadCache(); loadPrintedTagQty();
   wireNav();
   wireLogin();
   wireHeader();
@@ -1051,6 +1057,33 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ------- brand logo (login / sidebar / favicon / bill print) ------- */
+// Builds a clean 512x512 square icon with the shop's initial when no logo
+// has been uploaded yet — used so the phone always has a proper square icon
+// to install with, instead of falling back to an auto-generated screenshot
+// thumbnail (which is what caused the random "frock" image on phone installs).
+let _defaultIconCache = null;
+function generateDefaultIconDataUrl(){
+  if(_defaultIconCache) return _defaultIconCache;
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(0, 0, size, size);
+  const letter = (state.cfg.shopName || 'AK Fashion Hub').trim().charAt(0).toUpperCase() || 'A';
+  ctx.fillStyle = '#c6a15a';
+  ctx.font = '700 ' + Math.round(size*0.55) + 'px Manrope, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(letter, size/2, size/2 + size*0.03);
+  _defaultIconCache = canvas.toDataURL('image/png');
+  return _defaultIconCache;
+}
+
+// Applies the shop logo (or the generated fallback) everywhere it's used —
+// the login screen, sidebar, browser tab favicon, and — critically for
+// phone installs — the Web App Manifest, so "Add to Home Screen" uses this
+// exact square icon rather than an auto-cropped screenshot of the page.
 function applyBrandLogo(){
   const logo = state.cfg.shopLogo;
   [ '#loginLogoDot', '#sideLogoDot' ].forEach(sel => {
@@ -1064,14 +1097,43 @@ function applyBrandLogo(){
       el.textContent = 'A';
     }
   });
-  // favicon / home-screen icon on phone
-  if(logo){
-    let link = document.querySelector("link[rel~='icon']");
-    if(!link){ link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
-    link.href = logo;
-    let touch = document.querySelector("link[rel='apple-touch-icon']");
-    if(!touch){ touch = document.createElement('link'); touch.rel='apple-touch-icon'; document.head.appendChild(touch); }
-    touch.href = logo;
+
+  // Square icon used for favicon / apple-touch-icon / manifest — always a
+  // real image (uploaded logo if present, otherwise the generated fallback)
+  // so the phone never has to guess an icon from a page screenshot.
+  const iconUrl = logo || generateDefaultIconDataUrl();
+
+  let link = document.querySelector("link[rel~='icon']");
+  if(!link){ link = document.createElement('link'); link.rel='icon'; document.head.appendChild(link); }
+  link.href = iconUrl;
+
+  let touch = document.querySelector("link[rel='apple-touch-icon']");
+  if(!touch){ touch = document.createElement('link'); touch.rel='apple-touch-icon'; document.head.appendChild(touch); }
+  touch.href = iconUrl;
+
+  // Build a fresh Web App Manifest pointing at this icon. This is what
+  // Android/Chrome actually reads when the user taps "Add to Home Screen" —
+  // without it (or with a stale one), the OS falls back to generating its
+  // own icon from a screenshot, which is what produced the wrong image.
+  const manifest = {
+    name: state.cfg.shopName || 'AK Fashion Hub',
+    short_name: (state.cfg.shopName || 'AK Fashion Hub').slice(0, 12),
+    start_url: '.',
+    display: 'standalone',
+    background_color: '#111111',
+    theme_color: '#111111',
+    icons: [
+      { src: iconUrl, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+      { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+    ]
+  };
+  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+  const manifestUrl = URL.createObjectURL(manifestBlob);
+  const manifestLink = document.querySelector('#webManifest');
+  if(manifestLink){
+    if(manifestLink.dataset.blobUrl){ URL.revokeObjectURL(manifestLink.dataset.blobUrl); }
+    manifestLink.href = manifestUrl;
+    manifestLink.dataset.blobUrl = manifestUrl;
   }
 }
 
@@ -2020,6 +2082,7 @@ function renderProducts(){
       <td>${fmt(p.MRP)}</td>
       <td>
         <button class="btn ghost sm" data-a="view" data-id="${p.ProductID}">👁</button>
+        <button class="btn ghost sm" data-a="tags" data-id="${p.ProductID}" title="Print tags only for stock not yet printed">🏷</button>
         ${isAdmin ? '<button class="btn ghost sm" data-a="edit" data-id="'+p.ProductID+'">✎</button>' : ''}
         ${isAdmin ? '<button class="btn bad sm" data-a="del" data-id="'+p.ProductID+'">×</button>' : ''}
       </td>`;
@@ -2033,6 +2096,7 @@ function renderProducts(){
               state.data.products.find(x => x.Name === tr.children[1].textContent);
     if(!p) return;
     if(b.dataset.a==='view' || b.classList.contains('link')) openScanDetails(p);
+    if(b.dataset.a==='tags') queueNewStockTagsForProduct(p);
     if(b.dataset.a==='edit') openProductForm(p);
     if(b.dataset.a==='del') deleteProduct(p);
   };
@@ -3371,6 +3435,42 @@ function renderReports(){
 // tagQty holds { variantID: quantity } so quantity persists across searches.
 const tagQty = {};
 
+// printedTagQty holds { variantID: totalTagsAlreadyPrinted } — persisted in
+// localStorage. This is how the app remembers "these units already got a
+// tag printed" so that clicking a product again only queues NEW stock
+// (stock added since the last print), never the units that were already
+// covered by an earlier print run.
+let printedTagQty = {};
+function loadPrintedTagQty(){
+  try{ printedTagQty = JSON.parse(localStorage.getItem(PRINTED_TAGS_KEY)||'{}'); }catch(e){ printedTagQty = {}; }
+}
+function savePrintedTagQty(){
+  try{ localStorage.setItem(PRINTED_TAGS_KEY, JSON.stringify(printedTagQty)); }catch(e){}
+}
+
+// Called from the Products screen's 🏷 button — queues only the stock that
+// hasn't already been printed for this product's variants, then jumps to
+// the Tag Printing screen with those quantities pre-filled and ready to go.
+function queueNewStockTagsForProduct(p){
+  const variants = p.variants || [];
+  if(!variants.length){ toast('This product has no variants yet', 'warn'); return; }
+  let queuedAny = false;
+  variants.forEach(v => {
+    const stock = Number(v.Stock||0);
+    const alreadyPrinted = Number(printedTagQty[v.VariantID]||0);
+    const pending = Math.max(0, stock - alreadyPrinted);
+    if(pending > 0){ tagQty[v.VariantID] = pending; queuedAny = true; }
+  });
+  if(!queuedAny){
+    toast('No new stock to print for '+p.Name+' — everything in stock already has a tag printed', 'warn');
+  }else{
+    toast('Queued tags for new stock — review and print on the Tag Printing screen', 'ok');
+  }
+  goto('tags');
+  $('#tagSearch').value = p.UID;
+  renderTags();
+}
+
 function renderTags(){
   const term = ($('#tagSearch').value||'').toLowerCase();
   const rows = [];
@@ -3477,6 +3577,16 @@ function printStickerSheet(){
     for(let i=0;i<qty;i++) stickers.push(hit);
   });
   if(!stickers.length){ toast('Please enter a sticker quantity', 'warn'); return; }
+
+  // Remember what's being printed right now — this is what lets a later
+  // click on "🏷 Print New Stock Tags" for this product skip everything
+  // already covered here and only queue units added after this point.
+  Object.keys(tagQty).forEach(vid => {
+    const qty = Number(tagQty[vid]||0);
+    if(qty <= 0) return;
+    printedTagQty[vid] = Number(printedTagQty[vid]||0) + qty;
+  });
+  savePrintedTagQty();
 
   const fsMap = { small: 9, medium: 10, large: 12 };
   const fs = fsMap[size] || 10;
