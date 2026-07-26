@@ -546,7 +546,7 @@ tr:hover td{background:#faf9f4;}
           </div>
         </div>
 
-        <div class="tag-info mb-12">Enter the quantity next to each variant — that many stickers will be printed. Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid), which keeps paper wastage low — for example, 20-30 tags will automatically fill just a handful of 4×6 pages. The SIZE now prints as a bold, high-contrast badge above the MRP line so it stands out clearly on the tag.</div>
+        <div class="tag-info mb-12">Every variant is listed automatically with its print quantity pre-filled to match its current stock — for example, a variant with 3 in stock starts at 3 tags, and a size with 2 in stock starts at 2 tags. Adjust any row's quantity by hand if needed. Printing uses a 4×6 inch page with 6 stickers per page (2×3 grid), which keeps paper wastage low. The SIZE prints as a bold, high-contrast badge above the MRP line so it stands out clearly on the tag.</div>
 
         <div class="row mb-12">
           <button class="btn ok" id="btnPrintQueue">🖨 Print All (<span id="qCount">0</span>)</button>
@@ -1916,7 +1916,7 @@ async function viewCustomerHistory(){
 }
 
 /* ============ PRODUCT SCAN / DETAILS MODAL ============ */
-function openScanDetails(p){
+function openScanDetails(p, hideCP){
   const variants = p.variants || [];
   // color-wise & size-wise breakdown
   const byColor = {}, bySize = {};
@@ -1953,7 +1953,7 @@ function openScanDetails(p){
         <div><span class="dim">Gender</span>: ${p.Gender||'—'}</div>
         <div><span class="dim">Batch</span>: <b>${p.BatchNumber||'—'}</b></div>
         <div><span class="dim">Total Stock</span>: <b>${variants.reduce((s,v)=>s+Number(v.Stock||0),0)}</b></div>
-        ${isAdminUser() ? '<div><span class="dim">CP</span>: '+fmt(p.CostPrice)+'</div>' : ''}
+        ${(isAdminUser() && !hideCP) ? '<div><span class="dim">CP</span>: '+fmt(p.CostPrice)+'</div>' : ''}
         <div><span class="dim">SP</span>: ${fmt(p.SalePrice)}</div>
         <div><span class="dim">MRP</span>: ${fmt(p.MRP)}</div>
         <div><span class="dim">Last Updated</span>: ${(p.UpdatedDate||p.CreatedDate||'').substr(0,10)}</div>
@@ -2403,15 +2403,15 @@ function wireInventory(){
   $('#invSearch').addEventListener('input', renderInventory);
   $('#btnInvScan').addEventListener('click', ()=> openCamScanner(code=>{
     $('#invSearch').value = code; renderInventory();
-    const hit = findByCode(code); if(hit) openScanDetails(hit.product);
+    const hit = findByCode(code); if(hit) openScanDetails(hit.product, true);
   }));
 }
 function renderInventory(){
   const term = ($('#invSearch').value||'').toLowerCase();
   const isAdmin = isAdminUser();
-  // header: add CP column for admin only
+  // Cost Price is intentionally NOT shown on the Inventory screen (it still
+  // shows everywhere else — Products catalog, POS scan details, etc.)
   $('#invTblHead').innerHTML = '<tr><th>UID</th><th>Product</th><th>Color</th><th>Size</th><th>Batch</th>'
-    + (isAdmin ? '<th>Cost Price</th>' : '')
     + '<th>Stock</th><th>Location</th><th></th></tr>';
   const rows = [];
   let totalU = 0;
@@ -2434,7 +2434,6 @@ function renderInventory(){
       <td>${v.Color||''}</td>
       <td>${v.Size||''}</td>
       <td>${v.BatchNumber || p.BatchNumber || '—'}</td>
-      ${isAdmin ? '<td>'+fmt(p.CostPrice)+'</td>' : ''}
       <td><b>${v.Stock}</b></td>
       <td>${loc||'—'}</td>
       <td>
@@ -2447,13 +2446,13 @@ function renderInventory(){
     const b = e.target.closest('button'); if(!b) return;
     if(b.dataset.a==='view'){
       const p = state.data.products.find(x=>x.ProductID===b.dataset.p);
-      if(p) openScanDetails(p);
+      if(p) openScanDetails(p, true);
     }
     if(b.dataset.a==='adj'){
       openSetStockDialog(b.dataset.v, b.dataset.name, Number(b.dataset.cur||0));
     }
   };
-  if(!rows.length) tb.innerHTML = '<tr><td colspan="'+(isAdmin?9:8)+'" class="empty">No inventory rows</td></tr>';
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No inventory rows</td></tr>';
 }
 
 // Direct-value stock editor — enter the exact stock count you counted,
@@ -3387,10 +3386,15 @@ function renderTags(){
   // can get a print quantity. Previously this was capped at 200 rows, which
   // silently hid any variant beyond that from the Tag Printing screen.
   rows.forEach(({p, v}, i) => {
+    // Default the print quantity to the variant's current stock count — so
+    // every unit in stock automatically gets a tag queued up (e.g. 3 in
+    // stock = 3 tags). Staff can still edit any row's quantity by hand;
+    // once they do, that manual value is remembered instead of the stock count.
+    if(tagQty[v.VariantID] === undefined){ tagQty[v.VariantID] = Number(v.Stock||0); }
     const qty = tagQty[v.VariantID] || 0;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input class="inp" type="number" min="0" max="99" value="${qty}" data-vid="${v.VariantID}" style="max-width:50px;padding:4px 6px;"></td>
+      <td><input class="inp" type="number" min="0" value="${qty}" data-vid="${v.VariantID}" style="max-width:50px;padding:4px 6px;"></td>
       <td><b>${p.Name}</b><br><small class="dim">${p.UID}</small></td>
       <td>${v.Color||''} ${v.Size||''}</td>
       <td>${v.BatchNumber || p.BatchNumber || '—'}</td>
@@ -3414,7 +3418,7 @@ function renderTags(){
   tb.oninput = e => {
     const inp = e.target.closest('input[data-vid]');
     if(!inp) return;
-    const n = Math.max(0, Math.min(99, Number(inp.value||0)));
+    const n = Math.max(0, Number(inp.value||0));
     tagQty[inp.dataset.vid] = n;
     updateQCount();
   };
