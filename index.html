@@ -1849,11 +1849,17 @@ function printBill(b){
     ? `<div style="text-align:center;margin-top:6px;"><img src="${state.cfg.upiQR}" style="max-width:120px;"><br><small>Scan to pay</small></div>` : '';
   const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
   const billBarcodeID = 'billBc_' + rnd();
+  // When a logo is printed, the logo itself already represents the shop's
+  // "AK" mark — printing "AK FASHION HUB" as text right under it duplicated
+  // the branding. So the printed text drops the leading "AK" and just reads
+  // "FASHION HUB" (or whatever the header is, minus that prefix).
+  const rawBillHeader = state.cfg.billHeader || state.cfg.shopName || '';
+  const printedHeaderText = rawBillHeader.replace(/^AK\s+/i, '').trim() || rawBillHeader;
   const html = `
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:${fontSz};padding:6px;">
       <div style="text-align:center;">
         ${logo}
-        <b style="font-size:${isThermal?'14px':'18px'};">${state.cfg.billHeader || state.cfg.shopName}</b><br>
+        <b style="font-size:${isThermal?'14px':'18px'};">${printedHeaderText}</b><br>
         <small>${state.cfg.shopAddress||''}</small><br>
         Mob: ${state.cfg.shopMobile}<br>
         Bill: ${b.BillNumber||''}<br>
@@ -3029,6 +3035,25 @@ function isReturnEligible(dateStr){
   return d <= windowDays;
 }
 
+// If the customer was given a discount on the original bill, that discount
+// needs to come off the refund too — otherwise the shop ends up refunding
+// more than it actually received for that item. The bill's total Discount
+// is distributed proportionally across every line item (by that line's
+// share of the subtotal), giving each product an "average" discounted rate
+// to refund against, instead of its full undiscounted sale price.
+function getEffectiveUnitPrice(it, bill, allItems){
+  const price = Number(it.Price||0);
+  const discount = Number(bill && bill.Discount || 0);
+  if(!discount) return price;
+  const subtotal = Number(bill.Subtotal||0) ||
+    (allItems||[]).reduce((s,x)=>s+Number(x.LineTotal != null ? x.LineTotal : Number(x.Price||0)*Number(x.Quantity||0)), 0);
+  if(!subtotal) return price;
+  const lineTotal = Number(it.LineTotal != null ? it.LineTotal : price*Number(it.Quantity||1));
+  const discountShare = discount * (lineTotal / subtotal);
+  const effectiveLineTotal = Math.max(0, lineTotal - discountShare);
+  return effectiveLineTotal / Number(it.Quantity||1);
+}
+
 function doReturnSearch(){
   const q = $('#retSearch').value.trim();
   if(!q) return;
@@ -3048,15 +3073,22 @@ function showBillForReturn(b, highlightVariantID){
   const days = daysSince(b.CreatedDate);
   const elig = isReturnEligible(b.CreatedDate);
   const windowDays = state.cfg.returnWindowDays != null ? state.cfg.returnWindowDays : 3;
-  const rows = items.map(it => `
+  const billDiscount = Number(b.Discount||0);
+  const rows = items.map(it => {
+    const effPrice = getEffectiveUnitPrice(it, b, items);
+    const priceCell = billDiscount > 0
+      ? `<s class="dim">${fmt(it.Price)}</s><br><b>${fmt(effPrice)}</b>`
+      : fmt(it.Price);
+    return `
     <tr style="${it.VariantID===highlightVariantID?'background:#fff8e6;':''}">
       <td><b>${it.Name}</b></td>
       <td>${it.Color||''} ${it.Size||''}</td>
       <td>${it.Quantity}</td>
-      <td>${fmt(it.Price)}</td>
+      <td>${priceCell}</td>
       <td><input class="inp" data-vid="${it.VariantID}" type="number" min="0" max="${it.Quantity}" value="0" style="max-width:70px;"></td>
       <td class="dim">Refund: <span data-refund="${it.VariantID}">₹0</span></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   $('#retResult').innerHTML = `
     <div class="pane">
       <div class="${elig?'tag-note':'tag-info'} mb-12">
@@ -3068,6 +3100,7 @@ function showBillForReturn(b, highlightVariantID){
         <div><b>Bill:</b> ${b.BillNumber}<br><b>Bill ID:</b> <span class="mono">${b.BillID}</span><br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
         <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
       </div>
+      ${billDiscount > 0 ? '<div class="tag-info mb-12">This bill had a ₹'+fmt(billDiscount)+' discount applied — it has been proportionally deducted from each item\'s refund rate below (shown struck-through vs. actual refund rate).</div>' : ''}
       <div class="row mb-12">
         <button class="btn ghost sm" id="btnPrintOrigBill">🖨 Print Original Bill</button>
       </div>
@@ -3155,10 +3188,14 @@ function printReturnReceipt(b, lines, totalRefund, mode){
   const rows = lines.map(l => `<tr><td>${l.it.Name}<br><small>${l.it.Color||''} ${l.it.Size||''}</small></td><td class="text-c">${l.qty}</td><td class="text-r">${fmt(l.refund)}</td></tr>`).join('');
   const isThermal = (state.cfg.billFormat || 'thermal') === 'thermal';
   const pageWidth = isThermal ? '80mm' : '210mm';
+  const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
+  const rawBillHeader = state.cfg.billHeader || state.cfg.shopName || '';
+  const printedHeaderText = rawBillHeader.replace(/^AK\s+/i, '').trim() || rawBillHeader;
   const html = `
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:12px;padding:6px;">
       <div style="text-align:center;">
-        <b>${state.cfg.billHeader || state.cfg.shopName}</b><br>
+        ${logo}
+        <b>${printedHeaderText}</b><br>
         <b>RETURN / EXCHANGE RECEIPT</b><br>
         Against Bill: ${b.BillNumber||''}<br>
         ${new Date().toLocaleString('en-IN')}
