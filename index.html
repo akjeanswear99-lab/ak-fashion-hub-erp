@@ -341,6 +341,22 @@ tr:hover td{background:#faf9f4;}
             </div>
           </div>
 
+          <!-- 🎁 Gift Items -->
+          <div class="field mt-8">
+            <label>🎁 Gift Items <small class="dim" style="font-weight:400;">(optional — added free with this bill)</small></label>
+            <div class="chips mb-8" id="posGiftPresets">
+              <span class="chip" data-gift="T-Shirt">T-Shirt</span>
+              <span class="chip" data-gift="Shirt">Shirt</span>
+              <span class="chip" data-gift="Socks">Socks</span>
+              <span class="chip" data-gift="Handkerchief">Handkerchief</span>
+            </div>
+            <div class="row">
+              <input class="inp" id="posGiftInput" placeholder="Type a gift item and press +">
+              <button class="btn ghost sm" id="btnGiftAdd">＋ Add Gift</button>
+            </div>
+            <div class="chips mt-8" id="posGiftChips"></div>
+          </div>
+
           <!-- coin apply -->
           <div class="tag-note" id="coinApplyBox" style="display:none;"></div>
 
@@ -855,6 +871,7 @@ const state = {
   posReceivedDenoms: {},      // actual notes the customer handed over, entered by staff (not assumed)
   posChangeDenoms: {},        // actual notes being handed back as change, entered/adjusted by staff
   posLastChangeAmt: null,     // last change amount a suggestion was generated for (avoids re-typing loss)
+  giftItems: [],              // 🎁 gift items added to the current bill (array of strings)
   chart: null,
   pendingSubmit: false        // duplicate-click guard
 };
@@ -1369,7 +1386,7 @@ function wirePOS(){
     }
     else showSuggest($('#posScan').value.trim());
   });
-  $('#btnClearCart').addEventListener('click', () => { state.cart=[]; state.activeCoin=null; resetPosCashInputs(); refreshCart(); });
+  $('#btnClearCart').addEventListener('click', () => { state.cart=[]; state.activeCoin=null; resetPosCashInputs(); resetPosGifts(); refreshCart(); });
   $('#posDisc').addEventListener('input', refreshCart);
   $('#btnComplete').addEventListener('click', completeSale);
   $('#btnPrintLast').addEventListener('click', () => state.lastBill ? printBill(state.lastBill) : toast('No recent bill', 'warn'));
@@ -1389,6 +1406,43 @@ function wirePOS(){
   $('#posPay').addEventListener('change', updateUpiQr);
   buildPosReceivedGrid();
   buildPosChangeGrid();
+  wireGiftItems();
+}
+
+/* ------- 🎁 Gift Items — preset chips + free-typed custom entries -------
+   Staff can tap a preset (T-Shirt, Shirt, Socks, Handkerchief) or type any
+   custom gift name and press "＋ Add Gift". Every added gift shows as a
+   removable chip. The full list travels with the bill on Complete Sale and
+   is saved to the Sheet as part of the bill record (GiftItems field), and
+   is also printed on the receipt. */
+function wireGiftItems(){
+  const addGift = (val) => {
+    val = String(val||'').trim();
+    if(!val) return;
+    state.giftItems.push(val);
+    renderGiftChips();
+  };
+  $('#posGiftPresets').addEventListener('click', e => {
+    const c = e.target.closest('[data-gift]'); if(!c) return;
+    addGift(c.dataset.gift);
+  });
+  $('#btnGiftAdd').addEventListener('click', () => { addGift($('#posGiftInput').value); $('#posGiftInput').value=''; $('#posGiftInput').focus(); });
+  $('#posGiftInput').addEventListener('keyup', e => { if(e.key==='Enter'){ addGift($('#posGiftInput').value); $('#posGiftInput').value=''; } });
+  renderGiftChips();
+}
+function renderGiftChips(){
+  const box = $('#posGiftChips');
+  if(!box) return;
+  box.innerHTML = state.giftItems.map((g,i)=>`<span class="chip on">🎁 ${escapeHtml(g)} <b data-rm-gift="${i}" style="cursor:pointer;margin-left:4px;">×</b></span>`).join('');
+  box.onclick = e => {
+    const b = e.target.closest('[data-rm-gift]'); if(!b) return;
+    state.giftItems.splice(+b.dataset.rmGift,1);
+    renderGiftChips();
+  };
+}
+function resetPosGifts(){
+  state.giftItems = [];
+  renderGiftChips();
 }
 
 /* ------- denomination click-to-add grids (shared by all 4 note-count UIs) -------
@@ -1720,6 +1774,8 @@ async function completeSale(){
   DENOMS.forEach(d => { if(state.posChangeDenoms[d]) changeBreak[d] = Number(state.posChangeDenoms[d]); });
   const changeGiven = DENOMS.reduce((s,d)=> s + (changeBreak[d]||0)*d, 0);
 
+  const giftItemsText = state.giftItems.join(', ');
+
   const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const payload = {
     BillID: billID,
@@ -1737,7 +1793,8 @@ async function completeSale(){
     })),
     WalletID: state.activeCoin ? state.activeCoin.WalletID : '',
     WalletUsed: coinUse,
-    Tendered: tendered, ChangeGiven: changeGiven
+    Tendered: tendered, ChangeGiven: changeGiven,
+    GiftItems: giftItemsText
   };
   // Upsert customer alongside (fire and forget — sheet also upserts on bill)
   if(payload.CustomerMobile){
@@ -1798,6 +1855,7 @@ async function completeSale(){
   // reset
   state.cart=[]; state.activeCoin=null;
   resetPosCashInputs();
+  resetPosGifts();
   $('#posCoin').value=''; $('#posCoinLine').style.display='none';
   $('#coinApplyBox').style.display='none';
   $('#posDisc').value=0;
@@ -1848,6 +1906,7 @@ function printBill(b){
   const upiQr = ((b.PaymentMode === 'UPI' || b.PaymentMode === 'Online') && state.cfg.upiQR)
     ? `<div style="text-align:center;margin-top:6px;"><img src="${state.cfg.upiQR}" style="max-width:120px;"><br><small>Scan to pay</small></div>` : '';
   const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
+  const giftLine = b.GiftItems ? `<div>🎁 Gift: ${b.GiftItems}</div>` : '';
   const billBarcodeID = 'billBc_' + rnd();
   // When a logo is printed, the logo itself already represents the shop's
   // "AK" mark — printing "AK FASHION HUB" as text right under it duplicated
@@ -1879,6 +1938,7 @@ function printBill(b){
       <div><b>Total: ${fmt(b.Total)}</b></div>
       <div>Mode: ${b.PaymentMode}</div>
       ${cashLine}
+      ${giftLine}
       ${upiQr}
       <hr>
       <div style="text-align:center;margin-top:4px;">
