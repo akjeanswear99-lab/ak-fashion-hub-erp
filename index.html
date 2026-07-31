@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://ak-fashion-hub-erp.vercel.app/ -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -827,6 +826,25 @@ tr:hover td{background:#faf9f4;}
       </div>
 
       <div class="pane">
+        <h3>📱 Online Payments <small>UPI / Card / Online bills — separate from physical cash</small></h3>
+        <div class="tag-info mb-12">Every UPI/Card/Online bill is saved here automatically. If there was online payment money pending from <b>before this system was set up</b>, add it once below — it becomes part of this running total.</div>
+        <div class="grid-3 mb-12">
+          <div class="stat"><div class="lab">Online Balance</div><div class="val" id="onlineNow">₹0</div></div>
+          <div class="stat"><div class="lab">Today In</div><div class="val" id="onlineIn">₹0</div></div>
+          <div class="stat"><div class="lab">Today Out / Settled</div><div class="val" id="onlineOut">₹0</div></div>
+        </div>
+        <div class="row mb-12">
+          <button class="btn ok sm" id="btnOnlineExisting">🗂️ Add Old / Existing Online Balance</button>
+          <button class="btn bad sm" id="btnOnlineOut">－ Settle / Withdraw Online</button>
+        </div>
+        <div class="strong mb-8">Today's Online Entries</div>
+        <div class="tbl-wrap"><table id="onlineTbl">
+          <thead><tr><th>Time</th><th>Type</th><th>Reference</th><th>Amount</th><th>Description</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="pane">
         <h3>🌙 Closing Cash</h3>
         <div class="denom-grid mb-12" id="denomClose">
     <div class="cell" data-denom="500">
@@ -1160,6 +1178,18 @@ const DENOMS = [500, 200, 100, 50, 20, 10];
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const fmt = n => '₹' + Math.round(Number(n||0)).toLocaleString('en-IN');
+// Keeps the printed shop-name header on a single line — shrinks the font
+// automatically for longer names instead of letting it wrap to 2 lines.
+function headerLineStyle(text, isThermal){
+  const len = String(text||'').length;
+  const base = isThermal ? 14 : 18;
+  let size = base;
+  if(len > 14) size = base - 2;
+  if(len > 20) size = base - 4;
+  if(len > 26) size = base - 6;
+  size = Math.max(size, isThermal ? 8 : 11);
+  return `font-size:${size}px;white-space:nowrap;display:inline-block;letter-spacing:0;`;
+}
 const money = n => Number(n||0).toFixed(0);
 const rnd = () => Math.random().toString(36).slice(2, 8);
 const nowISO = () => new Date().toISOString();
@@ -1578,7 +1608,9 @@ function renderDash(){
     ? DENOMS.reduce((s,d)=> s + Number(dd['Denom'+d]||0) * d, 0)
     : (state.data.cashTransactions || []).reduce((s,t)=>{
         const a = Number(t.Amount||0);
-        return t.Type==='OUT' ? s-a : s+a;
+        if(t.Type==='IN') return s+a;
+        if(t.Type==='OUT') return s-a;
+        return s; // ignore ONLINE-*/INFO/ATTENDANCE entries — they don't move physical cash
       }, 0);
 
   $('#s-todaySales').textContent = fmt(sales);
@@ -1853,6 +1885,7 @@ function openBillDetailsModal(b){
     </table></div>
   `, [
     { label:'Close', kind:'ghost', on: closeModal },
+    { label:'📱 WhatsApp', kind:'', on: () => sendBillWhatsapp(full) },
     { label:'🖨 Print', kind:'ok', on: () => printBill(full) }
   ]);
 }
@@ -2112,14 +2145,16 @@ async function completeSale(){
       reference: 'BILL-'+(r.data.billNumber||billID)
     }).then(()=> pullAll());
   }else if(total > 0){
-    // Non-cash sale still logged for reference (0 impact on physical drawer, tagged clearly)
+    // Non-cash (UPI/Card/Online/Mixed) sale — logged with its real amount
+    // under Type 'ONLINE-IN' so the Online Payments balance on the Cash
+    // Drawer / Galla screen tracks it properly (0 impact on physical cash).
     apiPost('addCashTxn', {
       Date: dayKey(nowISO()),
       Time: new Date().toTimeString().substr(0,8),
-      Type: 'INFO', Amount: 0,
+      Type: 'ONLINE-IN', Amount: total,
       Reference: 'BILL-'+(r.data.billNumber||billID),
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: payMode+' sale of '+fmt(total)+' (not physical cash)'
+      Description: payMode+' sale of '+fmt(total)
     });
   }
 
@@ -2189,7 +2224,7 @@ function printBill(b){
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:${fontSz};padding:6px;">
       <div style="text-align:center;">
         ${logo}
-        <b style="font-size:${isThermal?'14px':'18px'};">${printedHeaderText}</b><br>
+        <b style="${headerLineStyle(printedHeaderText, isThermal)}">${printedHeaderText}</b><br>
         <small>${state.cfg.shopAddress||''}</small><br>
         Mob: ${state.cfg.shopMobile}<br>
         Bill: ${b.BillNumber||''}<br>
@@ -2237,10 +2272,16 @@ function printBill(b){
 // that exact contact's chat window with the text box pre-populated.
 function whatsappLastBill(){
   if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
-  const b = state.lastBill;
+  sendBillWhatsapp(state.lastBill);
+}
+// Generalized so ANY bill — the last one, or one looked up later from
+// Customer History / a scanned bill barcode — can be sent on WhatsApp,
+// not just the bill that was just completed.
+function sendBillWhatsapp(b){
+  if(!b){ toast('No bill to send', 'warn'); return; }
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
   if(!mob || mob.length !== 10){ toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn'); return; }
-  const msg = `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
+  const msg = `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${(b.CreatedDate||'').substr(0,10) || new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
   window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
 }
 
@@ -2261,7 +2302,7 @@ async function viewCustomerHistory(){
       <td>${its}</td>
       <td class="text-r">${fmt(b.Total)}</td>
       <td>${b.PaymentMode||''}</td>
-      <td><button class="btn ghost sm" data-bp="${b.BillID}">🖨</button></td>
+      <td><button class="btn ghost sm" data-bp="${b.BillID}" title="Print">🖨</button> <button class="btn ghost sm" data-bw="${b.BillID}" title="Send WhatsApp">📱</button></td>
     </tr>`;
   }).join('');
   const coins = (r.data.wallets||[]).map(w=>`
@@ -2308,9 +2349,10 @@ async function viewCustomerHistory(){
   `, []);
   const histBox = $('#custHistBills');
   if(histBox) histBox.onclick = e => {
-    const btn = e.target.closest('button[data-bp]'); if(!btn) return;
-    const b = (r.data.bills||[]).find(x => x.BillID === btn.dataset.bp);
-    if(b) printBill(b);
+    const pBtn = e.target.closest('button[data-bp]');
+    if(pBtn){ const b = (r.data.bills||[]).find(x => x.BillID === pBtn.dataset.bp); if(b) printBill(b); return; }
+    const wBtn = e.target.closest('button[data-bw]');
+    if(wBtn){ const b = (r.data.bills||[]).find(x => x.BillID === wBtn.dataset.bw); if(b) sendBillWhatsapp(b); return; }
   };
 }
 
@@ -3526,7 +3568,7 @@ function printReturnReceipt(b, lines, totalRefund, mode){
     <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:12px;padding:6px;">
       <div style="text-align:center;">
         ${logo}
-        <b>${printedHeaderText}</b><br>
+        <b style="${headerLineStyle(printedHeaderText, isThermal)}">${printedHeaderText}</b><br>
         <b>RETURN / EXCHANGE RECEIPT</b><br>
         Against Bill: ${b.BillNumber||''}<br>
         ${new Date().toLocaleString('en-IN')}
@@ -4057,6 +4099,8 @@ function wireCash(){
   $('#btnSaveClose').addEventListener('click', saveClosing);
   $('#btnCashIn').addEventListener('click', () => cashInOut('IN'));
   $('#btnCashOut').addEventListener('click', () => cashInOut('OUT'));
+  $('#btnOnlineExisting').addEventListener('click', addExistingOnlineBalance);
+  $('#btnOnlineOut').addEventListener('click', () => onlineInOut('ONLINE-OUT'));
 }
 function buildDenomInputs(){
   renderDenomGrid($('#denomOpen'), state.denomOpen, () => {
@@ -4078,7 +4122,7 @@ function updateClosingCalc(){
     : (() => {
         const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
         const today = dayKey(nowISO());
-        const in_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
+        const in_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type==='IN').reduce((s,t)=>s+Number(t.Amount||0), 0);
         const out_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
         return opening + in_ - out_;
       })();
@@ -4087,8 +4131,8 @@ function updateClosingCalc(){
 }
 function renderCash(){
   const today = dayKey(nowISO());
-  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-'));
-  const in_ = rows.filter(t => t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const rows = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-') && !String(t.Type||'').startsWith('ONLINE'));
+  const in_ = rows.filter(t => t.Type==='IN').reduce((s,t)=>s+Number(t.Amount||0),0);
   const out_ = rows.filter(t => t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
 
   const dd = state.data.drawerDenoms || {};
@@ -4120,6 +4164,71 @@ function renderCash(){
   });
   if(!rows.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No cash entries today</td></tr>';
   updateClosingCalc();
+  renderOnline();
+}
+// Online Payments (UPI/Card/Online) balance — tracked completely separately
+// from physical cash so it never mixes with the note-wise drawer count.
+// Balance is the running total of every ONLINE-IN (bills + manually added
+// old/existing balance) minus every ONLINE-OUT (settlements/withdrawals),
+// across the FULL history — not just today — same as physical cash does
+// once note-wise truth exists.
+function renderOnline(){
+  const all = state.data.cashTransactions || [];
+  const onlineAll = all.filter(t => String(t.Type||'').startsWith('ONLINE'));
+  const balance = onlineAll.reduce((s,t)=>{
+    const a = Number(t.Amount||0);
+    return t.Type==='ONLINE-OUT' ? s-a : s+a;
+  }, 0);
+  const today = dayKey(nowISO());
+  const todayRows = onlineAll.filter(t => dayKey(t.Date)===today);
+  const inAmt = todayRows.filter(t=>t.Type==='ONLINE-IN').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const outAmt = todayRows.filter(t=>t.Type==='ONLINE-OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  $('#onlineNow').textContent = fmt(balance);
+  $('#onlineIn').textContent = fmt(inAmt);
+  $('#onlineOut').textContent = fmt(outAmt);
+  const tb = $('#onlineTbl tbody'); if(!tb) return;
+  tb.innerHTML = '';
+  todayRows.slice().reverse().forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${(t.Time||'').substr(0,5) || (t.Date||'').substr(11,5)}</td>
+      <td>${t.Type==='ONLINE-OUT'?'OUT':'IN'}</td><td>${t.Reference||''}</td>
+      <td>${fmt(t.Amount)}</td><td>${t.Description||''}</td>`;
+    tb.appendChild(tr);
+  });
+  if(!todayRows.length) tb.innerHTML = '<tr><td colspan="5" class="empty">No online entries today</td></tr>';
+}
+// One-time (or correction) entry for online/UPI money that was already
+// pending/collected before this system was set up — adds straight into
+// the same running Online Balance so nothing has to be tracked separately.
+async function addExistingOnlineBalance(){
+  const amt = Number(prompt('Old / existing online balance to add (₹):')||0);
+  if(amt<=0) return;
+  const note = prompt('Note (optional) — e.g. "Pending UPI collections before system started":') || 'Existing online balance (before system)';
+  const r = await apiPost('addCashTxn', {
+    Date: dayKey(nowISO()),
+    Time: new Date().toTimeString().substr(0,8),
+    Type: 'ONLINE-IN', Amount: amt,
+    Reference: 'ONLINE-EXISTING',
+    StaffID: state.user.staffID, StaffName: state.user.name,
+    Description: note
+  });
+  if(r.success){ toast('Added to online balance: '+fmt(amt), 'ok'); pullAll(); }
+}
+async function onlineInOut(type){
+  const amt = Number(prompt('Amount settled / withdrawn from online balance (₹):')||0);
+  if(amt<=0) return;
+  const ok = await requirePin('Enter PIN to authorize Online Settlement');
+  if(!ok) return;
+  const note = prompt('Note (optional) — e.g. "Transferred to bank":') || '';
+  const r = await apiPost('addCashTxn', {
+    Date: dayKey(nowISO()),
+    Time: new Date().toTimeString().substr(0,8),
+    Type: type, Amount: amt,
+    Reference: 'ONLINE manual',
+    StaffID: state.user.staffID, StaffName: state.user.name,
+    Description: note
+  });
+  if(r.success){ toast('Logged: '+fmt(amt), 'ok'); pullAll(); }
 }
 async function saveOpening(){
   const total = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
@@ -4154,28 +4263,53 @@ async function saveClosing(){
   toast('Closing saved. Difference: '+fmt(closing-expected), closing===expected?'ok':'warn');
   pullAll();
 }
-async function cashInOut(type){
-  const amt = Number(prompt(type==='IN' ? 'Cash IN amount (₹):' : 'Cash OUT amount (₹):')||0);
-  if(amt<=0) return;
+// Cash In/Out now asks for the EXACT notes being moved (not just a total ₹
+// amount) — staff taps in ₹500/₹200/.../₹10 counts, same grid used for
+// sale payments, and the amount is derived from that, never assumed.
+function cashInOut(type){
+  state.cioDenoms = {};
+  const title = type==='IN' ? '＋ Cash In — Enter Notes' : '－ Cash Out — Enter Notes';
+  openModal(title, `
+    <div class="tag-info mb-12">Tap the exact notes being ${type==='IN'?'added to':'taken out of'} the drawer — the amount is calculated from these, never typed in directly.</div>
+    <div class="denom-grid mb-12" id="cioDenomGrid"></div>
+    <div class="row mb-12">
+      <div class="stat"><div class="lab">Total</div><div class="val" id="cioTotal">₹0</div></div>
+    </div>
+    <div class="field"><label>Notes / reason</label><input class="inp" id="cioDesc" placeholder="e.g. Owner withdrawal, supplier payment..."></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label: type==='IN' ? 'Add Cash In' : 'Confirm Cash Out', kind: type==='IN'?'ok':'bad', on: () => confirmCashInOut(type) }
+  ]);
+  renderDenomGrid($('#cioDenomGrid'), state.cioDenoms, () => {
+    const total = DENOMS.reduce((s,d)=> s + (state.cioDenoms[d]||0)*d, 0);
+    $('#cioTotal').textContent = fmt(total);
+  });
+}
+async function confirmCashInOut(type){
+  const amt = DENOMS.reduce((s,d)=> s + (state.cioDenoms[d]||0)*d, 0);
+  if(amt<=0){ toast('Tap in the notes first', 'warn'); return; }
+  const descEl = $('#cioDesc');
+  const desc = descEl ? descEl.value : '';
+  const noteText = denomText(state.cioDenoms);
+  const denomSnapshot = { ...state.cioDenoms };
+  closeModal();
   if(type === 'OUT'){
     const ok = await requirePin('Enter PIN to authorize Cash Out');
     if(!ok) return;
   }
-  const desc = prompt('Notes / reason:')||'';
   const r = await apiPost('addCashTxn', {
     Date: dayKey(nowISO()),
     Time: new Date().toTimeString().substr(0,8),
-    Type: type, Amount: amt, Description: desc,
+    Type: type, Amount: amt,
+    Description: (desc ? desc+' — ' : '') + 'Notes: ' + noteText,
     Reference: type+' manual',
     StaffID: state.user.staffID, StaffName: state.user.name
   });
   if(r.success){
-    // Auto note-wise breakdown of the amount, applied as a delta to the drawer.
-    const brk = breakChange(amt).notes;
     const delta = {};
-    DENOMS.forEach(d => { delta[d] = type==='IN' ? (brk[d]||0) : -(brk[d]||0); });
+    DENOMS.forEach(d => { delta[d] = type==='IN' ? (denomSnapshot[d]||0) : -(denomSnapshot[d]||0); });
     await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: type+' manual' });
-    toast('Logged', 'ok'); pullAll();
+    toast('Logged: '+fmt(amt), 'ok'); pullAll();
   }
 }
 
@@ -4242,8 +4376,8 @@ function renderAttendance(){
   if(!Object.keys(byStaff).length) tb.innerHTML = '<tr><td colspan="6" class="empty">No punches today</td></tr>';
 
   // ---- Cash Drawer summary panel on the Attendance screen ----
-  const cashToday = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-'));
-  const inAmt = cashToday.filter(t=>t.Type!=='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
+  const cashToday = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type!=='INFO' && !String(t.Type||'').startsWith('ATTENDANCE-') && !String(t.Type||'').startsWith('ONLINE'));
+  const inAmt = cashToday.filter(t=>t.Type==='IN').reduce((s,t)=>s+Number(t.Amount||0),0);
   const outAmt = cashToday.filter(t=>t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0),0);
   const opening = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
   $('#attCashOpen').textContent = fmt(opening);
