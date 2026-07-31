@@ -275,16 +275,14 @@ tr:hover td{background:#faf9f4;}
 
     <!-- ===== DASHBOARD ===== -->
     <div class="screen on" id="scr-dash">
-      <div class="grid-4 mb-16">
+      <div class="grid-3 mb-16">
         <div class="stat"><div class="lab">Today's Sales</div><div class="val" id="s-todaySales">₹1,200</div><div class="sub" id="s-todayBills">2 bills</div></div>
-        <div class="stat"><div class="lab">Today's Profit</div><div class="val" id="s-todayProfit">₹582</div><div class="sub">Cost &amp; ₹10 deducted</div></div>
         <div class="stat"><div class="lab">Total Inventory</div><div class="val" id="s-invUnits">667</div><div class="sub" id="s-invValue">₹1,68,923 value</div></div>
         <div class="stat"><div class="lab">Cash In Drawer</div><div class="val" id="s-drawer">₹5,270</div><div class="sub" id="s-drawerHint">5 entries logged</div></div>
       </div>
-      <div class="grid-4 mb-16">
+      <div class="grid-3 mb-16">
         <div class="stat"><div class="lab">This Month</div><div class="val" id="s-monthSales">₹2,600</div><div class="sub" id="s-monthBills">3 bills</div></div>
         <div class="stat"><div class="lab">Sales — All Time</div><div class="val" id="s-allSales">₹2,600</div><div class="sub" id="s-allBills">3 bills</div></div>
-        <div class="stat"><div class="lab">Est. Month Profit</div><div class="val" id="s-monthProfit">₹1,228</div><div class="sub">Real (Cost + ₹10)</div></div>
         <div class="stat"><div class="lab">Total Customers</div><div class="val" id="s-totalCust">4</div><div class="sub" id="s-newCust">4 new this month</div></div>
       </div>
       <div class="grid-2">
@@ -333,6 +331,16 @@ tr:hover td{background:#faf9f4;}
             </div>
           </div>
           <div class="field"><label>Customer Name</label><input class="inp" id="posCustName" placeholder="Optional"></div>
+
+          <!-- Recent Bills — quick print/WhatsApp for ANY bill, old or new,
+               without leaving the billing screen or searching a customer -->
+          <div class="field mt-8">
+            <label>🧾 Recent Bills <small class="dim" style="font-weight:400;">tap 🖨 to print or 📱 to resend on WhatsApp</small></label>
+            <div class="tbl-wrap"><table id="posRecentBillsTbl">
+              <thead><tr><th>Bill#</th><th>Customer</th><th>Total</th><th></th></tr></thead>
+              <tbody><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+            </table></div>
+          </div>
 
           <div class="row">
             <div class="field"><label>Discount (₹)</label><input class="inp" id="posDisc" type="number" min="0" value="0"></div>
@@ -828,10 +836,11 @@ tr:hover td{background:#faf9f4;}
       <div class="pane">
         <h3>📱 Online Payments <small>UPI / Card / Online bills — separate from physical cash</small></h3>
         <div class="tag-info mb-12">Every UPI/Card/Online bill is saved here automatically. If there was online payment money pending from <b>before this system was set up</b>, add it once below — it becomes part of this running total.</div>
-        <div class="grid-3 mb-12">
+        <div class="grid-4 mb-12">
           <div class="stat"><div class="lab">Online Balance</div><div class="val" id="onlineNow">₹0</div></div>
           <div class="stat"><div class="lab">Today In</div><div class="val" id="onlineIn">₹0</div></div>
           <div class="stat"><div class="lab">Today Out / Settled</div><div class="val" id="onlineOut">₹0</div></div>
+          <div class="stat"><div class="lab">Total (Cash + Online)</div><div class="val" id="galleTotalCombined">₹0</div></div>
         </div>
         <div class="row mb-12">
           <button class="btn ok sm" id="btnOnlineExisting">🗂️ Add Old / Existing Online Balance</button>
@@ -1615,7 +1624,6 @@ function renderDash(){
 
   $('#s-todaySales').textContent = fmt(sales);
   $('#s-todayBills').textContent = todaysBills.length + ' bills';
-  $('#s-todayProfit').textContent = fmt(profit);
   $('#s-invUnits').textContent = invUnits.toLocaleString('en-IN');
   $('#s-invValue').textContent = fmt(invValue) + ' value';
   $('#s-drawer').textContent = fmt(draw);
@@ -1635,7 +1643,6 @@ function renderDash(){
   $('#s-monthBills').textContent = monthBills.length + ' bills';
   $('#s-allSales').textContent = fmt(allSales);
   $('#s-allBills').textContent = bills.length + ' bills';
-  $('#s-monthProfit').textContent = fmt(monthProfit);
   $('#s-totalCust').textContent = totalCust;
   $('#s-newCust').textContent = newCust + ' new this month';
 
@@ -1661,14 +1668,16 @@ function renderDash(){
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${b.BillNumber||''}</td><td>${b.CustomerName||b.CustomerMobile||'—'}</td>
       <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>
-      <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨</button></td>`;
+      <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}" title="Print">🖨</button> <button class="btn ghost sm" data-a="wa" data-id="${b.BillID}" title="Send WhatsApp">📱</button></td>`;
     tb.appendChild(tr);
   });
   if(!bills.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No bills yet</td></tr>';
   tb.onclick = e => {
-    const btn = e.target.closest('button[data-a="print"]'); if(!btn) return;
+    const btn = e.target.closest('button[data-id]'); if(!btn) return;
     const b = bills.find(x => x.BillID === btn.dataset.id);
-    if(b) printBill(billWithItems(b));
+    if(!b) return;
+    if(btn.dataset.a === 'print') printBill(billWithItems(b));
+    else sendBillWhatsapp(b);
   };
 }
 
@@ -2060,6 +2069,16 @@ async function completeSale(){
   state.pendingSubmit = true;
   const btn = $('#btnComplete'); btn.disabled = true; btn.textContent = 'Saving…';
 
+  // Reserve a browser tab for WhatsApp RIGHT NOW, synchronously, while we're
+  // still inside the original button click — before any network `await`
+  // happens below. Browsers only allow window.open() during a real click;
+  // opening it later (after awaiting the save) is what was silently
+  // getting blocked. We navigate this reserved tab to the actual wa.me
+  // link once the bill is saved.
+  const custMobForWa = ($('#posCustMob').value || '').replace(/\D/g,'');
+  const waWin = (custMobForWa.length === 10) ? window.open('', '_blank') : null;
+
+
   const sub = state.cart.reduce((s,c)=>s + c.Price*c.Quantity, 0);
   const disc = Number($('#posDisc').value||0);
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
@@ -2109,7 +2128,7 @@ async function completeSale(){
   const r = await apiPost('addBill', payload);
   state.pendingSubmit = false;
   btn.disabled = false; btn.textContent = '✓ Complete Sale';
-  if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+  if(!r.success){ toast(r.error||'Save failed', 'bad'); if(waWin && !waWin.closed) waWin.close(); return; }
   if(r.data && r.data.duplicate){ toast('Bill already saved (duplicate blocked)', 'warn'); }
   state.lastBill = { ...payload, BillNumber: r.data.billNumber };
   toast('Bill saved: '+r.data.billNumber, 'ok');
@@ -2168,12 +2187,37 @@ async function completeSale(){
   $('#posCustMob').value=''; $('#posCustName').value='';
   refreshCart();
   printBill(state.lastBill);
+  sendBillWhatsapp(state.lastBill, waWin);
   pullAll();
 }
 function renderPOS(){
   $('#posScan').focus();
   refreshCart();
   updateUpiQr();
+  renderPosRecentBills();
+}
+// Quick-access "Recent Bills" list right on the billing screen — any bill,
+// old or new, any customer — can be printed or resent on WhatsApp from
+// here without leaving the screen or searching for a customer first.
+function renderPosRecentBills(){
+  const tbl = $('#posRecentBillsTbl'); if(!tbl) return;
+  const tb = tbl.querySelector('tbody');
+  const bills = (state.data.bills || []).slice().reverse().slice(0, 12);
+  if(!bills.length){ tb.innerHTML = '<tr><td colspan="4" class="empty">No bills yet</td></tr>'; return; }
+  tb.innerHTML = bills.map(b => `
+    <tr>
+      <td>${b.BillNumber||''}</td>
+      <td>${b.CustomerName || b.CustomerMobile || '—'}</td>
+      <td>${fmt(b.Total)}</td>
+      <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}" title="Print">🖨</button> <button class="btn ghost sm" data-a="wa" data-id="${b.BillID}" title="Send WhatsApp">📱</button></td>
+    </tr>`).join('');
+  tb.onclick = e => {
+    const btn = e.target.closest('button[data-id]'); if(!btn) return;
+    const b = (state.data.bills || []).find(x => x.BillID === btn.dataset.id);
+    if(!b) return;
+    if(btn.dataset.a === 'print') printBill(billWithItems(b));
+    else sendBillWhatsapp(b);
+  };
 }
 
 /* ------- print helper: toggles #printBox display cleanly so it never gets stuck ------- */
@@ -2274,15 +2318,40 @@ function whatsappLastBill(){
   if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
   sendBillWhatsapp(state.lastBill);
 }
+function buildBillWaMessage(b){
+  return `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${(b.CreatedDate||'').substr(0,10) || new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
+}
+// Opens a wa.me link reliably. If a tab was already pre-opened (see
+// completeSale — opened synchronously inside the click, before any
+// network `await`) we just navigate that tab; browsers won't block this.
+// Otherwise we try window.open and fall back to navigating the CURRENT
+// tab if the browser blocked the popup — this is the fix for "WhatsApp
+// chat nahi khul rahi": a plain window.open() called after an `await`
+// is treated as NOT coming from a real click by most browsers and gets
+// silently blocked, so nothing visibly happens.
+function openWhatsAppLink(url, existingWin){
+  if(existingWin && !existingWin.closed){
+    existingWin.location.href = url;
+    return;
+  }
+  const win = window.open(url, '_blank');
+  if(!win || win.closed || typeof win.closed === 'undefined'){
+    location.href = url;
+  }
+}
 // Generalized so ANY bill — the last one, or one looked up later from
 // Customer History / a scanned bill barcode — can be sent on WhatsApp,
-// not just the bill that was just completed.
-function sendBillWhatsapp(b){
+// not just the bill that was just completed. `existingWin` is an
+// optional pre-opened blank tab (see completeSale) to avoid popup blocks.
+function sendBillWhatsapp(b, existingWin){
   if(!b){ toast('No bill to send', 'warn'); return; }
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
-  if(!mob || mob.length !== 10){ toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn'); return; }
-  const msg = `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${(b.CreatedDate||'').substr(0,10) || new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
-  window.open('https://wa.me/91'+mob+'?text='+encodeURIComponent(msg), '_blank');
+  if(!mob || mob.length !== 10){
+    toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn');
+    if(existingWin && !existingWin.closed) existingWin.close();
+    return;
+  }
+  openWhatsAppLink('https://wa.me/91'+mob+'?text='+encodeURIComponent(buildBillWaMessage(b)), existingWin);
 }
 
 /* ------- customer history modal ------- */
@@ -4164,7 +4233,7 @@ function renderCash(){
   });
   if(!rows.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No cash entries today</td></tr>';
   updateClosingCalc();
-  renderOnline();
+  renderOnline(liveTotal);
 }
 // Online Payments (UPI/Card/Online) balance — tracked completely separately
 // from physical cash so it never mixes with the note-wise drawer count.
@@ -4172,7 +4241,7 @@ function renderCash(){
 // old/existing balance) minus every ONLINE-OUT (settlements/withdrawals),
 // across the FULL history — not just today — same as physical cash does
 // once note-wise truth exists.
-function renderOnline(){
+function renderOnline(cashTotal){
   const all = state.data.cashTransactions || [];
   const onlineAll = all.filter(t => String(t.Type||'').startsWith('ONLINE'));
   const balance = onlineAll.reduce((s,t)=>{
@@ -4186,6 +4255,10 @@ function renderOnline(){
   $('#onlineNow').textContent = fmt(balance);
   $('#onlineIn').textContent = fmt(inAmt);
   $('#onlineOut').textContent = fmt(outAmt);
+  // Combined figure — how much money the shop is holding right now in
+  // total, cash in the drawer plus online/UPI balance added together.
+  const combinedEl = $('#galleTotalCombined');
+  if(combinedEl) combinedEl.textContent = fmt(Number(cashTotal||0) + balance);
   const tb = $('#onlineTbl tbody'); if(!tb) return;
   tb.innerHTML = '';
   todayRows.slice().reverse().forEach(t => {
