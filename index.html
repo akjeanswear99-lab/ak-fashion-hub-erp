@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://ak-fashion-hub-erp.vercel.app/ -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -248,6 +249,7 @@ tr:hover td{background:#faf9f4;}
       <a data-scr="customers">👥 Customers</a>
       <a data-scr="suppliers">🚚 Suppliers</a>
       <a data-scr="staff">👨‍💼 Staff</a>
+      <a data-scr="bills">🧾 Bills</a>
 
       <div class="group">Money</div>
       <a data-scr="cash">💵 Cash Drawer / Galla</a>
@@ -533,7 +535,7 @@ tr:hover td{background:#faf9f4;}
           </div>
           <div class="row mt-8">
             <button class="btn ghost sm" id="btnPrintLast">🖨 Print Last</button>
-            <button class="btn ghost sm" id="btnWhatsappLast">📱 WhatsApp</button>
+            <a class="btn ghost sm" id="btnWhatsappLast" href="#" target="_blank" rel="noopener">📱 WhatsApp</a>
             <button class="btn ghost sm bad" id="btnClearCart">✕ Clear</button>
           </div>
         </div>
@@ -669,6 +671,20 @@ tr:hover td{background:#faf9f4;}
         <div class="tbl-wrap"><table id="staffTbl">
           <thead><tr><th>Name</th><th>Mobile</th><th>Role</th><th>Status</th><th>Last Login</th><th></th></tr></thead>
           <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ===== BILLS — every bill, old and new, searchable and editable ===== -->
+    <div class="screen" id="scr-bills">
+      <div class="pane">
+        <h3>🧾 All Bills <small>Every bill ever made — new and old — search, print, WhatsApp, or edit</small></h3>
+        <div class="row mb-12">
+          <div class="field" style="flex:1;"><label>Search</label><input class="inp" id="billsSearch" placeholder="Bill #, customer name, or mobile"></div>
+        </div>
+        <div class="tbl-wrap"><table id="billsTbl">
+          <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Mobile</th><th>Total</th><th>Mode</th><th>Status</th><th></th></tr></thead>
+          <tbody><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
         </table></div>
       </div>
     </div>
@@ -1356,6 +1372,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireCustomers();
   wireSuppliers();
   wireStaff();
+  wireBillsSearch();
   wireExpenses();
   wireReturns();
   wirePreorders();
@@ -1473,7 +1490,7 @@ function applyRolePerms(){
   // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
 }
-const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1 };
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1, bills:1 };
 function accessDeniedHTML(){
   return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
        + 'If you are an administrator and still see this message, please verify that the Role column for your account '
@@ -1574,6 +1591,7 @@ function render(scr){
     case 'customers': renderCustomers(); break;
     case 'suppliers': renderSuppliers(); break;
     case 'staff':     renderStaff(); break;
+    case 'bills':     renderBills(); break;
     case 'tags':      renderTags(); break;
     case 'cash':      renderCash(); break;
     case 'attendance':renderAttendance(); break;
@@ -1656,18 +1674,20 @@ function renderDash(){
   const tb = $('#dashBills tbody'); tb.innerHTML='';
   bills.slice().reverse().forEach(b=>{
     const tr = document.createElement('tr');
+    const href = waHref(b);
+    const waEl = href
+      ? `<a class="btn ghost sm" href="${href}" target="_blank" rel="noopener" title="Send WhatsApp">📱</a>`
+      : `<button class="btn ghost sm" disabled title="No valid mobile on this bill">📱</button>`;
     tr.innerHTML = `<td>${b.BillNumber||''}</td><td>${b.CustomerName||b.CustomerMobile||'—'}</td>
       <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>
-      <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}" title="Print">🖨</button> <button class="btn ghost sm" data-a="wa" data-id="${b.BillID}" title="Send WhatsApp">📱</button></td>`;
+      <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}" title="Print">🖨</button> ${waEl}</td>`;
     tb.appendChild(tr);
   });
   if(!bills.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No bills yet</td></tr>';
   tb.onclick = e => {
-    const btn = e.target.closest('button[data-id]'); if(!btn) return;
+    const btn = e.target.closest('button[data-a="print"]'); if(!btn) return;
     const b = bills.find(x => x.BillID === btn.dataset.id);
-    if(!b) return;
-    if(btn.dataset.a === 'print') printBill(billWithItems(b));
-    else sendBillWhatsapp(b);
+    if(b) printBill(billWithItems(b));
   };
 }
 
@@ -1692,7 +1712,14 @@ function wirePOS(){
   $('#posDisc').addEventListener('input', refreshCart);
   $('#btnComplete').addEventListener('click', completeSale);
   $('#btnPrintLast').addEventListener('click', () => state.lastBill ? printBill(state.lastBill) : toast('No recent bill', 'warn'));
-  $('#btnWhatsappLast').addEventListener('click', whatsappLastBill);
+  $('#btnWhatsappLast').addEventListener('click', (e) => {
+    const href = waHref(state.lastBill);
+    if(!href){ e.preventDefault(); toast(state.lastBill ? 'A valid 10-digit customer mobile number is required to send WhatsApp' : 'No recent bill', 'warn'); }
+    // else: let the browser follow the real href natively — this is what
+    // actually opens WhatsApp reliably (a genuine link click), instead of
+    // a JS-triggered window.open()/simulated click which many browsers
+    // and installed-app webviews silently swallow.
+  });
   $('#btnCustView').addEventListener('click', viewCustomerHistory);
   $('#btnCoinCheck').addEventListener('click', checkCoin);
   $('#posCustMob').addEventListener('input', () => {
@@ -1884,7 +1911,9 @@ function openBillDetailsModal(b){
     </table></div>
   `, [
     { label:'Close', kind:'ghost', on: closeModal },
-    { label:'📱 WhatsApp', kind:'', on: () => sendBillWhatsapp(full) },
+    waHref(full)
+      ? { label:'📱 WhatsApp', kind:'', href: waHref(full), on: closeModal }
+      : { label:'📱 No mobile', kind:'ghost', on: () => toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn') },
     { label:'🖨 Print', kind:'ok', on: () => printBill(full) }
   ]);
 }
@@ -2059,16 +2088,6 @@ async function completeSale(){
   state.pendingSubmit = true;
   const btn = $('#btnComplete'); btn.disabled = true; btn.textContent = 'Saving…';
 
-  // Reserve a browser tab for WhatsApp RIGHT NOW, synchronously, while we're
-  // still inside the original button click — before any network `await`
-  // happens below. Browsers only allow window.open() during a real click;
-  // opening it later (after awaiting the save) is what was silently
-  // getting blocked. We navigate this reserved tab to the actual wa.me
-  // link once the bill is saved.
-  const custMobForWa = ($('#posCustMob').value || '').replace(/\D/g,'');
-  const waWin = (custMobForWa.length === 10) ? window.open('', '_blank') : null;
-
-
   const sub = state.cart.reduce((s,c)=>s + c.Price*c.Quantity, 0);
   const disc = Number($('#posDisc').value||0);
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
@@ -2118,7 +2137,7 @@ async function completeSale(){
   const r = await apiPost('addBill', payload);
   state.pendingSubmit = false;
   btn.disabled = false; btn.textContent = '✓ Complete Sale';
-  if(!r.success){ toast(r.error||'Save failed', 'bad'); if(waWin && !waWin.closed) waWin.close(); return; }
+  if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
   if(r.data && r.data.duplicate){ toast('Bill already saved (duplicate blocked)', 'warn'); }
   state.lastBill = { ...payload, BillNumber: r.data.billNumber };
   toast('Bill saved: '+r.data.billNumber, 'ok');
@@ -2176,14 +2195,16 @@ async function completeSale(){
   $('#posDisc').value=0;
   $('#posCustMob').value=''; $('#posCustName').value='';
   refreshCart();
-  printBill(state.lastBill);
-  sendBillWhatsapp(state.lastBill, waWin);
+  // Nothing auto-opens here on purpose — Print and WhatsApp only fire when
+  // the staff actually taps "🖨 Print Last" / "📱 WhatsApp" themselves.
+  refreshLastBillWaLink();
   pullAll();
 }
 function renderPOS(){
   $('#posScan').focus();
   refreshCart();
   updateUpiQr();
+  refreshLastBillWaLink();
 }
 
 /* ------- print helper: toggles #printBox display cleanly so it never gets stuck ------- */
@@ -2280,53 +2301,32 @@ function printBill(b){
 // Opens WhatsApp directly to the customer's own number with the bill message
 // pre-filled and ready to Send — wa.me/<countrycode><number> always opens
 // that exact contact's chat window with the text box pre-populated.
-function whatsappLastBill(){
-  if(!state.lastBill){ toast('No recent bill', 'warn'); return; }
-  sendBillWhatsapp(state.lastBill);
-}
 function buildBillWaMessage(b){
   return `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${(b.CreatedDate||'').substr(0,10) || new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
 }
-// Opens a wa.me link reliably. Uses a real, invisible <a target="_blank">
-// click instead of window.open() — window.open() is what was failing
-// silently for "old bill" WhatsApp sends (many browsers / installed
-// PWA webviews restrict or ignore window.open() for external links,
-// especially wa.me deep links, even from a direct click). A genuine
-// anchor click goes through the browser's normal link-handling path,
-// which reliably launches WhatsApp / WhatsApp Web on both desktop and
-// mobile. If a tab was already pre-opened (see completeSale — opened
-// synchronously inside the click, before any network `await`, so it
-// isn't popup-blocked) we just navigate that tab instead.
-function openWhatsAppLink(url, existingWin){
-  if(existingWin && !existingWin.closed){
-    existingWin.location.href = url;
-    return;
-  }
-  try{
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }catch(e){
-    location.href = url;
-  }
-}
-// Generalized so ANY bill — the last one, or one looked up later from
-// Customer History / a scanned bill barcode — can be sent on WhatsApp,
-// not just the bill that was just completed. `existingWin` is an
-// optional pre-opened blank tab (see completeSale) to avoid popup blocks.
-function sendBillWhatsapp(b, existingWin){
-  if(!b){ toast('No bill to send', 'warn'); return; }
+// Returns the actual wa.me URL for a bill, or '' if there's no valid
+// 10-digit customer mobile to send it to.
+// IMPORTANT: every "send on WhatsApp" button in this app is a real <a
+// href="..."> anchor pointing at this URL, NOT a button that opens the
+// link via JS (window.open / simulated click). A genuine anchor click is
+// what the browser treats as an ordinary link-follow — nothing about it
+// looks like a popup, so it can never be blocked, and it works
+// identically inside installed-PWA webviews too. This is the fix for
+// "WhatsApp par nahi ja raha" — JS-triggered opens were being silently
+// swallowed by some browsers/webviews even on a direct click.
+function waHref(b){
+  if(!b) return '';
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
-  if(!mob || mob.length !== 10){
-    toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn');
-    if(existingWin && !existingWin.closed) existingWin.close();
-    return;
-  }
-  openWhatsAppLink('https://wa.me/91'+mob+'?text='+encodeURIComponent(buildBillWaMessage(b)), existingWin);
+  if(!mob || mob.length !== 10) return '';
+  return 'https://wa.me/91'+mob+'?text='+encodeURIComponent(buildBillWaMessage(b));
+}
+// Refreshes the "WhatsApp" button on the billing screen to point at
+// whatever the current state.lastBill is — called right after a sale is
+// saved, and whenever the billing screen renders.
+function refreshLastBillWaLink(){
+  const el = $('#btnWhatsappLast'); if(!el) return;
+  const href = waHref(state.lastBill);
+  el.href = href || '#';
 }
 
 /* ------- customer history modal ------- */
@@ -2340,13 +2340,17 @@ async function viewCustomerHistory(){
   const c = r.data.customer, st = r.data.stats;
   const rows = (r.data.bills||[]).map(b=>{
     const its = (b.items||[]).map(i=>i.Name+' ('+i.Quantity+')').join(', ');
+    const href = waHref(b);
+    const waEl = href
+      ? `<a class="btn ghost sm" href="${href}" target="_blank" rel="noopener" title="Send WhatsApp">📱</a>`
+      : `<button class="btn ghost sm" disabled title="No valid mobile on this bill">📱</button>`;
     return `<tr>
       <td>${(b.CreatedDate||'').substr(0,10)}</td>
       <td>${b.BillNumber||''}</td>
       <td>${its}</td>
       <td class="text-r">${fmt(b.Total)}</td>
       <td>${b.PaymentMode||''}</td>
-      <td><button class="btn ghost sm" data-bp="${b.BillID}" title="Print">🖨</button> <button class="btn ghost sm" data-bw="${b.BillID}" title="Send WhatsApp">📱</button></td>
+      <td><button class="btn ghost sm" data-bp="${b.BillID}" title="Print">🖨</button> ${waEl}</td>
     </tr>`;
   }).join('');
   const coins = (r.data.wallets||[]).map(w=>`
@@ -2393,10 +2397,9 @@ async function viewCustomerHistory(){
   `, []);
   const histBox = $('#custHistBills');
   if(histBox) histBox.onclick = e => {
-    const pBtn = e.target.closest('button[data-bp]');
-    if(pBtn){ const b = (r.data.bills||[]).find(x => x.BillID === pBtn.dataset.bp); if(b) printBill(b); return; }
-    const wBtn = e.target.closest('button[data-bw]');
-    if(wBtn){ const b = (r.data.bills||[]).find(x => x.BillID === wBtn.dataset.bw); if(b) sendBillWhatsapp(b); return; }
+    const pBtn = e.target.closest('button[data-bp]'); if(!pBtn) return;
+    const b = (r.data.bills||[]).find(x => x.BillID === pBtn.dataset.bp);
+    if(b) printBill(b);
   };
 }
 
@@ -2986,6 +2989,18 @@ function renderCustomers(){
   );
   const tb = $('#custTbl tbody'); tb.innerHTML='';
   list.forEach(c => {
+    // Total Spend / Loyalty Points / Last Purchase are calculated LIVE
+    // from the actual Bills data every time this screen renders — so
+    // customers with old, pre-existing bill history and brand-new
+    // customers both stay correct automatically, instead of trusting a
+    // stored field on the Customer row that can drift out of sync.
+    const custBills = (state.data.bills||[]).filter(b =>
+      (c.CustomerID && String(b.CustomerID)===String(c.CustomerID)) ||
+      (c.Mobile && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,''))
+    );
+    const totalSpend = custBills.reduce((s,b)=>s+Number(b.Total||0), 0);
+    const loyaltyPoints = Math.floor(totalSpend/100);
+    const lastPurchase = custBills.reduce((latest,b)=> (!latest || String(b.CreatedDate||'')>String(latest)) ? (b.CreatedDate||'') : latest, '');
     const coinBal = (state.data.wallet||[])
       .filter(w => String(w.CustomerID)===String(c.CustomerID) && w.Status==='Active')
       .reduce((s,w)=>s+Number(w.RemainingAmount||0), 0);
@@ -2994,11 +3009,11 @@ function renderCustomers(){
       <td>${c.Name||''}</td>
       <td>${c.Mobile||''}</td>
       <td>${c.City||'—'}</td>
-      <td>${fmt(c.TotalSpend)}</td>
-      <td>${c.LoyaltyPoints||0}</td>
+      <td>${fmt(totalSpend)}</td>
+      <td>${loyaltyPoints}</td>
       <td>${fmt(c.DueBalance)}</td>
       <td>${fmt(coinBal)}</td>
-      <td>${(c.LastPurchaseDate||'').substr(0,10) || '—'}</td>
+      <td>${(lastPurchase || c.LastPurchaseDate || '').substr(0,10) || '—'}</td>
       <td>
         <button class="btn ghost sm" data-a="hist" data-id="${c.CustomerID}">👁 History</button>
         <button class="btn ghost sm" data-a="edit" data-id="${c.CustomerID}">✎</button>
@@ -3801,6 +3816,97 @@ function openStaffForm(s){
   ]);
 }
 
+/* ============ BILLS — every bill, old and new, searchable and editable ============ */
+function renderBills(){
+  const term = ($('#billsSearch').value||'').toLowerCase();
+  const list = (state.data.bills||[])
+    .filter(b => !term
+      || (b.BillNumber||'').toLowerCase().includes(term)
+      || (b.CustomerName||'').toLowerCase().includes(term)
+      || String(b.CustomerMobile||'').includes(term))
+    .slice().reverse();
+  const tb = $('#billsTbl tbody'); tb.innerHTML='';
+  list.forEach(b => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(b.CreatedDate||'').substr(0,16).replace('T',' ')}</td>
+      <td>${b.BillNumber||''}</td>
+      <td>${b.CustomerName||'—'}</td>
+      <td>${b.CustomerMobile||'—'}</td>
+      <td>${fmt(b.Total)}</td>
+      <td>${b.PaymentMode||''}</td>
+      <td><span class="pill ${b.Status==='Cancelled'?'bad':'ok'}">${b.Status||'Completed'}</span></td>
+      <td>
+        <button class="btn ghost sm" data-a="edit" data-id="${b.BillID}">✎ Edit</button>
+        <button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+  if(!list.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No bills found</td></tr>';
+  tb.onclick = e => {
+    const btn = e.target.closest('button'); if(!btn) return;
+    const b = (state.data.bills||[]).find(x => x.BillID === btn.dataset.id);
+    if(!b) return;
+    if(btn.dataset.a === 'edit') openBillEditForm(b);
+    else printBill(billWithItems(b));
+  };
+}
+let billsSearchWired = false;
+function wireBillsSearch(){
+  if(billsSearchWired) return; billsSearchWired = true;
+  const el = $('#billsSearch');
+  if(el) el.addEventListener('input', renderBills);
+}
+// Editable fields deliberately stay to customer info, payment mode/ref,
+// discount, and status — NOT the individual line items, since changing
+// items after the fact would desync stock and profit numbers already
+// applied at sale time. Discount changes automatically recompute Total.
+function openBillEditForm(b){
+  openModal('Edit Bill • '+(b.BillNumber||''), `
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Customer Name</label><input class="inp" id="beName" value="${b.CustomerName||''}"></div>
+      <div class="field"><label>Customer Mobile</label><input class="inp" id="beMob" value="${b.CustomerMobile||''}" maxlength="10"></div>
+    </div>
+    <div class="grid-3 mb-12">
+      <div class="field"><label>Payment Mode</label>
+        <select class="inp" id="bePay">
+          <option value="Cash" ${b.PaymentMode==='Cash'?'selected':''}>Cash</option>
+          <option value="UPI" ${b.PaymentMode==='UPI'?'selected':''}>UPI</option>
+          <option value="Card" ${b.PaymentMode==='Card'?'selected':''}>Card</option>
+          <option value="Online" ${b.PaymentMode==='Online'?'selected':''}>Online</option>
+          <option value="Mixed" ${b.PaymentMode==='Mixed'?'selected':''}>Mixed</option>
+        </select>
+      </div>
+      <div class="field"><label>Discount (₹)</label><input class="inp" id="beDisc" type="number" min="0" value="${Number(b.Discount||0)}"></div>
+      <div class="field"><label>Status</label>
+        <select class="inp" id="beStatus">
+          <option value="Completed" ${b.Status!=='Cancelled'?'selected':''}>Completed</option>
+          <option value="Cancelled" ${b.Status==='Cancelled'?'selected':''}>Cancelled</option>
+        </select>
+      </div>
+    </div>
+    <div class="tag-info">Subtotal: ${fmt(b.Subtotal)} — Total updates automatically as Subtotal − Discount.</div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Save', kind:'ok', on: async () => {
+      const disc = Number($('#beDisc').value||0);
+      const total = Math.max(0, Number(b.Subtotal||0) - disc);
+      const r = await apiPost('updateBill', {
+        BillID: b.BillID,
+        CustomerName: $('#beName').value.trim(),
+        CustomerMobile: $('#beMob').value.replace(/\D/g,''),
+        PaymentMode: $('#bePay').value,
+        Status: $('#beStatus').value,
+        Discount: disc,
+        Total: total,
+        staffID: state.user.staffID, staffName: state.user.name
+      });
+      if(!r.success){ toast(r.error||'Update failed', 'bad'); return; }
+      toast('Bill updated', 'ok'); closeModal(); pullAll();
+    }}
+  ]);
+}
+
 /* ============ EXPENSES ============ */
 function wireExpenses(){
   $('#btnAddExp').addEventListener('click', () => openModal('Add Expense', `
@@ -4557,10 +4663,18 @@ function openModal(title, bodyHTML, actions){
   $('#dlgBody').innerHTML = bodyHTML;
   const foot = $('#dlgFoot'); foot.innerHTML = '';
   (actions||[]).forEach(a => {
-    const b = document.createElement('button');
+    // Actions with an `href` render as a genuine <a target="_blank"> link
+    // instead of a JS button — used for WhatsApp so the click is a real,
+    // native browser link-follow (never blocked as a popup).
+    const b = document.createElement(a.href ? 'a' : 'button');
     b.className = 'btn ' + (a.kind==='ghost'?'ghost':(a.kind==='bad'?'bad':(a.kind==='ok'?'ok':'')));
     b.textContent = a.label;
-    b.addEventListener('click', a.on);
+    if(a.href){
+      b.href = a.href;
+      b.target = '_blank';
+      b.rel = 'noopener';
+    }
+    if(a.on) b.addEventListener('click', a.on);
     foot.appendChild(b);
   });
   $('#veil').classList.add('on');
