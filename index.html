@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://ak-fashion-hub-erp.vercel.app/ -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -342,9 +341,24 @@ tr:hover td{background:#faf9f4;}
                 <option value="UPI">UPI</option>
                 <option value="Card">Card</option>
                 <option value="Online">Online</option>
-                <option value="Mixed">Mixed</option>
+                <option value="Mixed">Split (Cash + Online)</option>
+                <option value="Udhaar">Udhaar / Credit (Due)</option>
               </select>
             </div>
+          </div>
+
+          <!-- Split / Udhaar entry — how much of the total is Cash, how
+               much is Online, and whatever's left over becomes Due on
+               the customer's account. Covers "aadha cash aadha online"
+               and full/partial "udhaar" with one flexible box. -->
+          <div class="field mt-8" id="posSplitWrap" style="display:none;">
+            <label>💰 Split Payment <small class="dim" style="font-weight:400;">enter what's actually being paid now — the rest becomes Udhaar (Due) on the customer's account</small></label>
+            <div class="grid-3 mb-8">
+              <div class="field"><label>Cash Now (₹)</label><input class="inp" id="posSplitCash" type="number" min="0" value="0"></div>
+              <div class="field"><label>Online Now (₹)</label><input class="inp" id="posSplitOnline" type="number" min="0" value="0"></div>
+              <div class="stat"><div class="lab">Udhaar / Due</div><div class="val" id="posSplitDue">₹0</div></div>
+            </div>
+            <div class="tag-info" id="posSplitHint"></div>
           </div>
 
           <!-- 🎁 Gift Items -->
@@ -1710,6 +1724,8 @@ function wirePOS(){
   });
   $('#btnClearCart').addEventListener('click', () => { state.cart=[]; state.activeCoin=null; resetPosCashInputs(); resetPosGifts(); refreshCart(); });
   $('#posDisc').addEventListener('input', refreshCart);
+  $('#posSplitCash').addEventListener('input', refreshCart);
+  $('#posSplitOnline').addEventListener('input', refreshCart);
   $('#btnComplete').addEventListener('click', completeSale);
   $('#btnPrintLast').addEventListener('click', () => state.lastBill ? printBill(state.lastBill) : toast('No recent bill', 'warn'));
   $('#btnWhatsappLast').addEventListener('click', (e) => {
@@ -1826,19 +1842,22 @@ function buildPosChangeGrid(){
 }
 function resetPosCashInputs(){
   state.posReceivedDenoms = {}; state.posChangeDenoms = {}; state.posLastChangeAmt = null;
-  state.tenderedDenoms = {}; state.cashShortfall = false;
+  state.tenderedDenoms = {}; state.cashShortfall = false; state.posSplitOver = false;
   buildPosReceivedGrid(); buildPosChangeGrid();
   $('#posRecvTotal').textContent = fmt(0);
   $('#posChangeTotal').textContent = fmt(0);
   $('#changeBox').style.display = 'none';
   $('#posChangeDenomWrap').style.display = 'none';
+  $('#posSplitCash').value = 0; $('#posSplitOnline').value = 0;
+  $('#posSplitWrap').style.display = 'none';
 }
 function updateUpiQr(){
   const mode = $('#posPay').value;
   const showQr = (mode === 'UPI' || mode === 'Online');
-  $('#posTenderedWrap').style.display = (mode==='Cash' || mode==='Mixed') ? 'block' : 'none';
+  $('#posTenderedWrap').style.display = (mode==='Cash') ? 'block' : 'none';
   $('#changeBox').style.display = 'none';
   $('#posChangeDenomWrap').style.display = 'none';
+  refreshCart();
   if(showQr && state.cfg.upiQR){
     $('#upiQrImg').src = state.cfg.upiQR;
     $('#upiQrBox').style.display = 'block';
@@ -1997,6 +2016,36 @@ function refreshCart(){
     $('#posCoinView').textContent = '-'+fmt(coinUse);
   }else{ $('#posCoinLine').style.display='none'; }
   updatePosCashCalc(total);
+  updatePosSplit(total);
+}
+
+// Split / Udhaar box — total is split into however much Cash is paid now,
+// however much Online is paid now, and whatever's left over automatically
+// becomes Due (Udhaar) on the customer's account. Works for a plain
+// half-cash/half-online split (Due stays ₹0) all the way to a full
+// Udhaar sale (Cash & Online stay ₹0, entire Total becomes Due).
+function updatePosSplit(total){
+  const mode = $('#posPay').value;
+  const wrap = $('#posSplitWrap');
+  if(mode !== 'Mixed' && mode !== 'Udhaar'){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const cash = Math.max(0, Number($('#posSplitCash').value||0));
+  const online = Math.max(0, Number($('#posSplitOnline').value||0));
+  const due = Math.max(0, Math.round((total - cash - online) * 100) / 100);
+  $('#posSplitDue').textContent = fmt(due);
+  const hint = $('#posSplitHint');
+  const over = (cash + online) > total + 0.5;
+  if(over){
+    hint.className = 'tag-info';
+    hint.innerHTML = '<b>⚠ Cash + Online (' + fmt(cash+online) + ') is more than the Total (' + fmt(total) + ').</b> Reduce one of the amounts — use plain Cash mode instead if change needs to be handed back.';
+  }else if(due > 0){
+    hint.className = 'tag-note';
+    hint.innerHTML = 'A valid 10-digit customer mobile is required so ₹' + Math.round(due) + ' can be added to their Udhaar / Due balance.';
+  }else{
+    hint.className = 'tag-note';
+    hint.innerHTML = 'Fully paid now — nothing added to Udhaar.';
+  }
+  state.posSplitOver = over;
 }
 
 // Break a number into ₹500/200/100/50/20/10 counts — used only as a starting
@@ -2085,6 +2134,10 @@ async function completeSale(){
     toast('The amount received is less than the bill total — please collect the remaining amount first', 'bad');
     return;
   }
+  if((payModeCheck==='Mixed' || payModeCheck==='Udhaar') && state.posSplitOver){
+    toast('Cash + Online is more than the Total — fix the split amounts first', 'bad');
+    return;
+  }
   state.pendingSubmit = true;
   const btn = $('#btnComplete'); btn.disabled = true; btn.textContent = 'Saving…';
 
@@ -2093,6 +2146,20 @@ async function completeSale(){
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
   const total = Math.max(0, sub - disc - coinUse);
   const payMode = $('#posPay').value;
+
+  // Split / Udhaar amounts — however much is Cash now, however much is
+  // Online now, and whatever's left over is Due (Udhaar) on the customer.
+  let splitCash = 0, splitOnline = 0, splitDue = 0;
+  if(payMode === 'Mixed' || payMode === 'Udhaar'){
+    splitCash = Math.max(0, Number($('#posSplitCash').value||0));
+    splitOnline = Math.max(0, Number($('#posSplitOnline').value||0));
+    splitDue = Math.max(0, Math.round((total - splitCash - splitOnline) * 100) / 100);
+    if(splitDue > 0.5 && !($('#posCustMob').value||'').replace(/\D/g,'').match(/^\d{10}$/)){
+      toast('Udhaar (Due) requires a valid 10-digit customer mobile number — enter one, or collect the full amount now', 'bad');
+      state.pendingSubmit = false; btn.disabled = false; btn.textContent = '✓ Complete Sale';
+      return;
+    }
+  }
 
   // Use exactly what was entered in the note grids — never assumed.
   // If staff didn't enter any notes (e.g. exact-cash convenience case),
@@ -2108,11 +2175,25 @@ async function completeSale(){
 
   const giftItemsText = state.giftItems.join(', ');
 
+  // Look up / create the customer FIRST (awaited, not fire-and-forget) so
+  // we have a real CustomerID to attach to the bill and — if this sale
+  // has an Udhaar/Due portion — the customer's current Due balance to add
+  // to. This also fixes Total Spend / Loyalty ever going stale for new
+  // bills, since the bill is now correctly linked to CustomerID.
+  const custMobile = $('#posCustMob').value.trim();
+  const custName = $('#posCustName').value.trim();
+  let custRecord = null;
+  if(custMobile){
+    const custRes = await apiPost('addCustomer', { Name: custName, Mobile: custMobile });
+    if(custRes && custRes.success) custRecord = custRes.customer;
+  }
+
   const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const payload = {
     BillID: billID,
-    CustomerMobile: $('#posCustMob').value.trim(),
-    CustomerName: $('#posCustName').value.trim(),
+    CustomerID: custRecord ? custRecord.CustomerID : '',
+    CustomerMobile: custMobile,
+    CustomerName: custName,
     Subtotal: sub, Discount: disc, Total: total,
     PaymentMode: payMode,
     StaffID: state.user.staffID, StaffName: state.user.name,
@@ -2126,14 +2207,11 @@ async function completeSale(){
     WalletID: state.activeCoin ? state.activeCoin.WalletID : '',
     WalletUsed: coinUse,
     Tendered: tendered, ChangeGiven: changeGiven,
-    GiftItems: giftItemsText
+    GiftItems: giftItemsText,
+    CashAmount: payMode==='Cash' ? tendered : (payMode==='Mixed'||payMode==='Udhaar') ? splitCash : 0,
+    OnlineAmount: (payMode==='UPI'||payMode==='Card'||payMode==='Online') ? total : (payMode==='Mixed'||payMode==='Udhaar') ? splitOnline : 0,
+    DueAmount: (payMode==='Mixed'||payMode==='Udhaar') ? splitDue : 0
   };
-  // Upsert customer alongside (fire and forget — sheet also upserts on bill)
-  if(payload.CustomerMobile){
-    apiPost('addCustomer', {
-      Name: payload.CustomerName, Mobile: payload.CustomerMobile
-    });
-  }
   const r = await apiPost('addBill', payload);
   state.pendingSubmit = false;
   btn.disabled = false; btn.textContent = '✓ Complete Sale';
@@ -2172,8 +2250,46 @@ async function completeSale(){
       delta: netDelta, staffID: state.user.staffID, staffName: state.user.name,
       reference: 'BILL-'+(r.data.billNumber||billID)
     }).then(()=> pullAll());
+  }else if(payMode === 'Mixed' || payMode === 'Udhaar'){
+    // Split sale — log the Cash portion and Online portion separately so
+    // both the Cash Drawer and the Online Payments balance stay correct,
+    // and add whatever's left (Due) onto the customer's account.
+    if(splitCash > 0){
+      apiPost('addCashTxn', {
+        Date: dayKey(nowISO()),
+        Time: new Date().toTimeString().substr(0,8),
+        Type: 'IN', Amount: splitCash,
+        Reference: 'BILL-'+(r.data.billNumber||billID),
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Split payment — cash portion'
+      });
+      // Exact notes weren't collected via the tap grid for a split sale,
+      // so the drawer count is updated with a suggested note breakdown —
+      // correct it any time from Cash Drawer ▸ Cash In/Out if it's off.
+      const approxDelta = breakChange(splitCash).notes;
+      apiPost('updateDrawerDenoms', {
+        delta: approxDelta, staffID: state.user.staffID, staffName: state.user.name,
+        reference: 'BILL-'+(r.data.billNumber||billID)+' (split, approx notes)'
+      }).then(()=> pullAll());
+    }
+    if(splitOnline > 0){
+      apiPost('addCashTxn', {
+        Date: dayKey(nowISO()),
+        Time: new Date().toTimeString().substr(0,8),
+        Type: 'ONLINE-IN', Amount: splitOnline,
+        Reference: 'BILL-'+(r.data.billNumber||billID),
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Split payment — online portion'
+      });
+    }
+    if(splitDue > 0 && custRecord){
+      const newDue = Number(custRecord.DueBalance||0) + splitDue;
+      apiPost('updateCustomer', {
+        customerID: custRecord.CustomerID, DueBalance: newDue
+      }).then(()=> pullAll());
+    }
   }else if(total > 0){
-    // Non-cash (UPI/Card/Online/Mixed) sale — logged with its real amount
+    // Non-cash (UPI/Card/Online) sale — logged with its real amount
     // under Type 'ONLINE-IN' so the Online Payments balance on the Cash
     // Drawer / Galla screen tracks it properly (0 impact on physical cash).
     apiPost('addCashTxn', {
@@ -3017,6 +3133,7 @@ function renderCustomers(){
       <td>
         <button class="btn ghost sm" data-a="hist" data-id="${c.CustomerID}">👁 History</button>
         <button class="btn ghost sm" data-a="edit" data-id="${c.CustomerID}">✎</button>
+        ${Number(c.DueBalance||0) > 0 ? `<button class="btn ok sm" data-a="due" data-id="${c.CustomerID}">💰 Collect Due</button>` : ''}
       </td>`;
     tb.appendChild(tr);
   });
@@ -3025,12 +3142,58 @@ function renderCustomers(){
     const c = state.data.customers.find(x => x.CustomerID === b.dataset.id);
     if(!c) return;
     if(b.dataset.a === 'edit') openCustomerForm(c);
+    if(b.dataset.a === 'due') openCollectDueForm(c);
     if(b.dataset.a === 'hist'){
       $('#posCustMob').value = c.Mobile;
       viewCustomerHistory();
     }
   };
   if(!list.length) tb.innerHTML = '<tr><td colspan="9" class="empty">No customers</td></tr>';
+}
+// Settle some or all of a customer's Udhaar (Due) balance — reduces
+// DueBalance and logs the collected amount into Cash Drawer or Online
+// Payments depending on how it was collected, exactly like a normal sale.
+function openCollectDueForm(c){
+  const due = Number(c.DueBalance||0);
+  openModal('Collect Due • '+(c.Name||c.Mobile), `
+    <div class="tag-info mb-12">Outstanding Udhaar / Due: <b>${fmt(due)}</b></div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Amount Collected (₹)</label><input class="inp" id="cdAmt" type="number" min="0" max="${due}" value="${due}"></div>
+      <div class="field"><label>Collected Via</label>
+        <select class="inp" id="cdMode">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online / UPI</option>
+        </select>
+      </div>
+    </div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Collect', kind:'ok', on: async () => {
+      const amt = Math.min(due, Math.max(0, Number($('#cdAmt').value||0)));
+      if(amt <= 0){ toast('Enter a valid amount', 'warn'); return; }
+      const mode = $('#cdMode').value;
+      const newDue = Math.max(0, due - amt);
+      const cr = await apiPost('updateCustomer', { customerID: c.CustomerID, DueBalance: newDue });
+      if(!cr.success){ toast(cr.error||'Update failed', 'bad'); return; }
+      apiPost('addCashTxn', {
+        Date: dayKey(nowISO()),
+        Time: new Date().toTimeString().substr(0,8),
+        Type: mode==='Cash' ? 'IN' : 'ONLINE-IN', Amount: amt,
+        Reference: 'DUE-SETTLE-'+c.CustomerID,
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Udhaar collected from '+(c.Name||c.Mobile)+' via '+mode
+      });
+      if(mode==='Cash'){
+        const approxDelta = breakChange(amt).notes;
+        apiPost('updateDrawerDenoms', {
+          delta: approxDelta, staffID: state.user.staffID, staffName: state.user.name,
+          reference: 'DUE-SETTLE-'+c.CustomerID+' (approx notes)'
+        });
+      }
+      toast('Collected '+fmt(amt)+' — remaining due: '+fmt(newDue), 'ok');
+      closeModal(); pullAll();
+    }}
+  ]);
 }
 function openCustomerForm(c){
   const isEdit = !!c;
@@ -3828,6 +3991,10 @@ function renderBills(){
   const tb = $('#billsTbl tbody'); tb.innerHTML='';
   list.forEach(b => {
     const tr = document.createElement('tr');
+    const href = waHref(b);
+    const waEl = href
+      ? `<a class="btn ghost sm" href="${href}" target="_blank" rel="noopener" title="Send WhatsApp">📱</a>`
+      : `<button class="btn ghost sm" disabled title="No valid mobile on this bill">📱</button>`;
     tr.innerHTML = `
       <td>${(b.CreatedDate||'').substr(0,16).replace('T',' ')}</td>
       <td>${b.BillNumber||''}</td>
@@ -3839,12 +4006,13 @@ function renderBills(){
       <td>
         <button class="btn ghost sm" data-a="edit" data-id="${b.BillID}">✎ Edit</button>
         <button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨</button>
+        ${waEl}
       </td>`;
     tb.appendChild(tr);
   });
   if(!list.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No bills found</td></tr>';
   tb.onclick = e => {
-    const btn = e.target.closest('button'); if(!btn) return;
+    const btn = e.target.closest('button[data-a]'); if(!btn) return;
     const b = (state.data.bills||[]).find(x => x.BillID === btn.dataset.id);
     if(!b) return;
     if(btn.dataset.a === 'edit') openBillEditForm(b);
