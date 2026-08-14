@@ -3671,15 +3671,15 @@ function showBillForReturn(b, highlightVariantID){
   const billDiscount = Number(b.Discount||0);
   const rows = items.map(it => {
     const effPrice = getEffectiveUnitPrice(it, b, items);
-    const priceCell = billDiscount > 0
-      ? `<s class="dim">${fmt(it.Price)}</s><br><b>${fmt(effPrice)}</b>`
-      : fmt(it.Price);
+    const product = (state.data.products||[]).find(p => p.ProductID === it.ProductID);
+    const mrp = product ? Number(product.MRP||0) : 0;
     return `
     <tr style="${it.VariantID===highlightVariantID?'background:#fff8e6;':''}">
       <td><b>${it.Name}</b></td>
       <td>${it.Color||''} ${it.Size||''}</td>
       <td>${it.Quantity}</td>
-      <td>${priceCell}</td>
+      <td class="dim">${mrp ? 'MRP: '+fmt(mrp) : '—'}<br>Sold: ${fmt(it.Price)}</td>
+      <td><label class="dim" style="font-size:11px;">Refund Rate (₹)</label><input class="inp" data-rate="${it.VariantID}" type="number" min="0" value="${Math.round(effPrice)}" style="max-width:90px;"></td>
       <td><input class="inp" data-vid="${it.VariantID}" type="number" min="0" max="${it.Quantity}" value="0" style="max-width:70px;"></td>
       <td class="dim">Refund: <span data-refund="${it.VariantID}">₹0</span></td>
     </tr>`;
@@ -3695,11 +3695,11 @@ function showBillForReturn(b, highlightVariantID){
         <div><b>Bill:</b> ${b.BillNumber}<br><b>Bill ID:</b> <span class="mono">${b.BillID}</span><br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
         <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
       </div>
-      ${billDiscount > 0 ? '<div class="tag-info mb-12">This bill had a ₹'+fmt(billDiscount)+' discount applied — it has been proportionally deducted from each item\'s refund rate below (shown struck-through vs. actual refund rate).</div>' : ''}
+      ${billDiscount > 0 ? '<div class="tag-info mb-12">This bill had a ₹'+fmt(billDiscount)+' discount applied — the Refund Rate below defaults to the discount-adjusted price, but you can change it (e.g. to MRP, or whatever it was actually sold for).</div>' : ''}
       <div class="row mb-12">
         <button class="btn ghost sm" id="btnPrintOrigBill">🖨 Print Original Bill</button>
       </div>
-      <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Var</th><th>Bought</th><th>Price</th><th>Return Qty</th><th></th></tr></thead>
+      <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Var</th><th>Bought</th><th>MRP / Sold</th><th>Refund Rate</th><th>Return Qty</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table></div>
       <div class="mt-16 grid-3">
         <div class="field"><label>Reason</label><input class="inp" id="retReason" placeholder="Size issue, defect..."></div>
@@ -3707,9 +3707,20 @@ function showBillForReturn(b, highlightVariantID){
           <select class="inp" id="retMode">
             <option value="cash">Cash Return</option>
             <option value="coin">Store Coin (Wallet)</option>
+            <option value="exchange">Exchange (New Item)</option>
           </select>
         </div>
         <div class="field"><label>Total Refund</label><div class="lg strong mt-8" id="retTotal">₹0</div></div>
+      </div>
+      <!-- Exchange box — shown only when Refund Mode = Exchange -->
+      <div id="retExchangeBox" style="display:none;" class="mt-16 pane">
+        <div class="strong mb-8">🔁 Exchange for</div>
+        <div class="row mb-8">
+          <input class="inp" id="exScan" placeholder="Scan new item's barcode, or type its name to search">
+          <button class="btn ghost sm" id="btnExScan">📷 Scan</button>
+        </div>
+        <div id="exPicked" class="tag-note" style="display:none;"></div>
+        <div id="exSearchResults"></div>
       </div>
       <div class="mt-16 row">
         <button class="btn ok" id="btnDoReturn">Process Return</button>
@@ -3719,38 +3730,168 @@ function showBillForReturn(b, highlightVariantID){
   // wire refund calc
   const box = $('#retResult');
   const items2 = items;
+  state.retExchangePick = null;
   $('#btnPrintOrigBill').addEventListener('click', () => printBill(billWithItems(b)));
-  box.querySelectorAll('input[data-vid]').forEach(inp => {
-    inp.addEventListener('input', () => {
-      let total = 0;
-      box.querySelectorAll('input[data-vid]').forEach(x => {
-        const it = items2.find(i => i.VariantID === x.dataset.vid);
-        const q = Number(x.value||0);
-        const r = q * Number(it.Price||0);
-        box.querySelector('[data-refund="'+x.dataset.vid+'"]').textContent = fmt(r);
-        total += r;
-      });
-      $('#retTotal').textContent = fmt(total);
+  function recalcReturnTotal(){
+    let total = 0;
+    box.querySelectorAll('input[data-vid]').forEach(x => {
+      const rateInp = box.querySelector('input[data-rate="'+x.dataset.vid+'"]');
+      const rate = Number((rateInp && rateInp.value) || 0);
+      const q = Number(x.value||0);
+      const r = q * rate;
+      box.querySelector('[data-refund="'+x.dataset.vid+'"]').textContent = fmt(r);
+      total += r;
     });
+    $('#retTotal').textContent = fmt(total);
+    return total;
+  }
+  box.querySelectorAll('input[data-vid], input[data-rate]').forEach(inp => {
+    inp.addEventListener('input', recalcReturnTotal);
   });
+  // Exchange mode — reveal the "pick a new item" box, hide it otherwise
+  $('#retMode').addEventListener('change', () => {
+    $('#retExchangeBox').style.display = $('#retMode').value === 'exchange' ? 'block' : 'none';
+  });
+  function renderExPicked(){
+    const pbox = $('#exPicked');
+    if(!state.retExchangePick){ pbox.style.display='none'; return; }
+    const {product,variant,qty} = state.retExchangePick;
+    const price = Number(variant.SalePrice||product.SalePrice||0);
+    pbox.style.display='block';
+    pbox.innerHTML = `Exchanging for: <b>${product.Name}</b> ${variant.Color||''} ${variant.Size||''} — ${fmt(price)} each
+      <input class="inp" id="exQty" type="number" min="1" max="${variant.Stock||99}" value="${qty}" style="max-width:70px;display:inline-block;margin:0 8px;">
+      <button class="btn ghost sm" id="exClear">✕ Clear</button>`;
+    $('#exQty').addEventListener('input', () => { state.retExchangePick.qty = Math.max(1, Number($('#exQty').value||1)); });
+    $('#exClear').addEventListener('click', () => { state.retExchangePick = null; renderExPicked(); });
+  }
+  function pickExchangeItem(product, variant){
+    state.retExchangePick = { product, variant, qty: 1 };
+    $('#exSearchResults').innerHTML = '';
+    $('#exScan').value = '';
+    renderExPicked();
+  }
+  function exchangeNameSearch(q){
+    const term = q.toLowerCase();
+    const results = [];
+    (state.data.products||[]).forEach(p => {
+      if(!p.Name || !p.Name.toLowerCase().includes(term)) return;
+      (p.variants||[]).forEach(v => { if(Number(v.Stock||0) > 0) results.push({p,v}); });
+    });
+    const list = results.slice(0, 8);
+    $('#exSearchResults').innerHTML = list.map(({p,v}) => `
+      <div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);">
+        <div>${p.Name} — ${v.Color||''} ${v.Size||''} <span class="dim">(Stock: ${v.Stock})</span></div>
+        <button class="btn ghost sm" data-pick="${p.ProductID}|${v.VariantID}">${fmt(v.SalePrice||p.SalePrice)} — Pick</button>
+      </div>`).join('') || '<div class="empty">No match</div>';
+    $('#exSearchResults').querySelectorAll('button[data-pick]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const [pid,vid] = btn.dataset.pick.split('|');
+        const p = (state.data.products||[]).find(x=>x.ProductID===pid);
+        const v = p && (p.variants||[]).find(x=>x.VariantID===vid);
+        if(p && v) pickExchangeItem(p, v);
+      });
+    });
+  }
+  $('#exScan').addEventListener('input', () => {
+    const q = $('#exScan').value.trim();
+    if(q.length < 2){ $('#exSearchResults').innerHTML=''; return; }
+    exchangeNameSearch(q);
+  });
+  $('#exScan').addEventListener('keydown', e => {
+    if(e.key !== 'Enter') return;
+    e.preventDefault();
+    const code = $('#exScan').value.trim(); if(!code) return;
+    const hit = findByCode(code);
+    if(hit && hit.variant) pickExchangeItem(hit.product, hit.variant);
+    else exchangeNameSearch(code);
+  });
+  $('#btnExScan').addEventListener('click', () => openCamScanner(code => {
+    const hit = findByCode(code);
+    if(hit && hit.variant) pickExchangeItem(hit.product, hit.variant);
+    else toast('No matching product for: '+code, 'bad');
+  }));
   $('#btnDoReturn').addEventListener('click', async () => {
+    const mode = $('#retMode').value;
     const lines = [];
     box.querySelectorAll('input[data-vid]').forEach(x => {
       const q = Number(x.value||0);
       if(q>0) lines.push({ vid: x.dataset.vid, qty: q });
     });
     if(!lines.length){ toast('Please enter a return quantity', 'warn'); return; }
+    if(mode === 'exchange' && !state.retExchangePick){
+      toast('Scan or search the new item to exchange for', 'warn'); return;
+    }
     let totalRefund = 0;
     const returnedLines = [];
     for(const l of lines){
       const it = items2.find(i => i.VariantID === l.vid);
+      const rateInp = box.querySelector('input[data-rate="'+l.vid+'"]');
+      const rate = Number((rateInp && rateInp.value) || it.Price || 0);
       const r = await apiPost('returnBill', {
         billID: b.BillID, variantID: l.vid, quantity: l.qty,
+        unitRefundRate: rate,
         reason: $('#retReason').value, staffID: state.user.staffID
       });
       if(r.success){ totalRefund += Number(r.data.refund||0); returnedLines.push({ it, qty:l.qty, refund:Number(r.data.refund||0) }); }
     }
-    if($('#retMode').value === 'coin'){
+
+    if(mode === 'exchange'){
+      // The returned value becomes a discount on a brand-new small bill for
+      // the replacement item — this is what "updates on the bill too" means:
+      // it's a real, linked bill (not just a note), so it shows up in Bills,
+      // Customer History, Reports, and stock the same way any sale does.
+      const {product, variant, qty} = state.retExchangePick;
+      const price = Number(variant.SalePrice||product.SalePrice||0);
+      const newItemTotal = price * qty;
+      const discount = Math.min(newItemTotal, totalRefund);
+      const owed = Math.max(0, Math.round((newItemTotal - discount) * 100) / 100);
+      const credit = Math.max(0, Math.round((totalRefund - newItemTotal) * 100) / 100);
+      const exBillID = 'BILL_' + Date.now() + '_' + rnd();
+      const exPayload = {
+        BillID: exBillID,
+        CustomerID: b.CustomerID || '',
+        CustomerMobile: b.CustomerMobile || '',
+        CustomerName: b.CustomerName || '',
+        Subtotal: newItemTotal, Discount: discount, Total: owed,
+        PaymentMode: 'Cash',
+        PaymentRef: 'EXCHANGE for '+b.BillNumber,
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        items: [{
+          ProductID: product.ProductID, VariantID: variant.VariantID, UID: variant.UID||product.UID,
+          Name: product.Name, Color: variant.Color, Size: variant.Size,
+          Quantity: qty, Price: price, CostPrice: variant.CostPrice||product.CostPrice||0,
+          LineTotal: newItemTotal, LineProfit: (price-(variant.CostPrice||product.CostPrice||0))*qty - 10
+        }],
+        CashAmount: owed, OnlineAmount: 0, DueAmount: 0
+      };
+      const exRes = await apiPost('addBill', exPayload);
+      if(!exRes.success){ toast('Exchange item save failed: '+(exRes.error||''), 'bad'); }
+      else{
+        if(owed > 0){
+          apiPost('addCashTxn', {
+            Date: dayKey(nowISO()), Type:'IN', Amount: owed,
+            Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
+            StaffID: state.user.staffID, StaffName: state.user.name,
+            Description: 'Exchange top-up collected — for '+b.BillNumber
+          });
+          const brk = breakChange(owed).notes;
+          apiPost('updateDrawerDenoms', { delta: brk, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
+        }
+        if(credit > 0){
+          apiPost('addCashTxn', {
+            Date: dayKey(nowISO()), Type:'OUT', Amount: credit,
+            Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
+            StaffID: state.user.staffID, StaffName: state.user.name,
+            Description: 'Exchange balance refunded — for '+b.BillNumber
+          });
+          const brk = breakChange(credit).notes;
+          const delta = {}; DENOMS.forEach(d => delta[d] = -(brk[d]||0));
+          apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
+        }
+        toast(`Exchanged — ${owed>0 ? 'collected '+fmt(owed) : credit>0 ? 'refunded '+fmt(credit) : 'even swap'}`, 'ok');
+        printBill({ ...exPayload, BillNumber: exRes.data.billNumber, items: exPayload.items });
+      }
+    }else if(mode === 'coin'){
       // issue a coin for the amount
       openIssueCoinForm({
         mobile: (b.CustomerMobile||''), name: b.CustomerName,
@@ -3771,7 +3912,7 @@ function showBillForReturn(b, highlightVariantID){
         apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RETURN-'+b.BillNumber });
       }
     }
-    printReturnReceipt(b, returnedLines, totalRefund, $('#retMode').value);
+    printReturnReceipt(b, returnedLines, totalRefund, mode);
     pullAll();
     $('#retResult').innerHTML = '';
     $('#retSearch').value = '';
@@ -4929,4 +5070,4 @@ function requirePin(reason){
 <script defer="" src="./SRGDRH_files/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;7f7b0fd8732c4326aae4b9d58d5c514a&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
 
 
-</body></html>
+</body></html> 
