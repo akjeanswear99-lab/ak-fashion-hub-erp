@@ -1522,7 +1522,7 @@ function applyRolePerms(){
   // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
 }
-const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1, bills:1 };
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1 };
 function accessDeniedHTML(){
   return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
        + 'If you are an administrator and still see this message, please verify that the Role column for your account '
@@ -1604,12 +1604,7 @@ function currentScreen(){
 /* ------- master renderer ------- */
 function render(scr){
   if(RESTRICTED_SCREENS[scr] && !isAdminUser()){
-    const el = $('#scr-'+scr);
-    if(el){
-      const pane = el.querySelector('.pane');
-      if(pane) pane.parentElement.innerHTML = accessDeniedHTML();
-      else el.innerHTML = accessDeniedHTML();
-    }
+    toast('This section is restricted to Admin access only', 'warn');
     return;
   }
   switch(scr){
@@ -2505,10 +2500,42 @@ async function viewCustomerHistory(){
   if(m.length !== 10){ toast('Please enter a valid 10-digit mobile number', 'warn'); return; }
   toast('Loading customer…');
   const r = await apiPost('getCustomerHistory', { mobile: m });
-  if(!r.success){ toast(r.error||'Load failed', 'bad'); return; }
-  if(!r.data.found){ toast('New customer — no history found', 'warn'); return; }
-  const c = r.data.customer, st = r.data.stats;
-  const rows = (r.data.bills||[]).map(b=>{
+
+  let hist = null;
+  if(r.success && r.data && r.data.found){
+    hist = r.data;
+  }else{
+    // Backend history call failed or returned nothing — rebuild the history
+    // from what's already synced locally, so bills already on this device
+    // are never hidden just because the server call had a problem.
+    const localCust = (state.data.customers||[]).find(c => String(c.Mobile||'').replace(/\D/g,'')===m);
+    const localBills = (state.data.bills||[])
+      .filter(b => String(b.CustomerMobile||'').replace(/\D/g,'')===m)
+      .map(b => billWithItems(b));
+    if(!localCust && !localBills.length){
+      toast(r.error || 'New customer — no history found', 'warn');
+      return;
+    }
+    const totalSpend = localBills.reduce((s,b)=>s+Number(b.Total||0),0);
+    const custWallets = (state.data.wallet||[]).filter(w => localCust && String(w.CustomerID)===String(localCust.CustomerID));
+    hist = {
+      found: true,
+      customer: localCust || { Name:'', Mobile:m },
+      stats: {
+        totalSpend,
+        totalBills: localBills.length,
+        loyaltyPoints: Math.floor(totalSpend/100),
+        dueBalance: localCust ? Number(localCust.DueBalance||0) : 0,
+        lastPurchaseDate: localBills.reduce((l,b)=> (!l || String(b.CreatedDate||'')>String(l)) ? (b.CreatedDate||'') : l, '')
+      },
+      bills: localBills,
+      wallets: custWallets,
+      activeCoinBalance: custWallets.filter(w=>w.Status==='Active').reduce((s,w)=>s+Number(w.RemainingAmount||0),0)
+    };
+  }
+
+  const c = hist.customer, st = hist.stats;
+  const rows = (hist.bills||[]).map(b=>{
     const its = (b.items||[]).map(i=>i.Name+' ('+i.Quantity+')').join(', ');
     const href = waHref(b);
     const waEl = href
@@ -2523,7 +2550,7 @@ async function viewCustomerHistory(){
       <td><button class="btn ghost sm" data-bp="${b.BillID}" title="Print">🖨</button> ${waEl}</td>
     </tr>`;
   }).join('');
-  const coins = (r.data.wallets||[]).map(w=>`
+  const coins = (hist.wallets||[]).map(w=>`
     <tr><td class="mono">${w.WalletID}</td><td>${fmt(w.Amount)}</td><td>${fmt(w.RemainingAmount)}</td>
     <td>${(w.ExpiryDate||'').substr(0,10)}</td><td><span class="pill ${w.Status==='Active'?'ok':(w.Status==='Expired'?'bad':'warn')}">${w.Status}</span></td></tr>
   `).join('');
@@ -2548,7 +2575,7 @@ async function viewCustomerHistory(){
       <div class="stat"><div class="lab">Total Spend</div><div class="val">${fmt(st.totalSpend)}</div></div>
       <div class="stat"><div class="lab">Bills</div><div class="val">${st.totalBills}</div></div>
       <div class="stat"><div class="lab">Loyalty Points</div><div class="val">${st.loyaltyPoints||0}</div></div>
-      <div class="stat"><div class="lab">Active Coin Bal.</div><div class="val">${fmt(r.data.activeCoinBalance)}</div></div>
+      <div class="stat"><div class="lab">Active Coin Bal.</div><div class="val">${fmt(hist.activeCoinBalance)}</div></div>
       <div class="stat"><div class="lab">Due Balance</div><div class="val">${fmt(st.dueBalance)}</div></div>
       <div class="stat"><div class="lab">Last Buy</div><div class="val" style="font-size:14px;">${(st.lastPurchaseDate||'—').substr(0,10)}</div></div>
     </div>
@@ -2568,7 +2595,7 @@ async function viewCustomerHistory(){
   const histBox = $('#custHistBills');
   if(histBox) histBox.onclick = e => {
     const pBtn = e.target.closest('button[data-bp]'); if(!pBtn) return;
-    const b = (r.data.bills||[]).find(x => x.BillID === pBtn.dataset.bp);
+    const b = (hist.bills||[]).find(x => x.BillID === pBtn.dataset.bp);
     if(b) printBill(b);
   };
 }
