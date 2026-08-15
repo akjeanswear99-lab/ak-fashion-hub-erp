@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://ak-fashion-hub-erp.vercel.app/ -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -1331,9 +1332,26 @@ async function queueFlush(){
 
 /* ------- API ------- */
 async function apiGet(action){
-  const url = state.cfg.apiUrl + '?action=' + encodeURIComponent(action);
-  const r = await fetch(url);
-  return r.json();
+  try{
+    if(!state.cfg.apiUrl){ return { success:false, error:'API URL missing (set it under Settings)' }; }
+    const url = state.cfg.apiUrl + '?action=' + encodeURIComponent(action);
+    const r = await fetch(url);
+    if(!r.ok){
+      return { success:false, error:'Server returned '+r.status+' '+r.statusText };
+    }
+    let j;
+    try{ j = await r.json(); }
+    catch(parseErr){
+      // Apps Script returned something that isn't JSON — almost always
+      // means the deployment needs attention: it's not published as
+      // "Execute as: Me / Access: Anyone", it needs re-authorization, or
+      // it hit an execution error and returned an HTML page instead.
+      return { success:false, error:'Server did not return valid data — check the Apps Script deployment (Access should be "Anyone", and try redeploying as a new version)' };
+    }
+    return j;
+  }catch(err){
+    return { success:false, error:'Could not reach the server — check your internet connection and the API URL in Settings ('+(err && err.message ? err.message : err)+')' };
+  }
 }
 async function apiPost(action, data, opts){
   opts = opts || {};
@@ -1619,8 +1637,14 @@ function render(scr){
 function renderDash(){
   const today = dayKey(nowISO());
   const bills = state.data.bills || [];
+  const returns = state.data.returns || [];
   const todaysBills = bills.filter(b => dayKey(b.CreatedDate) === today);
-  const sales = todaysBills.reduce((s,b)=>s + Number(b.Total||0), 0);
+  const todaysReturns = returns.filter(r => dayKey(r.CreatedDate) === today).reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
+  // Net Sales = gross bill totals for the period MINUS refunds processed
+  // in that same period — this is the actual money that stayed, exact to
+  // the rupee, not just a raw sum of bill totals (which would double-count
+  // value on an Exchange: the original bill AND its replacement bill).
+  const sales = Math.max(0, todaysBills.reduce((s,b)=>s + Number(b.Total||0), 0) - todaysReturns);
   const items = state.data.billItems || [];
   const todaysItems = items.filter(it => todaysBills.some(b => b.BillID === it.BillID));
   const profit = todaysItems.reduce((s,it)=>s + Number(it.LineProfit||0), 0);
@@ -1655,10 +1679,12 @@ function renderDash(){
   const now = new Date();
   const monthStart = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const monthBills = bills.filter(b => (b.CreatedDate||'').startsWith(monthStart));
-  const monthSales = monthBills.reduce((s,b)=>s+Number(b.Total||0), 0);
+  const monthReturns = returns.filter(r => (r.CreatedDate||'').startsWith(monthStart)).reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
+  const monthSales = Math.max(0, monthBills.reduce((s,b)=>s+Number(b.Total||0), 0) - monthReturns);
   const monthItems = items.filter(it => monthBills.some(b => b.BillID === it.BillID));
   const monthProfit = monthItems.reduce((s,it)=>s+Number(it.LineProfit||0), 0);
-  const allSales = bills.reduce((s,b)=>s+Number(b.Total||0), 0);
+  const allReturns = returns.reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
+  const allSales = Math.max(0, bills.reduce((s,b)=>s+Number(b.Total||0), 0) - allReturns);
   const totalCust = (state.data.customers||[]).length;
   const newCust = (state.data.customers||[]).filter(c => (c.CreatedDate||'').startsWith(monthStart)).length;
   $('#s-monthSales').textContent = fmt(monthSales);
@@ -1674,7 +1700,9 @@ function renderDash(){
     const d = new Date(); d.setDate(d.getDate()-i);
     const k = d.toISOString().substr(0,10);
     labels.push(k.substr(5));
-    data.push( bills.filter(b => dayKey(b.CreatedDate)===k).reduce((s,b)=>s+Number(b.Total||0),0) );
+    const dayGross = bills.filter(b => dayKey(b.CreatedDate)===k).reduce((s,b)=>s+Number(b.Total||0),0);
+    const dayReturns = returns.filter(r => dayKey(r.CreatedDate)===k).reduce((s,r)=>s+Number(r.RefundAmount||0),0);
+    data.push(Math.max(0, dayGross - dayReturns));
   }
   const ctx = $('#dashChart').getContext('2d');
   if(state.chart){ state.chart.destroy(); }
@@ -2126,8 +2154,18 @@ async function checkCoin(){
   $('#coinApplyBox').innerHTML = `Coin <b>${w.WalletID}</b> — ₹${w.RemainingAmount} balance available. It will be deducted from the bill automatically.`;
   refreshCart();
 }
+// Same date format Apps Script's autoBillNumber_() uses — generating it
+// client-side means we know the real BillNumber immediately, without
+// waiting for the server round-trip, so Print/WhatsApp/UI can use it
+// right away. The backend still honors whatever BillNumber it's given.
+function localBillNumber(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return 'B' + String(d.getFullYear()).slice(-2) + p(d.getMonth()+1) + p(d.getDate()) + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+
 async function completeSale(){
-  if(state.pendingSubmit){ toast('A bill is already being processed — please wait', 'warn'); return; }
+  if(state.pendingSubmit){ toast('Still preparing the previous bill — one moment', 'warn'); return; }
   if(!state.cart.length){ toast('Cart is empty', 'warn'); return; }
   const payModeCheck = $('#posPay').value;
   if(payModeCheck==='Cash' && state.cashShortfall){
@@ -2139,7 +2177,6 @@ async function completeSale(){
     return;
   }
   state.pendingSubmit = true;
-  const btn = $('#btnComplete'); btn.disabled = true; btn.textContent = 'Saving…';
 
   const sub = state.cart.reduce((s,c)=>s + c.Price*c.Quantity, 0);
   const disc = Number($('#posDisc').value||0);
@@ -2156,14 +2193,12 @@ async function completeSale(){
     splitDue = Math.max(0, Math.round((total - splitCash - splitOnline) * 100) / 100);
     if(splitDue > 0.5 && !($('#posCustMob').value||'').replace(/\D/g,'').match(/^\d{10}$/)){
       toast('Udhaar (Due) requires a valid 10-digit customer mobile number — enter one, or collect the full amount now', 'bad');
-      state.pendingSubmit = false; btn.disabled = false; btn.textContent = '✓ Complete Sale';
+      state.pendingSubmit = false;
       return;
     }
   }
 
   // Use exactly what was entered in the note grids — never assumed.
-  // If staff didn't enter any notes (e.g. exact-cash convenience case),
-  // fall back to treating the payment as exact with no note tracking.
   let receivedBreak = {};
   DENOMS.forEach(d => { if(state.posReceivedDenoms[d]) receivedBreak[d] = Number(state.posReceivedDenoms[d]); });
   let tendered = DENOMS.reduce((s,d)=> s + (receivedBreak[d]||0)*d, 0);
@@ -2174,23 +2209,24 @@ async function completeSale(){
   const changeGiven = DENOMS.reduce((s,d)=> s + (changeBreak[d]||0)*d, 0);
 
   const giftItemsText = state.giftItems.join(', ');
-
-  // Look up / create the customer FIRST (awaited, not fire-and-forget) so
-  // we have a real CustomerID to attach to the bill and — if this sale
-  // has an Udhaar/Due portion — the customer's current Due balance to add
-  // to. This also fixes Total Spend / Loyalty ever going stale for new
-  // bills, since the bill is now correctly linked to CustomerID.
   const custMobile = $('#posCustMob').value.trim();
   const custName = $('#posCustName').value.trim();
+  const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
+  const billNumber = localBillNumber();               // known instantly, no waiting on the server
+
+  // Udhaar (Due>0) genuinely needs the customer's real CustomerID + current
+  // Due balance before we can add to it, so ONLY that case briefly waits
+  // on the network. Every other sale (the vast majority) never waits —
+  // CustomerID is filled in later once the background customer lookup
+  // resolves; history/reports already match bills by mobile too either way.
   let custRecord = null;
-  if(custMobile){
+  if(splitDue > 0.5 && custMobile){
     const custRes = await apiPost('addCustomer', { Name: custName, Mobile: custMobile });
     if(custRes && custRes.success) custRecord = custRes.customer;
   }
 
-  const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const payload = {
-    BillID: billID,
+    BillID: billID, BillNumber: billNumber,
     CustomerID: custRecord ? custRecord.CustomerID : '',
     CustomerMobile: custMobile,
     CustomerName: custName,
@@ -2212,13 +2248,47 @@ async function completeSale(){
     OnlineAmount: (payMode==='UPI'||payMode==='Card'||payMode==='Online') ? total : (payMode==='Mixed'||payMode==='Udhaar') ? splitOnline : 0,
     DueAmount: (payMode==='Mixed'||payMode==='Udhaar') ? splitDue : 0
   };
-  const r = await apiPost('addBill', payload);
+
+  // From here on the bill is treated as DONE from the staff's point of
+  // view — set it as the last bill, clear the cart, and hand control
+  // straight back so the NEXT sale can start immediately. The actual
+  // network save + Cash Drawer / Online / Due logging all continue in the
+  // background via saveBillInBackground(); apiPost already auto-queues
+  // and retries on its own if the connection drops.
+  state.lastBill = { ...payload, BillNumber: billNumber };
+  toast('Bill '+billNumber+' — saving in background…', 'ok');
+  state.cart=[]; state.activeCoin=null;
+  resetPosCashInputs();
+  resetPosGifts();
+  $('#posCoin').value=''; $('#posCoinLine').style.display='none';
+  $('#coinApplyBox').style.display='none';
+  $('#posDisc').value=0;
+  $('#posCustMob').value=''; $('#posCustName').value='';
+  refreshCart();
+  refreshLastBillWaLink();
   state.pendingSubmit = false;
-  btn.disabled = false; btn.textContent = '✓ Complete Sale';
-  if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
-  if(r.data && r.data.duplicate){ toast('Bill already saved (duplicate blocked)', 'warn'); }
-  state.lastBill = { ...payload, BillNumber: r.data.billNumber };
-  toast('Bill saved: '+r.data.billNumber, 'ok');
+
+  saveBillInBackground(payload, billID, billNumber, payMode, custMobile, custName, custRecord, tendered, changeGiven, receivedBreak, changeBreak, splitCash, splitOnline, splitDue, total);
+}
+
+// Everything that used to block the "Complete Sale" click now happens
+// here, off to the side: saving the bill itself (with retry/offline
+// queueing built into apiPost), then Cash Drawer / Online Payments /
+// Udhaar logging, then a background sync so every screen picks it up.
+async function saveBillInBackground(payload, billID, billNumber, payMode, custMobile, custName, custRecord, tendered, changeGiven, receivedBreak, changeBreak, splitCash, splitOnline, splitDue, total){
+  // Fire the customer upsert if we haven't already awaited it above (i.e.
+  // this wasn't an Udhaar sale) — still fully in the background.
+  if(!custRecord && custMobile){
+    apiPost('addCustomer', { Name: custName, Mobile: custMobile });
+  }
+
+  const r = await apiPost('addBill', payload);
+  if(!r.success){
+    toast('⚠ Bill '+billNumber+' failed to save: '+(r.error||'unknown error')+' — it has been queued and will retry automatically', 'bad');
+    return;
+  }
+  if(r.data && r.data.duplicate){ toast('Bill '+billNumber+' already saved (duplicate blocked)', 'warn'); }
+  else{ toast('Bill '+billNumber+' saved ✓', 'ok'); }
 
   // ------- Cash Drawer / Galla logging + note-wise auto-tracking -------
   if(payMode === 'Cash'){
@@ -2242,8 +2312,6 @@ async function completeSale(){
         Description: 'Change returned' + (changeNoteText ? ' — Given: '+changeNoteText : '')
       });
     }
-    // Note-wise drawer count updates automatically from exactly what was
-    // entered above — no manual counting needed at day's end.
     const netDelta = {};
     DENOMS.forEach(d => { netDelta[d] = (receivedBreak[d]||0) - (changeBreak[d]||0); });
     apiPost('updateDrawerDenoms', {
@@ -2251,9 +2319,6 @@ async function completeSale(){
       reference: 'BILL-'+(r.data.billNumber||billID)
     }).then(()=> pullAll());
   }else if(payMode === 'Mixed' || payMode === 'Udhaar'){
-    // Split sale — log the Cash portion and Online portion separately so
-    // both the Cash Drawer and the Online Payments balance stay correct,
-    // and add whatever's left (Due) onto the customer's account.
     if(splitCash > 0){
       apiPost('addCashTxn', {
         Date: dayKey(nowISO()),
@@ -2263,9 +2328,6 @@ async function completeSale(){
         StaffID: state.user.staffID, StaffName: state.user.name,
         Description: 'Split payment — cash portion'
       });
-      // Exact notes weren't collected via the tap grid for a split sale,
-      // so the drawer count is updated with a suggested note breakdown —
-      // correct it any time from Cash Drawer ▸ Cash In/Out if it's off.
       const approxDelta = breakChange(splitCash).notes;
       apiPost('updateDrawerDenoms', {
         delta: approxDelta, staffID: state.user.staffID, staffName: state.user.name,
@@ -2289,9 +2351,6 @@ async function completeSale(){
       }).then(()=> pullAll());
     }
   }else if(total > 0){
-    // Non-cash (UPI/Card/Online) sale — logged with its real amount
-    // under Type 'ONLINE-IN' so the Online Payments balance on the Cash
-    // Drawer / Galla screen tracks it properly (0 impact on physical cash).
     apiPost('addCashTxn', {
       Date: dayKey(nowISO()),
       Time: new Date().toTimeString().substr(0,8),
@@ -2301,19 +2360,6 @@ async function completeSale(){
       Description: payMode+' sale of '+fmt(total)
     });
   }
-
-  // reset
-  state.cart=[]; state.activeCoin=null;
-  resetPosCashInputs();
-  resetPosGifts();
-  $('#posCoin').value=''; $('#posCoinLine').style.display='none';
-  $('#coinApplyBox').style.display='none';
-  $('#posDisc').value=0;
-  $('#posCustMob').value=''; $('#posCustName').value='';
-  refreshCart();
-  // Nothing auto-opens here on purpose — Print and WhatsApp only fire when
-  // the staff actually taps "🖨 Print Last" / "📱 WhatsApp" themselves.
-  refreshLastBillWaLink();
   pullAll();
 }
 function renderPOS(){
@@ -2356,11 +2402,19 @@ function printBill(b){
   const pageWidth = isThermal ? '80mm' : '210mm';
   const fontSz = isThermal ? '12px' : '14px';
   const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
-  const upiQr = ((b.PaymentMode === 'UPI' || b.PaymentMode === 'Online') && state.cfg.upiQR)
-    ? `<div style="text-align:center;margin-top:6px;"><img src="${state.cfg.upiQR}" style="max-width:120px;"><br><small>Scan to pay</small></div>` : '';
   const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
+  // Split / Udhaar bills show exactly how the amount was actually paid —
+  // how much Cash, how much Online, and how much is still Due (Udhaar).
+  const splitLine = (b.PaymentMode==='Mixed' || b.PaymentMode==='Udhaar')
+    ? `<div>Cash: ${fmt(b.CashAmount||0)} | Online: ${fmt(b.OnlineAmount||0)}${Number(b.DueAmount||0)>0 ? ' | Udhaar: '+fmt(b.DueAmount) : ''}</div>`
+    : '';
   const giftLine = b.GiftItems ? `<div>🎁 Gift: ${b.GiftItems}</div>` : '';
   const billBarcodeID = 'billBc_' + rnd();
+  // The bill always shows ITS OWN date & time — the moment it was actually
+  // created (b.CreatedDate), never the moment it happens to be printed or
+  // re-printed. This matters most when reprinting an old bill later: it
+  // must still show the original sale's date/time, not today's.
+  const billDateTime = b.CreatedDate ? new Date(b.CreatedDate).toLocaleString('en-IN') : new Date().toLocaleString('en-IN');
   // When a logo is printed, the logo itself already represents the shop's
   // "AK" mark — printing "AK FASHION HUB" as text right under it duplicated
   // the branding. So the printed text drops the leading "AK" and just reads
@@ -2375,7 +2429,7 @@ function printBill(b){
         <small>${state.cfg.shopAddress||''}</small><br>
         Mob: ${state.cfg.shopMobile}<br>
         Bill: ${b.BillNumber||''}<br>
-        ${new Date().toLocaleString('en-IN')}
+        ${billDateTime}
       </div>
       <hr>
       <div>Cust: ${b.CustomerName||'-'}<br>Mob: ${b.CustomerMobile||'-'}</div>
@@ -2390,9 +2444,9 @@ function printBill(b){
       ${b.WalletUsed ? '<div>Coin '+b.WalletID+': -'+fmt(b.WalletUsed)+'</div>' : ''}
       <div><b>Total: ${fmt(b.Total)}</b></div>
       <div>Mode: ${b.PaymentMode}</div>
+      ${splitLine}
       ${cashLine}
       ${giftLine}
-      ${upiQr}
       <hr>
       <div style="text-align:center;margin-top:4px;">
         <canvas id="${billBarcodeID}"></canvas>
@@ -3755,17 +3809,21 @@ function showBillForReturn(b, highlightVariantID){
   function renderExPicked(){
     const pbox = $('#exPicked');
     if(!state.retExchangePick){ pbox.style.display='none'; return; }
-    const {product,variant,qty} = state.retExchangePick;
-    const price = Number(variant.SalePrice||product.SalePrice||0);
+    const {product,variant,qty,price} = state.retExchangePick;
     pbox.style.display='block';
-    pbox.innerHTML = `Exchanging for: <b>${product.Name}</b> ${variant.Color||''} ${variant.Size||''} — ${fmt(price)} each
-      <input class="inp" id="exQty" type="number" min="1" max="${variant.Stock||99}" value="${qty}" style="max-width:70px;display:inline-block;margin:0 8px;">
-      <button class="btn ghost sm" id="exClear">✕ Clear</button>`;
+    pbox.innerHTML = `Exchanging for: <b>${product.Name}</b> ${variant.Color||''} ${variant.Size||''}
+      <div class="row mt-8" style="align-items:flex-end;">
+        <div class="field" style="max-width:100px;"><label>Qty</label><input class="inp" id="exQty" type="number" min="1" max="${variant.Stock||99}" value="${qty}"></div>
+        <div class="field" style="max-width:120px;"><label>Sell Price (₹)</label><input class="inp" id="exPrice" type="number" min="0" value="${Math.round(price)}"></div>
+        <button class="btn ghost sm" id="exClear">✕ Clear</button>
+      </div>
+      <div class="tag-note mt-8">Catalog price is ${fmt(Number(variant.SalePrice||product.SalePrice||0))} — edit above to sell it for the same, more, or less (e.g. same-value swap, or upgrade with extra payment).</div>`;
     $('#exQty').addEventListener('input', () => { state.retExchangePick.qty = Math.max(1, Number($('#exQty').value||1)); });
+    $('#exPrice').addEventListener('input', () => { state.retExchangePick.price = Math.max(0, Number($('#exPrice').value||0)); });
     $('#exClear').addEventListener('click', () => { state.retExchangePick = null; renderExPicked(); });
   }
   function pickExchangeItem(product, variant){
-    state.retExchangePick = { product, variant, qty: 1 };
+    state.retExchangePick = { product, variant, qty: 1, price: Number(variant.SalePrice||product.SalePrice||0) };
     $('#exSearchResults').innerHTML = '';
     $('#exScan').value = '';
     renderExPicked();
@@ -3840,8 +3898,7 @@ function showBillForReturn(b, highlightVariantID){
       // the replacement item — this is what "updates on the bill too" means:
       // it's a real, linked bill (not just a note), so it shows up in Bills,
       // Customer History, Reports, and stock the same way any sale does.
-      const {product, variant, qty} = state.retExchangePick;
-      const price = Number(variant.SalePrice||product.SalePrice||0);
+      const {product, variant, qty, price} = state.retExchangePick;
       const newItemTotal = price * qty;
       const discount = Math.min(newItemTotal, totalRefund);
       const owed = Math.max(0, Math.round((newItemTotal - discount) * 100) / 100);
@@ -5070,4 +5127,4 @@ function requirePin(reason){
 <script defer="" src="./SRGDRH_files/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;7f7b0fd8732c4326aae4b9d58d5c514a&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
 
 
-</body></html> 
+</body></html>
