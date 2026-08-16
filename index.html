@@ -973,6 +973,19 @@ tr:hover td{background:#faf9f4;}
 
     <!-- ===== REPORTS ===== -->
     <div class="screen" id="scr-reports">
+      <div class="pane mb-12">
+        <h3>📊 Sales Summary — last 30 days</h3>
+        <div class="grid-3 mb-12">
+          <div class="stat"><div class="lab">Total Sales</div><div class="val" id="repSummSales">₹0</div></div>
+          <div class="stat"><div class="lab">Total Profit</div><div class="val" id="repSummProfit">₹0</div></div>
+          <div class="stat"><div class="lab">Total Expenses</div><div class="val" id="repSummExp">₹0</div></div>
+          <div class="stat"><div class="lab">Net (Profit − Expenses)</div><div class="val" id="repSummNet">₹0</div></div>
+          <div class="stat"><div class="lab">Total Bills</div><div class="val" id="repSummBills">0</div></div>
+          <div class="stat"><div class="lab">Total Returns</div><div class="val" id="repSummReturns">₹0</div></div>
+        </div>
+        <div class="strong mb-8">Payment Mode Breakdown</div>
+        <div class="tbl-wrap"><table id="repPayMode"><thead><tr><th>Mode</th><th>Bills</th><th>Amount Collected</th></tr></thead><tbody></tbody></table></div>
+      </div>
       <div class="grid-2">
         <div class="pane">
           <h3>🔥 Top Selling — last 30 days</h3>
@@ -994,8 +1007,13 @@ tr:hover td{background:#faf9f4;}
           <h3>👥 Staff Performance — last 30 days</h3>
           <div class="tbl-wrap"><table id="repStaff"><thead><tr><th>Staff</th><th>Bills</th><th>Revenue</th><th>Avg / Bill</th></tr></thead><tbody></tbody></table></div>
         </div>
+        <div class="pane">
+          <h3>🧾 Udhaar / Due Outstanding <small>Customers who owe money</small></h3>
+          <div class="tbl-wrap"><table id="repDue"><thead><tr><th>Customer</th><th>Mobile</th><th>Due Balance</th><th>Last Purchase</th></tr></thead><tbody></tbody></table></div>
+        </div>
       </div>
     </div>
+
 
     <!-- ===== ATTENDANCE ===== -->
     <div class="screen" id="scr-attendance">
@@ -1711,9 +1729,11 @@ function renderDash(){
     options:{ plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } }, responsive:true, maintainAspectRatio:false }
   });
 
-  // recent bills
+  // recent bills — last 15 only (this is a "recent" widget, not full history;
+  // full history with search/edit lives on the Bills tab)
   const tb = $('#dashBills tbody'); tb.innerHTML='';
-  bills.slice().reverse().forEach(b=>{
+  const recentBills = bills.slice().reverse().slice(0, 15);
+  recentBills.forEach(b=>{
     const tr = document.createElement('tr');
     const href = waHref(b);
     const waEl = href
@@ -1724,10 +1744,10 @@ function renderDash(){
       <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}" title="Print">🖨</button> ${waEl}</td>`;
     tb.appendChild(tr);
   });
-  if(!bills.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No bills yet</td></tr>';
+  if(!recentBills.length) tb.innerHTML = '<tr><td colspan="6" class="empty">No bills yet</td></tr>';
   tb.onclick = e => {
     const btn = e.target.closest('button[data-a="print"]'); if(!btn) return;
-    const b = bills.find(x => x.BillID === btn.dataset.id);
+    const b = recentBills.find(x => x.BillID === btn.dataset.id);
     if(b) printBill(billWithItems(b));
   };
 }
@@ -4405,6 +4425,45 @@ function renderReports(){
   const items = state.data.billItems || [];
   const thirtyAgo = new Date(); thirtyAgo.setDate(thirtyAgo.getDate()-30);
   const items30 = items.filter(it => new Date(it.CreatedDate) >= thirtyAgo);
+
+  // ------- Sales Summary (last 30 days) -------
+  const bills30 = bills.filter(b => new Date(b.CreatedDate) >= thirtyAgo);
+  const returns30 = (state.data.returns||[]).filter(r => new Date(r.CreatedDate) >= thirtyAgo);
+  const returnsTotal30 = returns30.reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
+  const grossSales30 = bills30.reduce((s,b)=>s+Number(b.Total||0), 0);
+  const netSales30 = Math.max(0, grossSales30 - returnsTotal30);
+  const profit30 = items30.reduce((s,it)=>s+Number(it.LineProfit||0), 0);
+  const expenses30 = (state.data.expenses||[]).filter(e => new Date(e.Date||e.CreatedDate) >= thirtyAgo)
+    .reduce((s,e)=>s+Number(e.Amount||0), 0);
+  $('#repSummSales').textContent = fmt(netSales30);
+  $('#repSummProfit').textContent = fmt(profit30);
+  $('#repSummExp').textContent = fmt(expenses30);
+  $('#repSummNet').textContent = fmt(profit30 - expenses30);
+  $('#repSummBills').textContent = bills30.length;
+  $('#repSummReturns').textContent = fmt(returnsTotal30);
+
+  // Payment mode breakdown — how much actually came in as Cash vs Online
+  // vs still-pending Udhaar, using the same CashAmount/OnlineAmount/
+  // DueAmount split the bill was saved with (falls back to Total for
+  // plain single-mode bills that predate the split fields).
+  const modeAgg = {};
+  bills30.forEach(b => {
+    const mode = b.PaymentMode || 'Cash';
+    if(!modeAgg[mode]) modeAgg[mode] = { bills:0, amt:0 };
+    modeAgg[mode].bills++;
+    modeAgg[mode].amt += Number(b.Total||0);
+  });
+  const modeRows = Object.keys(modeAgg).sort((a,b)=>modeAgg[b].amt-modeAgg[a].amt)
+    .map(m => `<tr><td>${m}</td><td>${modeAgg[m].bills}</td><td>${fmt(modeAgg[m].amt)}</td></tr>`).join('');
+  $('#repPayMode tbody').innerHTML = modeRows || '<tr><td colspan="3" class="empty">No sales in 30d</td></tr>';
+
+  // ------- Udhaar / Due Outstanding -------
+  const dueCust = (state.data.customers||[]).filter(c => Number(c.DueBalance||0) > 0)
+    .sort((a,b)=>Number(b.DueBalance||0)-Number(a.DueBalance||0));
+  $('#repDue tbody').innerHTML = dueCust.map(c =>
+    `<tr><td>${c.Name||'—'}</td><td>${c.Mobile||''}</td><td>${fmt(c.DueBalance)}</td><td>${(c.LastPurchaseDate||'').substr(0,10)}</td></tr>`
+  ).join('') || '<tr><td colspan="4" class="empty">No outstanding dues 🎉</td></tr>';
+
   // top selling
   const agg = {};
   items30.forEach(it => {
@@ -4437,7 +4496,6 @@ function renderReports(){
   $('#repRet tbody').innerHTML = rets30.map(r => `<tr><td>${(r.CreatedDate||'').substr(0,10)}</td><td>${r.BillID||''}</td><td>${r.Name}</td><td>${r.Quantity}</td><td>${fmt(r.RefundAmount)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No returns in 30d</td></tr>';
 
   // staff performance
-  const bills30 = bills.filter(b => new Date(b.CreatedDate) >= thirtyAgo);
   const perf = {};
   bills30.forEach(b => {
     const k = b.StaffID || b.StaffName || '—';
@@ -5018,9 +5076,31 @@ function wireSettings(){
   // API URL
   $('#setApi').value = state.cfg.apiUrl;
   $('#btnPing').addEventListener('click', async () => {
-    const r = await apiGet('ping');
-    if(r?.success){ toast('Connected — sheet: '+(r.data?.sheet||''), 'ok'); }
-    else toast('Connection failed', 'bad');
+    toast('Testing…');
+    const pingR = await apiGet('ping');
+    let msg = '<div class="field"><label>1) Ping test</label>';
+    if(pingR?.success){
+      msg += '<div class="tag-note">✅ Connected — Sheet ID: '+(pingR.data?.sheet||'—')+'<br>Server time: '+(pingR.data?.time||'—')+'</div>';
+    }else{
+      msg += '<div class="tag-info">❌ FAILED<br><b>Error:</b> '+(pingR?.error||'Unknown error')+'</div>';
+    }
+    msg += '</div><div class="field mt-8"><label>2) Data load test (getAll)</label>';
+    if(pingR?.success){
+      const allR = await apiGet('getAll');
+      if(allR?.success){
+        const d = allR.data||{};
+        msg += '<div class="tag-note">✅ Data loaded<br>'
+          + 'Bills: <b>'+((d.bills||[]).length)+'</b> &nbsp; '
+          + 'Products: <b>'+((d.products||[]).length)+'</b> &nbsp; '
+          + 'Customers: <b>'+((d.customers||[]).length)+'</b></div>';
+      }else{
+        msg += '<div class="tag-info">❌ FAILED<br><b>Error:</b> '+(allR?.error||'Unknown error')+'</div>';
+      }
+    }else{
+      msg += '<div class="tag-info">⏭ Skipped (ping already failed)</div>';
+    }
+    msg += '</div><div class="field mt-8"><label>Current API URL</label><div class="mono" style="font-size:11px;word-break:break-all;">'+(state.cfg.apiUrl||'—')+'</div></div>';
+    openModal('Connection Test', msg, [{ label:'Close', kind:'ok', on: closeModal }]);
   });
   $('#btnSaveApi').addEventListener('click', () => {
     state.cfg.apiUrl = $('#setApi').value.trim(); saveCfg(); toast('API saved', 'ok'); pullAll();
