@@ -402,7 +402,7 @@ tr:hover td{background:#faf9f4;}
 
           <!-- Actual notes received from customer — not an assumed breakdown -->
           <div class="field mt-8" id="posTenderedWrap">
-            <label>Notes Received from Customer</label>
+            <label id="posTenderedLabel">Notes Received from Customer</label>
             <div class="denom-grid" id="posRecvDenom">
     <div class="cell" data-denom="500">
       <button class="dclr" data-act="clear" title="Reset ₹500">×</button>
@@ -1589,11 +1589,15 @@ async function pullAll(){
   const r = await apiGet('getAll');
   if(r && r.success){
     state.data = Object.assign(emptyStore(), r.data);
+    state.lastSyncError = null;
+    state.lastSyncOk = new Date().toISOString();
     saveCache();
     render(currentScreen());
     toast('Synced from Sheet', 'ok');
   }else{
-    toast(r?.error || 'Sheet load failed — showing cached data', 'warn');
+    state.lastSyncError = r?.error || 'Sheet load failed';
+    toast(state.lastSyncError + ' — showing cached data', 'warn');
+    render(currentScreen());
   }
 }
 function currentScreen(){
@@ -1877,7 +1881,17 @@ function resetPosCashInputs(){
 function updateUpiQr(){
   const mode = $('#posPay').value;
   const showQr = (mode === 'UPI' || mode === 'Online');
-  $('#posTenderedWrap').style.display = (mode==='Cash') ? 'block' : 'none';
+  const wrap = $('#posTenderedWrap');
+  const lbl = $('#posTenderedLabel');
+  if(mode==='Cash'){
+    wrap.style.display = 'block';
+    if(lbl) lbl.textContent = 'Notes Received from Customer';
+  }else if(mode==='Mixed' || mode==='Udhaar'){
+    wrap.style.display = 'block';
+    if(lbl) lbl.textContent = 'Notes Received (Cash portion only)';
+  }else{
+    wrap.style.display = 'none';
+  }
   $('#changeBox').style.display = 'none';
   $('#posChangeDenomWrap').style.display = 'none';
   refreshCart();
@@ -2093,23 +2107,37 @@ function denomText(obj){
 // breakdown that staff can correct to match exactly what was taken from the drawer.
 function updatePosCashCalc(total){
   const payMode = $('#posPay').value;
+  // For a Mixed/Udhaar sale, only the "Cash Now" slice is actual physical
+  // notes — the online slice and the Udhaar/Due slice aren't notes at
+  // all, so the note-grid must reconcile against that Cash Now amount,
+  // never the full bill Total.
+  const target = (payMode==='Mixed' || payMode==='Udhaar')
+    ? Math.max(0, Number(($('#posSplitCash')||{}).value || 0))
+    : total;
   const recv = DENOMS.reduce((s,d)=> s + (Number(state.posReceivedDenoms[d])||0)*d, 0);
   const box = $('#changeBox');
   const changeWrap = $('#posChangeDenomWrap');
   const recvTotalEl = $('#posRecvTotal');
   if(recvTotalEl) recvTotalEl.textContent = fmt(recv);
 
-  if(!recv){
+  if((payMode==='Mixed' || payMode==='Udhaar') && target<=0){
+    // No cash portion on this sale — nothing to count.
     box.style.display = 'none';
     changeWrap.style.display = 'none';
     state.cashShortfall = false;
     return;
   }
-  if(payMode==='Cash' && recv < total){
+  if(!recv){
+    box.style.display = 'none';
+    changeWrap.style.display = 'none';
+    state.cashShortfall = (payMode==='Mixed' || payMode==='Udhaar') ? target>0 : false;
+    return;
+  }
+  if(recv < target){
     // Customer has handed over less than the bill total — block the sale
     // and show exactly how much more is still owed, before Complete Sale.
     state.cashShortfall = true;
-    const shortBy = total - recv;
+    const shortBy = target - recv;
     box.style.display = 'block';
     box.className = 'tag-info';
     box.innerHTML = '<b>⚠ Short by ₹' + Math.round(shortBy) + '</b> — please collect ₹' + Math.round(shortBy) + ' more from the customer before completing the sale.';
@@ -2117,7 +2145,7 @@ function updatePosCashCalc(total){
     return;
   }
   state.cashShortfall = false;
-  const change = recv - total;
+  const change = recv - target;
   box.style.display = 'block';
   box.className = 'tag-note';
   if(change > 0){
@@ -2163,8 +2191,8 @@ async function completeSale(){
   if(state.pendingSubmit){ toast('Still preparing the previous bill — one moment', 'warn'); return; }
   if(!state.cart.length){ toast('Cart is empty', 'warn'); return; }
   const payModeCheck = $('#posPay').value;
-  if(payModeCheck==='Cash' && state.cashShortfall){
-    toast('The amount received is less than the bill total — please collect the remaining amount first', 'bad');
+  if((payModeCheck==='Cash' || payModeCheck==='Mixed' || payModeCheck==='Udhaar') && state.cashShortfall){
+    toast('The cash notes counted are less than the Cash Now amount — count the actual notes received first', 'bad');
     return;
   }
   if((payModeCheck==='Mixed' || payModeCheck==='Udhaar') && state.posSplitOver){
@@ -2241,7 +2269,13 @@ async function completeSale(){
     GiftItems: giftItemsText,
     CashAmount: payMode==='Cash' ? tendered : (payMode==='Mixed'||payMode==='Udhaar') ? splitCash : 0,
     OnlineAmount: (payMode==='UPI'||payMode==='Card'||payMode==='Online') ? total : (payMode==='Mixed'||payMode==='Udhaar') ? splitOnline : 0,
-    DueAmount: (payMode==='Mixed'||payMode==='Udhaar') ? splitDue : 0
+    DueAmount: (payMode==='Mixed'||payMode==='Udhaar') ? splitDue : 0,
+    // The actual notes counted by staff — for plain Cash this is the full
+    // tender; for Mixed/Udhaar it's just the Cash Now portion. Saved on
+    // the bill itself (not just the Cash Transaction log) so it shows up
+    // whenever this bill is reopened later, e.g. from Edit Bill.
+    NotesIn:  denomText(receivedBreak),
+    NotesOut: denomText(changeBreak)
   };
 
   // From here on the bill is treated as DONE from the staff's point of
@@ -2315,18 +2349,33 @@ async function saveBillInBackground(payload, billID, billNumber, payMode, custMo
     }).then(()=> pullAll());
   }else if(payMode === 'Mixed' || payMode === 'Udhaar'){
     if(splitCash > 0){
+      const recvNoteText = denomText(receivedBreak);
       apiPost('addCashTxn', {
         Date: dayKey(nowISO()),
         Time: new Date().toTimeString().substr(0,8),
         Type: 'IN', Amount: splitCash,
         Reference: 'BILL-'+(r.data.billNumber||billID),
         StaffID: state.user.staffID, StaffName: state.user.name,
-        Description: 'Split payment — cash portion'
+        Description: 'Split payment — cash portion' + (recvNoteText ? ' — Received: '+recvNoteText : '')
       });
-      const approxDelta = breakChange(splitCash).notes;
+      if(changeGiven > 0){
+        const changeNoteText = denomText(changeBreak);
+        apiPost('addCashTxn', {
+          Date: dayKey(nowISO()),
+          Time: new Date().toTimeString().substr(0,8),
+          Type: 'OUT', Amount: changeGiven,
+          Reference: 'CHANGE-'+(r.data.billNumber||billID),
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Change returned (split payment)' + (changeNoteText ? ' — Given: '+changeNoteText : '')
+        });
+      }
+      // Use exactly the notes staff counted — never a guessed breakdown —
+      // same as a plain Cash sale, minus whatever change was handed back.
+      const netDelta = {};
+      DENOMS.forEach(d => { netDelta[d] = (receivedBreak[d]||0) - (changeBreak[d]||0); });
       apiPost('updateDrawerDenoms', {
-        delta: approxDelta, staffID: state.user.staffID, staffName: state.user.name,
-        reference: 'BILL-'+(r.data.billNumber||billID)+' (split, approx notes)'
+        delta: netDelta, staffID: state.user.staffID, staffName: state.user.name,
+        reference: 'BILL-'+(r.data.billNumber||billID)+' (split payment)'
       }).then(()=> pullAll());
     }
     if(splitOnline > 0){
@@ -2404,6 +2453,7 @@ function printBill(b){
     ? `<div>Cash: ${fmt(b.CashAmount||0)} | Online: ${fmt(b.OnlineAmount||0)}${Number(b.DueAmount||0)>0 ? ' | Udhaar: '+fmt(b.DueAmount) : ''}</div>`
     : '';
   const giftLine = b.GiftItems ? `<div>🎁 Gift: ${b.GiftItems}</div>` : '';
+  const notesLine = b.NotesIn ? `<div style="font-size:11px;">Notes: ${b.NotesIn}</div>` : '';
   const billBarcodeID = 'billBc_' + rnd();
   // The bill always shows ITS OWN date & time — the moment it was actually
   // created (b.CreatedDate), never the moment it happens to be printed or
@@ -2441,6 +2491,7 @@ function printBill(b){
       <div>Mode: ${b.PaymentMode}</div>
       ${splitLine}
       ${cashLine}
+      ${notesLine}
       ${giftLine}
       <hr>
       <div style="text-align:center;margin-top:4px;">
@@ -4235,7 +4286,19 @@ function renderBills(){
       </td>`;
     tb.appendChild(tr);
   });
-  if(!list.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No bills found</td></tr>';
+  if(!list.length){
+    if(!(state.data.bills||[]).length && !term){
+      tb.innerHTML = `<tr><td colspan="8" class="empty">
+        No bills loaded from the Sheet yet.
+        ${state.lastSyncError ? '<br><b>Last sync error:</b> '+state.lastSyncError : ''}
+        <br><button class="btn sm mt-8" id="btnBillsRetry">🔄 Retry Sync</button>
+      </td></tr>`;
+      const rb = $('#btnBillsRetry');
+      if(rb) rb.onclick = () => { toast('Syncing…'); pullAll(); };
+    } else {
+      tb.innerHTML = '<tr><td colspan="8" class="empty">No bills found</td></tr>';
+    }
+  }
   tb.onclick = e => {
     const btn = e.target.closest('button[data-a]'); if(!btn) return;
     const b = (state.data.bills||[]).find(x => x.BillID === btn.dataset.id);
@@ -4279,6 +4342,8 @@ function openBillEditForm(b){
       </div>
     </div>
     <div class="tag-info">Subtotal: ${fmt(b.Subtotal)} — Total updates automatically as Subtotal − Discount.</div>
+    ${b.NotesIn ? `<div class="tag-info mt-8">💵 Notes received: ${b.NotesIn}</div>` : ''}
+    ${b.NotesOut ? `<div class="tag-info mt-8">💵 Change given: ${b.NotesOut}</div>` : ''}
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Save', kind:'ok', on: async () => {
