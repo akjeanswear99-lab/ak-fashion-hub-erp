@@ -998,10 +998,21 @@ tr:hover td{background:#faf9f4;}
           <div class="stat"><div class="lab">Total Bills</div><div class="val" id="repRangeBills">0</div></div>
           <div class="stat"><div class="lab">Total Sale (post-discount)</div><div class="val" id="repRangeSale">₹0</div></div>
           <div class="stat"><div class="lab">Total Cost</div><div class="val" id="repRangeCost">₹0</div></div>
-          <div class="stat"><div class="lab">Total Profit</div><div class="val" id="repRangeProfit">₹0</div></div>
+          <div class="stat"><div class="lab">Total Profit (post-discount)</div><div class="val" id="repRangeProfit">₹0</div></div>
         </div>
         <div class="tbl-wrap"><table id="repRange">
           <thead><tr><th>Date</th><th>Product</th><th>Variant</th><th>Qty</th><th>Sold @</th><th>MRP</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+      <div class="pane mb-12">
+        <h3>🧮 Pieces Sold — this date range <small>Every item counted piece by piece</small></h3>
+        <div class="grid-2 mb-12">
+          <div class="stat"><div class="lab">Total Pieces Sold</div><div class="val" id="repPiecesTotal">0</div></div>
+          <div class="stat"><div class="lab">Different Items Sold</div><div class="val" id="repPiecesItems">0</div></div>
+        </div>
+        <div class="tbl-wrap"><table id="repPieces">
+          <thead><tr><th>Product</th><th>Variant</th><th>Pieces Sold</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1214,6 +1225,11 @@ const CACHE_KEY = 'akfh:cache';
 const QUEUE_KEY = 'akfh:queue';
 const PRINTED_TAGS_KEY = 'akfh:printedTagQty'; // { variantID: totalTagsAlreadyPrinted }
 
+// Built-in shop logo (used on the printed bill header) — shows automatically
+// even if no logo has ever been uploaded from Settings. If the user uploads
+// their own logo from Settings later, that upload takes over instead.
+const DEFAULT_SHOP_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAADQCAIAAABUeIgXAAAOuklEQVR42u3d2XKrOBQF0DiV//9l90PqptweQBJH81pPXX0dBlloc4SB2/1+/wKAXX1rAgAEIQAIQgAQhAAgCAFAEAKAIASAtf1ogkS3263gr9ymCTD68G6kDow90QggCCWfRAQQhPJPIgIIQuEnDgEEofwThwCCUASKQwBBKP9kIYAgFIHiEGAsqz1Z5na7LZOCKyU6gIpwwcx4ajr34AMIwjUjsLiJAjdMFgIIwnYRWKNNrm+qLAQQhHUjsEFTXNxsWQggCONTsH0LXNl+WQiwdRCudNWteF9kIUCgad5HuN4PT+73u7sjAFSE7VJw2D0t2DtFIcAuQbh2BMpCgO6GfrJMyC0HUwSGVANQEcZH4HxfRuZei0+A60b8sYyb7QBoZrip0Z1TMHfj/egUYKmKUCH45Z4KgG0rQilYti9SE2CFitAjxwDYtyKUgtIdYN8gvPK8TWlx/UwCgJ5B6KnTAOwbhFIwcDcVhQCTBaEUBGAQHX41WpaCIhCAFSpCKWivAfYNQikIwL5BKAUHbF4AGgWhFARg3yCUgsU0AsD0QSgFARhZ3dsnJkrBt5sqjwEE4bIpmLJ5f5+RiACCsIUGeVMWz79/JQ4BBGHFvKkaMyF3F4hDgPVU+bHMUPe03W632O1xxx6AijA+J2qUWfUS63a7vW7w8erUkQC7BOHyKVi2LtOqAGMKnhod4dJg+Fzo8Z6aKQVQEY6VgkMVgrULXwAGCsK+VGYA9AzCvuXgxRQ82BL5CrC2mGuE86bg/X4/3pKo7TQvCrByEHZUnIKnESjDAATh6OXglRRs2cqiFEBFOEoKpheCkgxAEFasyXql4KpfpKgGmKMiDBmv50pBEQWwbBB2uaN8q1rQzRsAq1WE86agwg5AEHYuB2esBcUngIqwp3EeXiNuAZYKwinKwe7xIJ8AVITrV2P2GmC7IGxcDrplEIDdK8LuKTjyxKzIB2gahFOUgwCwQkU476Ror3tFABgrCNtnUo01unECQBB2iAQlEQBzV4RrlINdNsNJAMCIQTh4OVgpBc2LAghCABCEDYuVGZ+mFrgl5kUBRgxCDzkbjXlRgHErQuUgAFsHoXKw9kolLkDTIGwWCVOXgwCoCLdOpmY/k5H9AEMH4RrloJ9uAghClIMA6/tRGy25y43flgWgIrw6nm7+M5nYctC8LkC3INxTm0iutxblICAIZU/Pcip2jSZFAeYLQlN5UXElBQF2qQjHieSLWRJ4EiAFAeKDMGtsbTawLvPqwcDfyEhBgFkrQvOi7RNLCgIMFISDKMvjxu/ZmKtwBxCE01RIw1al4ZOiUhBARThNASoFAQThKJkUmytSEEAQTp+CE61RCgKMG4R9L85tcmlQCgKoCEepsdpPikpBgEZBON2Dp8ecFJWCACrCUTJJCgIIQikYkzFSEEAQqgXbkYIA6X6mi7FBnmoWu8bAcnDMFIxq+YK9e111x5dZhmx/wQIvbljINjRut9Plx/7erVenSl/vwXIOFlJ77cWrjm3/n8Bva/BCRAou0PK53eztqmv01cR9fPrY6WaMcIdPvW1IX/LfJwPPJH7/f1RPqDQARjX+8XKKNz7xDwv2IvdPHj9f0kmunAlWPcPqu5ahomvqFFy+KLyyXxfruZBr1Y23IaQzBMbh4HMMg3SAkJK6oN0aHFy7BGGN89mo72+fFAw8EoYaudKXfHEoidqF3JK0wTacLipqYrNSFrY59PoeCDW++sBVl836PprvxzJZwRb1c82sNSaudLcULNvsxIbqO0OQskeVdmSB4/e0Zd7+a8E3mHWOsqRVe+D9n+Iv93uNY+lKILUfXmNXusPwOuYvpAqqq82zsLiweDvM9XqjJ+sNFN+TbvpBx02MwMdVX5xuvf0Tu7/tg9zJrB0ZMAUPPi/ACOkkP6cLHbartb/efn3tUnCcTtLxVpyRD6thU7DS9xi+HGa06SPWuvR4KXi9AYv32hi3xgEY9T1GXXdEEIZ1o5aDVK/fLEjBAQffjgPfVr+dqX3zkouFLFIRTvfyikpDnhQcdvxl6sPQccQEQdg9jSodFdcfg+LoDfwWqrae3O3YLIHX7H2PgnDNE7T0n2j3KgSl4HTD9Kcx1DA611ghC/WWpCAMH81bDvS5aRSyAQWXfxx4n5qluGWuPJ1SaQhbndoONzUa+KuwskVd2YCylRY8epjADlbjR15Zt5ZuNSoNOKuhKNTfRrxGePEHddd/j1dQRxav1PE2dU2W8qxUX/H4X7osnPdE9uBASx+TfxLXnVW1RE0wpnfHGqeZv8us+vqxsreTLHOl8Hdf3u5R1VdVxN7PnrK02Df+GKa/KjyU4O0CRz7c9uwAlR5j+TNFj19y7c43/xqhe1NcHO8SB+UaccjgfYMpfGuC6c7mJOiA7ZM+N26y1Dk3DQaBrAPtp9JG6FJVR2otfHFce63hQpo0fT7/+upck67UZ2aZIN2zA+S+QDfxu/u50j8wErXs0xM17/EFZmczspAaNcDb4y7lu/uut7m+s6rNsnwL1y6YGoxrp/OlDpOJ+r8va96h4/S7+8lauq4w1IHkLDW2tSu1Z0p16Iy++5mTsW5n31V7vPbNag2plltRTdTlPu3L2ofJvF3anYVbFYV+NdoiAtNT0LPZdjs+kYV095PbM7L6gbm7Srd/auTjpi5+75XGbPNN1XiqsIZ1RlhMRThcCjqkVyr0Ddk19rfvI/Q2LAqX77TftVtk25mEK7WgRm520A712npkwGLj27JBqMkCawXH2Ox9TGq2P9to/0YLx+nyB8u3btGrEDxuRkVhszFLUTjRsDjFe52YbmT4HrnTL5yCNcZ0w/cUA/rT5zcZx2e/2CZuL54vlv2WrdlR+d2sW6w9TJsOna626LIBO5+sXM/Ci+XgxcZ35BY3aeNuX7C675bdYtVRIH2/chtNUdhmqLo+O5r+Gqadx9biLLz42lV1YcevL3YKJOVV2AV/1fp9hIvdp5U1XJbt+ML3boZs6jjZ/7clibHa/msa4VnSnx5pnXtGoj7rcrAcf30NziQKdiFlpVcPg51vpWr29ec28oDNe7ALFx8mELK0gs1rNs8W1XRXllPj6ytuwMCvOGRRHa94NesAXYb9kNhOXVevU/Kps7BBIbhSFp5ufOw0e/h1o4MsTH8BYaXNS38bcPFyqj4mt82hFB7kLX/6cdxEDTpAl0qg8QXdW5dhet4s7BhIC9SFOzCVN9ScAfr86EE4V2N1z6FKk+MAm4u5jzD2Ms+AEThCNSbVAMatCEMiba6fePTaCxOkACNWhCFjbvHj/AepApfJcgAVYf+Rt1eiNP5J9zJ1KoAgrFWINBvBp4hAWQgwTRB+hU7KDZvWc1WushCgaRB+1blA1eVROAOGiiwEmCAI68Xh6fheb6WDZMlcc7kAWwfh1yq/XRwtQnZ4jgFAbY1ezHv6QvbxI3DA7RdmANNUhPNWh8IGQBDuGIfyD0AQbhqHIpAJjtvbTV+FRYJwnEQ0pjBdEOq3EOJntDqscSIaR5g3BYGlKsJmB7zkY7Eg1KVhkYowMbQ8Y5Od8+9TZ3bJEJatCIGnU8D7/X58OuiIhlzfmgBmTERARQhzhFb6IfYack9/+7fA00+mLO14S4wMCEIgsm47PtASZzs/fexx4acl4/GFxvTPgyAEUZdaimUl0O/HPkXpQcS+Xe/pX5VlpxsZEYQgBc9D5VMIffqn00w9+KuCydLXP3w7E3vw/2UhgtBQCB/LsuszkG+vCD6l16cwO7g8eRDMKYWvnr95D1/Sjy9YtjF4b3zMtqdeelDPfSX/5sXZMCMMjx37oSA0HDgOG/Wc45nJx9BKvwJ3elvh8QY8hmvixc6sNTqimWN40VcgpGI7LeZSPv/1bm7zaYGf8uxg9E+8qPn1YQr0dAdBEAJJxWvuhcO3f574Y5msbSjYZhCEQEYcphxoKWmUdY9EbqRduQcfBCFQJUQTb/hLme0EBCGsU2IWFHzAWx66DSuk4O9n3AIEghDW9Fvt3e/317Lv7/+8/VfglPsIYaYszP0nQEUIAIIQFi0N1YIgCGHfLJSCIAhBXQgIQgAQhAAgCAFAEAKAIAQAQQgA5zZ6xFrWu9ayXmSTuOTHd46H/NPvv759e3jsWo73vWyzE7+LrB1M7wPF9x683Z7XVyAldq3EfvX6sdGa9+AtiQefz3o/4vHSsvbiU6e98jVl9YGyhRwfa+mNn7iFW73Ma+uKMP1R/QefzH3e/+vni98YUPaH4RuQu8DcZo96o8Ljcq4s83U5xR2p7H0RYzZveL99bavAY+H4iE5fdWzrnS4tZHXF48bC7zbZ7qHbx2/6Pvjw8Vmku5uzvoLcU+aUU/jctfc68Up80W5UP2/ZvAV15GlRm3XABobE03pPm+hiGz51y7///lvs6SETOJ1TPGCqCGdNxC7fblRpMs4GdN+joeYYcuevsuqANZq3YNRuea7paa672TcIG89pMMgpy8XlPG7MY+wlLrbZqJq+m43PCHMbaoQj67SJOp5VB56rCcK98u9xsvt0uiN9Zvz2oGAk7XJUh2zA6yiQuMDEFqsx0PwtcPzBq3jf05s3KnKy1piYLumHYe7+xrZA9yy8/V/UBl9s0lls/WLerABInEwPvJq1fJ3dsqHWOJL/TlyyrnCnfLJx+yQeJk+D9el1+qcratMNR6/n6Oln7Q2OpoVHtn1/LBN7lve32D1TsMFI+jRMRBWCV+6j+Mr/0XzZeVJB8+auJbB5E09HakzeXp/beLuW9OncwYunx1OKWSrdNtxQ3y2Mr09LFvfRqA2YtOoKmQrOXWD6L2jSo3fe/v9nsW4zxbdT3P5un9g9t05vn+h78+nvtl2vchrHTO5lxet151ND9T0rr9pbCjpk7ZbJCvLHztzy+3qs6jp2lccZprJLvJ8ewhBbK6sId6nbZtnI7t20TXMVr+W1odqXI283PnGPBm/eNh27cSOUrfr6HE/Vr6Z4ZmLtOdKb39ECsDMVIQCCEAAEIQAIQgAQhAAgCAFAEAKAIAQAQQgAS/oP/EkVYTLto7UAAAAASUVORK5CYII=';
+
 const state = {
   cfg: {
     apiUrl: '',
@@ -1258,6 +1274,22 @@ const DENOMS = [500, 200, 100, 50, 20, 10];
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const fmt = n => '₹' + Math.round(Number(n||0)).toLocaleString('en-IN');
+// Profit, recomputed for reporting so it always reflects the amount
+// actually received AFTER discount — not the full listed price. Works for
+// every bill (old or new) since it re-derives from the bill's own
+// Subtotal/Discount instead of trusting whatever was stored on the line.
+function itemProfitPostDiscount(it, bill){
+  const price = Number(it.Price||0);
+  const cost = Number(it.CostPrice||0);
+  const qty = Number(it.Quantity||0);
+  let ratio = 1;
+  if(bill){
+    const sub = Number(bill.Subtotal||0);
+    const disc = Number(bill.Discount||0);
+    if(sub > 0) ratio = Math.max(0, (sub - disc) / sub);
+  }
+  return (price*ratio - cost) * qty - 10;
+}
 // Keeps the printed shop-name header on a single line — shrinks the font
 // automatically for longer names instead of letting it wrap to 2 lines.
 function headerLineStyle(text, isThermal){
@@ -1345,6 +1377,11 @@ function loadCfg(){
   if(!state.cfg.apiUrl){
     // sensible default — user's existing deployment
     state.cfg.apiUrl = 'https://script.google.com/macros/s/AKfycbyp77RG4mkSSfhcXkLyTfrkWFhF2ep0cfmSK2DmwNW6UuxR3XMMniuJoX0LpEbaglqa/exec';
+  }
+  // No logo uploaded yet (or none ever saved) — fall back to the built-in
+  // shop logo so it shows on printed bills without any Settings step.
+  if(!state.cfg.shopLogo){
+    state.cfg.shopLogo = DEFAULT_SHOP_LOGO;
   }
 }
 function saveCfg(){ localStorage.setItem(CFG_KEY, JSON.stringify(state.cfg)); }
@@ -1696,8 +1733,9 @@ function renderDash(){
   // value on an Exchange: the original bill AND its replacement bill).
   const sales = Math.max(0, todaysBills.reduce((s,b)=>s + Number(b.Total||0), 0) - todaysReturns);
   const items = state.data.billItems || [];
+  const billsById = {}; bills.forEach(b => { billsById[b.BillID] = b; });
   const todaysItems = items.filter(it => todaysBills.some(b => b.BillID === it.BillID));
-  const profit = todaysItems.reduce((s,it)=>s + Number(it.LineProfit||0), 0);
+  const profit = todaysItems.reduce((s,it) => s + itemProfitPostDiscount(it, billsById[it.BillID]), 0);
   const invUnits = (state.data.variants || []).reduce((s,v)=>s + Number(v.Stock||0), 0)
                  + (state.data.products || []).reduce((s,p)=>{
                     if(p.variants) return s + p.variants.reduce((a,v)=>a+Number(v.Stock||0),0);
@@ -1732,7 +1770,7 @@ function renderDash(){
   const monthReturns = returns.filter(r => (r.CreatedDate||'').startsWith(monthStart)).reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
   const monthSales = Math.max(0, monthBills.reduce((s,b)=>s+Number(b.Total||0), 0) - monthReturns);
   const monthItems = items.filter(it => monthBills.some(b => b.BillID === it.BillID));
-  const monthProfit = monthItems.reduce((s,it)=>s+Number(it.LineProfit||0), 0);
+  const monthProfit = monthItems.reduce((s,it) => s + itemProfitPostDiscount(it, billsById[it.BillID]), 0);
   const allReturns = returns.reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
   const allSales = Math.max(0, bills.reduce((s,b)=>s+Number(b.Total||0), 0) - allReturns);
   const totalCust = (state.data.customers||[]).length;
@@ -2298,6 +2336,10 @@ async function completeSale(){
   const coinUse = state.activeCoin ? Math.min(state.activeCoin.RemainingAmount, Math.max(0, sub-disc)) : 0;
   const total = Math.max(0, sub - disc - coinUse);
   const payMode = $('#posPay').value;
+  // Profit must be based on the amount actually received AFTER discount —
+  // not the full listed price. Spread the bill's discount proportionally
+  // across every item's price before working out that item's profit.
+  const discRatio = sub > 0 ? Math.max(0, (sub - disc) / sub) : 1;
 
   // Split / Udhaar amounts — however much is Cash now, however much is
   // Online now, and whatever's left over is Due (Udhaar) on the customer.
@@ -2353,7 +2395,7 @@ async function completeSale(){
       Name: c.Name, Color: c.Color, Size: c.Size,
       Quantity: c.Quantity, Price: c.Price, CostPrice: c.CostPrice,
       LineTotal: c.Price * c.Quantity,
-      LineProfit: (c.Price - c.CostPrice) * c.Quantity - 10
+      LineProfit: (c.Price * discRatio - c.CostPrice) * c.Quantity - 10
     })),
     WalletID: state.activeCoin ? state.activeCoin.WalletID : '',
     WalletUsed: coinUse,
@@ -4073,6 +4115,10 @@ function showBillForReturn(b, highlightVariantID){
       const discount = Math.min(newItemTotal, totalRefund);
       const owed = Math.max(0, Math.round((newItemTotal - discount) * 100) / 100);
       const credit = Math.max(0, Math.round((totalRefund - newItemTotal) * 100) / 100);
+      // Same post-discount profit rule as a normal sale — the returned
+      // value counts as a discount on the new item, so profit is worked
+      // out on what's actually owed, not the full listed price.
+      const exDiscRatio = newItemTotal > 0 ? Math.max(0, (newItemTotal - discount) / newItemTotal) : 1;
       const exBillID = 'BILL_' + Date.now() + '_' + rnd();
       const exPayload = {
         BillID: exBillID,
@@ -4087,7 +4133,7 @@ function showBillForReturn(b, highlightVariantID){
           ProductID: product.ProductID, VariantID: variant.VariantID, UID: variant.UID||product.UID,
           Name: product.Name, Color: variant.Color, Size: variant.Size,
           Quantity: qty, Price: price, CostPrice: variant.CostPrice||product.CostPrice||0,
-          LineTotal: newItemTotal, LineProfit: (price-(variant.CostPrice||product.CostPrice||0))*qty - 10
+          LineTotal: newItemTotal, LineProfit: (price*exDiscRatio-(variant.CostPrice||product.CostPrice||0))*qty - 10
         }],
         CashAmount: owed, OnlineAmount: 0, DueAmount: 0
       };
@@ -4555,19 +4601,24 @@ function renderRepRange(){
   const mrpByVariant = {};
   (state.data.products||[]).forEach(p => (p.variants||[]).forEach(v => { mrpByVariant[v.VariantID] = p.MRP; }));
 
+  // Profit is always worked out on the amount actually received AFTER
+  // discount — recomputed per item from its own bill's Subtotal/Discount,
+  // never the pre-discount listed price.
+  const billsById = {}; bills.forEach(b => { billsById[b.BillID] = b; });
+
   const rows = lineItems.slice().sort((a,b)=> String(b.CreatedDate).localeCompare(String(a.CreatedDate)));
   const tb = $('#repRange tbody');
   tb.innerHTML = rows.map(it => {
     const cost = Number(it.CostPrice||0) * Number(it.Quantity||0);
     const rev = Number(it.LineTotal||0);
-    const profit = Number(it.LineProfit||0);
+    const profit = itemProfitPostDiscount(it, billsById[it.BillID]);
     return `<tr><td>${(it.CreatedDate||'').substr(0,10)}</td><td>${it.Name}</td><td>${(it.Color||'')+' '+(it.Size||'')}</td>
       <td>${it.Quantity}</td><td>${fmt(it.Price)}</td><td>${fmt(mrpByVariant[it.VariantID]||0)}</td>
       <td>${fmt(rev)}</td><td>${fmt(cost)}</td><td>${fmt(profit)}</td></tr>`;
   }).join('') || '<tr><td colspan="9" class="empty">No sales in this range</td></tr>';
 
   const totalCost = lineItems.reduce((s,it)=>s+Number(it.CostPrice||0)*Number(it.Quantity||0), 0);
-  const totalProfit = lineItems.reduce((s,it)=>s+Number(it.LineProfit||0), 0);
+  const totalProfit = lineItems.reduce((s,it) => s + itemProfitPostDiscount(it, billsById[it.BillID]), 0);
   // Total Sale = actual bill amounts (post-discount) for bills in range —
   // when a product filter is active, item revenue is shown in the table
   // above instead, since a single bill's discount can't be attributed to
@@ -4580,6 +4631,21 @@ function renderRepRange(){
   $('#repRangeSale').textContent = fmt(totalSale);
   $('#repRangeCost').textContent = fmt(totalCost);
   $('#repRangeProfit').textContent = fmt(totalProfit);
+
+  // ------- Pieces Sold — every item counted piece by piece for this range -------
+  const pieceMap = {};
+  lineItems.forEach(it => {
+    const key = (it.VariantID || it.Name) + '|' + (it.Color||'') + '|' + (it.Size||'');
+    if(!pieceMap[key]) pieceMap[key] = { Name: it.Name, Color: it.Color||'', Size: it.Size||'', qty: 0 };
+    pieceMap[key].qty += Number(it.Quantity||0);
+  });
+  const pieceRows = Object.values(pieceMap).sort((a,b)=> b.qty - a.qty);
+  const totalPieces = pieceRows.reduce((s,r)=>s+r.qty, 0);
+  $('#repPieces tbody').innerHTML = pieceRows.map(r =>
+    `<tr><td>${r.Name}</td><td>${(r.Color+' '+r.Size).trim()}</td><td>${r.qty}</td></tr>`
+  ).join('') || '<tr><td colspan="3" class="empty">No sales in this range</td></tr>';
+  $('#repPiecesTotal').textContent = totalPieces.toLocaleString('en-IN');
+  $('#repPiecesItems').textContent = pieceRows.length;
 }
 
 function renderReports(){
@@ -4595,7 +4661,8 @@ function renderReports(){
   const returnsTotal30 = returns30.reduce((s,r)=>s+Number(r.RefundAmount||0), 0);
   const grossSales30 = bills30.reduce((s,b)=>s+Number(b.Total||0), 0);
   const netSales30 = Math.max(0, grossSales30 - returnsTotal30);
-  const profit30 = items30.reduce((s,it)=>s+Number(it.LineProfit||0), 0);
+  const billsById30 = {}; bills.forEach(b => { billsById30[b.BillID] = b; });
+  const profit30 = items30.reduce((s,it) => s + itemProfitPostDiscount(it, billsById30[it.BillID]), 0);
   const expenses30 = (state.data.expenses||[]).filter(e => new Date(e.Date||e.CreatedDate) >= thirtyAgo)
     .reduce((s,e)=>s+Number(e.Amount||0), 0);
   $('#repSummSales').textContent = fmt(netSales30);
