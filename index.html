@@ -1508,6 +1508,13 @@ window.addEventListener('DOMContentLoaded', () => {
   else showLogin();
   setInterval(queueFlush, 20000);
   window.addEventListener('online', queueFlush);
+  // Automatic background sync — pulls the latest Sheet data on its own
+  // every 20s (silently, no toast spam) so any change made from another
+  // device/staff login shows up here without anyone pressing ↻ Sync.
+  // The ↻ Sync button still works exactly as before for an instant,
+  // on-demand pull.
+  setInterval(() => { if(state.user) pullAll(true); }, 20000);
+  window.addEventListener('online', () => { if(state.user) pullAll(true); });
 });
 
 /* ------- brand logo (login / sidebar / favicon / bill print) ------- */
@@ -1673,7 +1680,7 @@ function goto(scr){
 }
 
 /* ------- data pull ------- */
-async function pullAll(){
+async function pullAll(silent){
   const r = await apiGet('getAll');
   if(r && r.success){
     state.data = Object.assign(emptyStore(), r.data);
@@ -1681,10 +1688,12 @@ async function pullAll(){
     state.lastSyncOk = new Date().toISOString();
     saveCache();
     render(currentScreen());
-    toast('Synced from Sheet', 'ok');
+    if(!silent) toast('Synced from Sheet', 'ok');
   }else{
     state.lastSyncError = r?.error || 'Sheet load failed';
-    toast(state.lastSyncError + ' — showing cached data', 'warn');
+    // Auto-sync failures stay quiet (network hiccups are normal in the
+    // background) — only a manual Sync click surfaces the error toast.
+    if(!silent) toast(state.lastSyncError + ' — showing cached data', 'warn');
     render(currentScreen());
   }
 }
@@ -2567,6 +2576,39 @@ function printHTML(html, onReady){
 }
 
 /* ------- print bill (thermal 3in style) ------- */
+// Shared premium-but-simple bill styling — one clean CSS block reused by
+// the sale bill and the return/exchange receipt, so both print with the
+// same elegant look (crisp rules, spaced-out caps, a bold boxed total).
+// Kept pure black/white with no gradients/shadows so it stays sharp on a
+// plain thermal printer, not just on a colour A4 printer.
+function billStyleBlock(isThermal){
+  const fs = isThermal ? 12 : 14;
+  return `
+  <style>
+    .akfh-bill{font-family:'Manrope',Arial,sans-serif;color:#111;font-size:${fs}px;line-height:1.45;}
+    .akfh-bill .ornament{text-align:center;letter-spacing:6px;font-size:${fs-2}px;color:#555;margin:2px 0 6px;}
+    .akfh-bill .biz-logo{text-align:center;margin-bottom:2px;}
+    .akfh-bill .biz-logo img{max-height:${isThermal?54:70}px;}
+    .akfh-bill .meta{text-align:center;font-size:${fs-2}px;letter-spacing:.3px;color:#333;}
+    .akfh-bill .meta b.billno{letter-spacing:.5px;}
+    .akfh-bill .rule{border:none;border-top:1px dashed #999;margin:7px 0;}
+    .akfh-bill .rule.solid{border-top:1.5px solid #111;}
+    .akfh-bill .sect-label{text-align:center;font-size:${fs-3}px;letter-spacing:2px;text-transform:uppercase;color:#777;margin:2px 0 5px;}
+    .akfh-bill .cust{font-size:${fs-1}px;color:#222;}
+    .akfh-bill .cust b{color:#111;}
+    .akfh-bill table.items{width:100%;border-collapse:collapse;margin-top:2px;}
+    .akfh-bill table.items thead th{font-size:${fs-3}px;text-transform:uppercase;letter-spacing:.8px;color:#555;border-bottom:1.5px solid #111;padding:4px 3px;text-align:left;}
+    .akfh-bill table.items td{padding:5px 3px;border-bottom:1px dotted #ccc;vertical-align:top;font-size:${fs-1}px;}
+    .akfh-bill table.items td small{color:#666;font-size:${fs-3}px;}
+    .akfh-bill .totals{margin-top:6px;}
+    .akfh-bill .totals .row{display:flex;justify-content:space-between;padding:2px 1px;font-size:${fs-1}px;color:#333;}
+    .akfh-bill .totals .grand{display:flex;justify-content:space-between;align-items:center;border-top:1.5px solid #111;border-bottom:3px double #111;margin-top:5px;padding:7px 1px;font-size:${fs+4}px;font-weight:800;letter-spacing:.3px;}
+    .akfh-bill .infoline{font-size:${fs-2}px;color:#333;padding:2px 0;}
+    .akfh-bill .footer{text-align:center;margin-top:10px;}
+    .akfh-bill .footer .thanks{font-size:${fs-1}px;font-style:italic;letter-spacing:.3px;color:#222;}
+    .akfh-bill .footer .brandline{letter-spacing:3px;font-size:${fs-4}px;color:#999;text-transform:uppercase;margin-top:3px;}
+  </style>`;
+}
 function printBill(b){
   if(!b){ toast('No bill to print', 'warn'); return; }
   const items = b.items||[];
@@ -2578,60 +2620,57 @@ function printBill(b){
   ).join('');
   const isThermal = (state.cfg.billFormat || 'thermal') === 'thermal';
   const pageWidth = isThermal ? '80mm' : '210mm';
-  const fontSz = isThermal ? '12px' : '14px';
-  const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
-  const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div>Tendered: ${fmt(b.Tendered)}</div><div>Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
+  const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}">` : '';
+  const cashLine = (b.PaymentMode==='Cash' && b.Tendered) ? `<div class="infoline">Tendered: ${fmt(b.Tendered)} &nbsp;•&nbsp; Change: ${fmt(b.ChangeGiven||0)}</div>` : '';
   // Split / Udhaar bills show exactly how the amount was actually paid —
   // how much Cash, how much Online, and how much is still Due (Udhaar).
   const splitLine = (b.PaymentMode==='Mixed' || b.PaymentMode==='Udhaar')
-    ? `<div>Cash: ${fmt(b.CashAmount||0)} | Online: ${fmt(b.OnlineAmount||0)}${Number(b.DueAmount||0)>0 ? ' | Udhaar: '+fmt(b.DueAmount) : ''}</div>`
+    ? `<div class="infoline">Cash: ${fmt(b.CashAmount||0)} &nbsp;•&nbsp; Online: ${fmt(b.OnlineAmount||0)}${Number(b.DueAmount||0)>0 ? ' &nbsp;•&nbsp; Udhaar: '+fmt(b.DueAmount) : ''}</div>`
     : '';
-  const giftLine = b.GiftItems ? `<div>🎁 Gift: ${b.GiftItems}</div>` : '';
-  const notesLine = b.NotesIn ? `<div style="font-size:11px;">Notes: ${b.NotesIn}</div>` : '';
+  const giftLine = b.GiftItems ? `<div class="infoline">🎁 Gift: ${b.GiftItems}</div>` : '';
+  const notesLine = b.NotesIn ? `<div class="infoline">Notes: ${b.NotesIn}</div>` : '';
   const billBarcodeID = 'billBc_' + rnd();
   // The bill always shows ITS OWN date & time — the moment it was actually
   // created (b.CreatedDate), never the moment it happens to be printed or
   // re-printed. This matters most when reprinting an old bill later: it
   // must still show the original sale's date/time, not today's.
   const billDateTime = b.CreatedDate ? new Date(b.CreatedDate).toLocaleString('en-IN') : new Date().toLocaleString('en-IN');
-  // When a logo is printed, the logo itself already represents the shop's
-  // "AK" mark — printing "AK FASHION HUB" as text right under it duplicated
-  // the branding. So the printed text drops the leading "AK" and just reads
-  // "FASHION HUB" (or whatever the header is, minus that prefix).
-  const rawBillHeader = state.cfg.billHeader || state.cfg.shopName || '';
-  const printedHeaderText = rawBillHeader.replace(/^AK\s+/i, '').trim() || rawBillHeader;
+  // Logo image already carries the full shop name/branding — so the header
+  // prints ONLY the logo image, no separate "shop name" text line at all.
   const html = `
-    <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:${fontSz};padding:6px;">
-      <div style="text-align:center;">
-        ${logo}
-        <b style="${headerLineStyle(printedHeaderText, isThermal)}">${printedHeaderText}</b><br>
-        <small>${state.cfg.shopAddress||''}</small><br>
+    ${billStyleBlock(isThermal)}
+    <div class="akfh-bill" style="width:${pageWidth};padding:10px 8px;">
+      <div class="biz-logo">${logo}</div>
+      <div class="meta">
+        ${state.cfg.shopAddress||''}<br>
         Mob: ${state.cfg.shopMobile}<br>
-        Bill: ${b.BillNumber||''}<br>
-        ${billDateTime}
+        <b class="billno">Bill #${b.BillNumber||''}</b> &nbsp;·&nbsp; ${billDateTime}
       </div>
-      <hr>
-      <div>Cust: ${b.CustomerName||'-'}<br>Mob: ${b.CustomerMobile||'-'}</div>
-      <hr>
-      <table style="width:100%;font-size:${isThermal?'11px':'13px'};">
+      <div class="rule solid"></div>
+      <div class="cust"><b>Customer:</b> ${b.CustomerName||'-'} &nbsp;·&nbsp; ${b.CustomerMobile||'-'}</div>
+      <div class="rule"></div>
+      <table class="items">
         <thead><tr><th align="left">Item</th><th>Qty</th><th align="right">Rate</th><th align="right">Amt</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <hr>
-      <div>Subtotal: ${fmt(b.Subtotal)}</div>
-      <div>Discount: -${fmt(b.Discount)}</div>
-      ${b.WalletUsed ? '<div>Coin '+b.WalletID+': -'+fmt(b.WalletUsed)+'</div>' : ''}
-      <div><b>Total: ${fmt(b.Total)}</b></div>
-      <div>Mode: ${b.PaymentMode}</div>
-      ${splitLine}
-      ${cashLine}
-      ${notesLine}
-      ${giftLine}
-      <hr>
-      <div style="text-align:center;margin-top:4px;">
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span>${fmt(b.Subtotal)}</span></div>
+        <div class="row"><span>Discount</span><span>−${fmt(b.Discount)}</span></div>
+        ${b.WalletUsed ? '<div class="row"><span>Coin '+b.WalletID+'</span><span>−'+fmt(b.WalletUsed)+'</span></div>' : ''}
+        <div class="grand"><span>TOTAL</span><span>${fmt(b.Total)}</span></div>
+        <div class="infoline">Payment Mode: ${b.PaymentMode}</div>
+        ${splitLine}
+        ${cashLine}
+        ${notesLine}
+        ${giftLine}
+      </div>
+      <div class="rule"></div>
+      <div style="text-align:center;margin-top:2px;">
         <canvas id="${billBarcodeID}"></canvas>
       </div>
-      <div style="text-align:center;font-size:10px;">${state.cfg.billFooter||'Thank you! Visit again'}</div>
+      <div class="footer">
+        <div class="thanks">${state.cfg.billFooter||'Thank you! Visit again'}</div>
+      </div>
     </div>`;
   printHTML(html, () => {
     // Draw a scannable barcode of the bill number onto the printed bill —
@@ -4197,30 +4236,30 @@ function printReturnReceipt(b, lines, totalRefund, mode){
   const rows = lines.map(l => `<tr><td>${l.it.Name}<br><small>${l.it.Color||''} ${l.it.Size||''}</small></td><td class="text-c">${l.qty}</td><td class="text-r">${fmt(l.refund)}</td></tr>`).join('');
   const isThermal = (state.cfg.billFormat || 'thermal') === 'thermal';
   const pageWidth = isThermal ? '80mm' : '210mm';
-  const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}" style="max-height:50px;margin-bottom:4px;">` : '';
-  const rawBillHeader = state.cfg.billHeader || state.cfg.shopName || '';
-  const printedHeaderText = rawBillHeader.replace(/^AK\s+/i, '').trim() || rawBillHeader;
+  const logo = state.cfg.shopLogo ? `<img src="${state.cfg.shopLogo}">` : '';
+  // Logo only in the header — same premium template as the sale bill.
   const html = `
-    <div style="width:${pageWidth};font-family:'Courier New',monospace;font-size:12px;padding:6px;">
-      <div style="text-align:center;">
-        ${logo}
-        <b style="${headerLineStyle(printedHeaderText, isThermal)}">${printedHeaderText}</b><br>
-        <b>RETURN / EXCHANGE RECEIPT</b><br>
-        Against Bill: ${b.BillNumber||''}<br>
+    ${billStyleBlock(isThermal)}
+    <div class="akfh-bill" style="width:${pageWidth};padding:10px 8px;">
+      <div class="biz-logo">${logo}</div>
+      <div class="sect-label">Return / Exchange Receipt</div>
+      <div class="meta">
+        Against Bill #${b.BillNumber||''}<br>
         ${new Date().toLocaleString('en-IN')}
       </div>
-      <hr>
-      <div>Cust: ${b.CustomerName||'-'}<br>Mob: ${b.CustomerMobile||'-'}</div>
-      <hr>
-      <table style="width:100%;font-size:11px;">
+      <div class="rule solid"></div>
+      <div class="cust"><b>Customer:</b> ${b.CustomerName||'-'} &nbsp;·&nbsp; ${b.CustomerMobile||'-'}</div>
+      <div class="rule"></div>
+      <table class="items">
         <thead><tr><th align="left">Item</th><th>Qty</th><th align="right">Refund</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <hr>
-      <div><b>Total Refund: ${fmt(totalRefund)}</b></div>
-      <div>Mode: ${mode==='coin' ? 'Store Coin' : 'Cash'}</div>
-      <hr>
-      <div style="text-align:center;font-size:10px;">Thank you</div>
+      <div class="totals">
+        <div class="grand"><span>TOTAL REFUND</span><span>${fmt(totalRefund)}</span></div>
+        <div class="infoline">Mode: ${mode==='coin' ? 'Store Coin' : 'Cash'}</div>
+      </div>
+      <div class="rule"></div>
+      <div class="footer"><div class="thanks">Thank you</div></div>
     </div>`;
   printHTML(html);
 }
