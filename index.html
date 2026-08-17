@@ -1171,8 +1171,15 @@ tr:hover td{background:#faf9f4;}
               <option value="xl">Extra Large</option>
             </select>
           </div>
+          <div class="field">
+            <label>Also Print Header Text?</label>
+            <select class="inp" id="btShowHeaderText">
+              <option value="no">No — logo image only (default)</option>
+              <option value="yes">Yes — show Header Text below the logo too</option>
+            </select>
+          </div>
         </div>
-        <div class="hint mb-8">If the logo prints too small to see clearly, pick a bigger size here and Save — every bill printed after that will use it.</div>
+        <div class="hint mb-8">Upload your logo image from "Shop Profile" above — that's what prints on the bill. If the logo prints too small, pick a bigger size here. Want the Header Text line to also print below the logo? Switch "Also Print Header Text?" to Yes.</div>
         <button class="btn sm" id="btnSaveBill">Save Bill Template</button>
       </div>
 
@@ -1255,6 +1262,7 @@ const state = {
     billHeader: 'AK FASHION HUB',
     billFooter: 'Thank You! Visit Again',
     billLogoSize: 'large',
+    showHeaderTextOnBill: false,
     returnWindowDays: 3
   },
   user: null,                 // { staffID, name, mobile, role, permissions }
@@ -2653,13 +2661,20 @@ function printBill(b){
   // re-printed. This matters most when reprinting an old bill later: it
   // must still show the original sale's date/time, not today's.
   const billDateTime = b.CreatedDate ? new Date(b.CreatedDate).toLocaleString('en-IN') : new Date().toLocaleString('en-IN');
-  // Logo image already carries the full shop name/branding — so the header
-  // prints ONLY the logo image, no separate "shop name" text line at all.
+  // Logo image is always the main branding. Whether the Header Text also
+  // prints below it is controlled from Settings > Bill Template ("Also
+  // Print Header Text?") — off by default since the logo already carries
+  // the shop name, but the person can switch it on any time they want
+  // both showing together.
+  const headerTextLine = (state.cfg.showHeaderTextOnBill && (state.cfg.billHeader || state.cfg.shopName))
+    ? `<b style="${headerLineStyle(state.cfg.billHeader || state.cfg.shopName, isThermal)}">${escapeHtml(state.cfg.billHeader || state.cfg.shopName)}</b><br>`
+    : '';
   const html = `
     ${billStyleBlock(isThermal)}
     <div class="akfh-bill" style="width:${pageWidth};padding:10px 8px;">
       <div class="biz-logo">${logo}</div>
       <div class="meta">
+        ${headerTextLine}
         ${state.cfg.shopAddress||''}<br>
         Mob: ${state.cfg.shopMobile}<br>
         <b class="billno">Bill #${b.BillNumber||''}</b> &nbsp;·&nbsp; ${billDateTime}
@@ -5563,11 +5578,13 @@ function wireSettings(){
   $('#btHeader').value = state.cfg.billHeader || state.cfg.shopName;
   $('#btFooter').value = state.cfg.billFooter || '';
   $('#btLogoSize').value = state.cfg.billLogoSize || 'large';
+  $('#btShowHeaderText').value = state.cfg.showHeaderTextOnBill ? 'yes' : 'no';
   $('#btnSaveBill').addEventListener('click', () => {
     state.cfg.billFormat = $('#btFormat').value;
     state.cfg.billHeader = $('#btHeader').value;
     state.cfg.billFooter = $('#btFooter').value;
     state.cfg.billLogoSize = $('#btLogoSize').value;
+    state.cfg.showHeaderTextOnBill = $('#btShowHeaderText').value === 'yes';
     saveCfg(); toast('Bill template saved', 'ok');
   });
 
@@ -5750,3 +5767,10 @@ function requirePin(reason){
 
 
 </body></html>
+
+
+
+
+
+
+  
