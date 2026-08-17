@@ -181,7 +181,7 @@ tr:hover td{background:#faf9f4;}
 .tag{width:2in;height:3in;padding:8px;border:1px dashed #000;font-family:'Courier New',monospace;}
 
 /* camera scanner box */
-#camBox{width:100%;max-width:320px;height:240px;background:#000;border-radius:8px;overflow:hidden;margin:0 auto;position:relative;}
+#camBox{width:100%;max-width:380px;height:380px;background:#000;border-radius:8px;overflow:hidden;margin:0 auto;position:relative;}
 #camBox video{width:100% !important;height:100% !important;object-fit:cover;}
 
 /* util */
@@ -1161,6 +1161,18 @@ tr:hover td{background:#faf9f4;}
           <div class="field"><label>Header Text</label><input class="inp" id="btHeader" placeholder="AK FASHION HUB"></div>
           <div class="field"><label>Footer Text</label><input class="inp" id="btFooter" placeholder="Thank You! Visit Again"></div>
         </div>
+        <div class="grid-3 mb-12">
+          <div class="field">
+            <label>Logo Size on Printed Bill</label>
+            <select class="inp" id="btLogoSize">
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large (default)</option>
+              <option value="xl">Extra Large</option>
+            </select>
+          </div>
+        </div>
+        <div class="hint mb-8">If the logo prints too small to see clearly, pick a bigger size here and Save — every bill printed after that will use it.</div>
         <button class="btn sm" id="btnSaveBill">Save Bill Template</button>
       </div>
 
@@ -1242,6 +1254,7 @@ const state = {
     billFormat: 'thermal',
     billHeader: 'AK FASHION HUB',
     billFooter: 'Thank You! Visit Again',
+    billLogoSize: 'large',
     returnWindowDays: 3
   },
   user: null,                 // { staffID, name, mobile, role, permissions }
@@ -2583,12 +2596,17 @@ function printHTML(html, onReady){
 // plain thermal printer, not just on a colour A4 printer.
 function billStyleBlock(isThermal){
   const fs = isThermal ? 12 : 14;
+  // Logo prints much bigger by default now (it was barely visible before).
+  // "Logo Size on Printed Bill" in Settings > Bill Template lets it be
+  // made smaller/bigger without touching any code.
+  const logoSizes = { small: 70, medium: 100, large: 140, xl: 180 };
+  const logoH = logoSizes[state.cfg.billLogoSize] || logoSizes.large;
   return `
   <style>
     .akfh-bill{font-family:'Manrope',Arial,sans-serif;color:#111;font-size:${fs}px;line-height:1.45;}
     .akfh-bill .ornament{text-align:center;letter-spacing:6px;font-size:${fs-2}px;color:#555;margin:2px 0 6px;}
     .akfh-bill .biz-logo{text-align:center;margin-bottom:2px;}
-    .akfh-bill .biz-logo img{max-height:${isThermal?54:70}px;}
+    .akfh-bill .biz-logo img{max-height:${isThermal ? Math.round(logoH*0.8) : logoH}px;max-width:100%;}
     .akfh-bill .meta{text-align:center;font-size:${fs-2}px;letter-spacing:.3px;color:#333;}
     .akfh-bill .meta b.billno{letter-spacing:.5px;}
     .akfh-bill .rule{border:none;border-top:1px dashed #999;margin:7px 0;}
@@ -4981,7 +4999,7 @@ function printStickerSheet(){
       .stk-name { font-weight:700; font-size:${fs}px; }
       .stk-batch { font-size:${fs-2}px; color:#333; }
       .stk-dm { margin:0.8mm 0; }
-      .stk-dm canvas { width:17mm; height:17mm; }
+      .stk-dm canvas { width:22mm; height:22mm; }
       .stk-size { font-weight:900; font-size:${fs+2}px; background:#000; color:#fff; padding:0.6mm 2.4mm; border-radius:3mm; margin-bottom:0.8mm; letter-spacing:.5px; box-shadow:0 0 0 0.3mm #000; }
       .stk-mrp { font-size:${fs}px; color:#555; }
       .stk-sp { font-weight:900; font-size:${fs+9}px; margin-top:0.3mm; }
@@ -5018,7 +5036,7 @@ function printTag(pid, vid){
       <div style="font-weight:800;font-size:9px;letter-spacing:.3px;text-transform:uppercase;border-bottom:0.3mm solid #000;padding-bottom:1mm;margin-bottom:1mm;">${escapeHtml(shopName)}</div>
       <div style="font-weight:700;font-size:12px;">${escapeHtml(p.Name)}</div>
       <div style="font-size:9px;">B:${escapeHtml(v.BatchNumber || p.BatchNumber || '—')}</div>
-      <canvas id="pt" style="width:20mm;height:20mm;margin:2mm 0;"></canvas>
+      <canvas id="pt" style="width:26mm;height:26mm;margin:2mm 0;"></canvas>
       ${v.Size ? '<div style="font-weight:900;font-size:13px;background:#000;color:#fff;display:inline-block;padding:0.6mm 3.2mm;border-radius:3mm;margin-bottom:1.5mm;">SIZE: '+escapeHtml(v.Size)+'</div>' : ''}
       <div style="text-decoration:line-through;color:#666;font-size:11px;">MRP ${fmt(p.MRP)}</div>
       <div style="font-size:24px;font-weight:900;">₹${fmt(v.SalePrice||p.SalePrice)}</div>
@@ -5544,10 +5562,12 @@ function wireSettings(){
   $('#btFormat').value = state.cfg.billFormat || 'thermal';
   $('#btHeader').value = state.cfg.billHeader || state.cfg.shopName;
   $('#btFooter').value = state.cfg.billFooter || '';
+  $('#btLogoSize').value = state.cfg.billLogoSize || 'large';
   $('#btnSaveBill').addEventListener('click', () => {
     state.cfg.billFormat = $('#btFormat').value;
     state.cfg.billHeader = $('#btHeader').value;
     state.cfg.billFooter = $('#btFooter').value;
+    state.cfg.billLogoSize = $('#btLogoSize').value;
     saveCfg(); toast('Bill template saved', 'ok');
   });
 
@@ -5640,7 +5660,7 @@ function openCamScanner(onCode, opts){
     <div id="camBox"></div>
     <div class="row mt-8">
       <button class="btn ghost sm" id="btnTorch">🔦 Torch ON</button>
-      <span class="hint">${continuous ? 'Camera will stay open — scan as many items as needed, then tap Done' : 'Camera permission is required'}</span>
+      <span class="hint">${continuous ? 'Camera will stay open — scan as many items as needed, then tap Done' : 'Camera permission is required'}. Hold the tag flat, well lit, a little farther back if it looks blurry.</span>
     </div>
   `, [
     { label: continuous ? 'Done' : 'Cancel', kind:'ghost', on: () => { stopCam(); closeModal(); } }
@@ -5648,7 +5668,25 @@ function openCamScanner(onCode, opts){
   setTimeout(async () => {
     try{
       camScanner = new Html5Qrcode('camBox');
-      await camScanner.start({ facingMode:'environment' }, { fps: 10, qrbox: { width: 220, height: 130 } },
+      // A bigger scan window + a request for the camera's highest available
+      // resolution means the tag no longer has to be held right up to the
+      // lens to fill the box — it can be scanned from further away and
+      // still have enough sharp detail to decode. Laptop webcams especially
+      // benefit since their sensors are small; asking for 1080p/4K (browser
+      // picks the closest the hardware actually supports) gives the decoder
+      // far more pixels to work with at distance than the old default.
+      await camScanner.start(
+        { facingMode:'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 300, height: 300 },
+          videoConstraints: {
+            facingMode: 'environment',
+            width: { ideal: 3840, min: 1280 },
+            height: { ideal: 2160, min: 720 },
+            advanced: [{ focusMode: 'continuous' }]
+          }
+        },
         code => {
           if(continuous){
             handleScan(code, onCode);
@@ -5658,6 +5696,11 @@ function openCamScanner(onCode, opts){
         },
         () => {}
       );
+      // Best-effort: nudge the camera into continuous autofocus if the
+      // device/browser supports it (many laptop webcams do). Silently
+      // ignored where unsupported — torch toggle already handles that
+      // pattern the same way.
+      try{ await camScanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }); }catch(e){}
     }catch(err){ toast('Camera failed: '+err.message, 'bad'); }
   }, 100);
   setTimeout(() => {
