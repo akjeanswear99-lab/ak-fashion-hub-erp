@@ -694,10 +694,11 @@ tr:hover td{background:#faf9f4;}
         <h3>🧾 All Bills <small>Every bill ever made — new and old — name, mobile, returns, coins, loyalty, print & WhatsApp</small></h3>
         <div class="row mb-12">
           <div class="field" style="flex:1;"><label>Search</label><input class="inp" id="billsSearch" placeholder="Bill #, customer name, or mobile"></div>
+          <button class="btn ghost sm" id="btnBillsScan" style="align-self:flex-end;">📷 Scan Bill</button>
         </div>
         <div class="tbl-wrap"><table id="billsTbl">
-          <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Mobile</th><th>Total</th><th>Mode</th><th>Return / Exchange</th><th>Wallet Coin</th><th>Loyalty Pts</th><th></th></tr></thead>
-          <tbody><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+          <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Mobile</th><th>Total</th><th>Mode</th><th>Return / Exchange</th><th>Wallet Coin</th><th>Loyalty Pts</th><th>Last Purchase</th><th></th></tr></thead>
+          <tbody><tr><td colspan="11" class="empty">Loading…</td></tr></tbody>
         </table></div>
       </div>
     </div>
@@ -2089,9 +2090,7 @@ function openBillDetailsModal(b){
     </table></div>
   `, [
     { label:'Close', kind:'ghost', on: closeModal },
-    waHref(full)
-      ? { label:'📱 WhatsApp', kind:'', href: waHref(full), on: closeModal }
-      : { label:'📱 No mobile', kind:'ghost', on: () => toast('A valid 10-digit customer mobile number is required to send WhatsApp', 'warn') },
+    { label:'📱 WhatsApp', kind:'', on: () => { closeModal(); openWaSendModal(full); } },
     { label:'🖨 Print', kind:'ok', on: () => printBill(full) }
   ]);
 }
@@ -2769,21 +2768,24 @@ function renderBills(){
   const wallets = state.data.wallet||[];
   const customers = state.data.customers||[];
 
-  // Wallet-coin balance and loyalty points belong to the CUSTOMER, not the
-  // bill — worked out once per customer here (same rule as the Customers
-  // screen: match by CustomerID first, else by Mobile) so every bill row
-  // below is just a cheap lookup instead of re-scanning everything.
+  // Loyalty Points, Wallet Coin balance, and Last Purchase all belong to
+  // the CUSTOMER, not the bill — taken straight from the same rule the
+  // Customers screen uses (match by CustomerID, else by Mobile), so the
+  // numbers shown here always agree with what Customers shows for the
+  // same person.
   const custStatsByKey = {};
   customers.forEach(c => {
     const custBills = bills.filter(b =>
       (c.CustomerID && String(b.CustomerID)===String(c.CustomerID)) ||
-      (!c.CustomerID && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,'')));
+      (c.Mobile && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,'')));
     const totalSpend = custBills.reduce((s,b)=>s+Number(b.Total||0), 0);
+    const lastPurchase = custBills.reduce((latest,b)=> (!latest || String(b.CreatedDate||'')>String(latest)) ? (b.CreatedDate||'') : latest, '');
     const coinBal = wallets
       .filter(w => String(w.CustomerID)===String(c.CustomerID) && w.Status==='Active')
       .reduce((s,w)=>s+Number(w.RemainingAmount||0), 0);
-    const key = c.CustomerID ? ('c:'+c.CustomerID) : ('m:'+String(c.Mobile||'').replace(/\D/g,''));
-    custStatsByKey[key] = { loyaltyPoints: Math.floor(totalSpend/100), coinBal };
+    const stat = { loyaltyPoints: Math.floor(totalSpend/100), coinBal, lastPurchase: lastPurchase || c.LastPurchaseDate || '' };
+    if(c.CustomerID) custStatsByKey['c:'+c.CustomerID] = stat;
+    if(c.Mobile) custStatsByKey['m:'+String(c.Mobile).replace(/\D/g,'')] = stat;
   });
   const returnedBillIDs = new Set(returns.map(r => r.BillID));
 
@@ -2796,8 +2798,9 @@ function renderBills(){
   const tb = $('#billsTbl tbody'); tb.innerHTML = '';
   list.forEach(b => {
     const mobDigits = String(b.CustomerMobile||'').replace(/\D/g,'');
-    const custKey = b.CustomerID ? ('c:'+b.CustomerID) : ('m:'+mobDigits);
-    const stats = custStatsByKey[custKey] || { loyaltyPoints: 0, coinBal: 0 };
+    const stats = (b.CustomerID && custStatsByKey['c:'+b.CustomerID])
+      || custStatsByKey['m:'+mobDigits]
+      || { loyaltyPoints: 0, coinBal: 0, lastPurchase: '' };
     const wasReturned = returnedBillIDs.has(b.BillID);
     const wasExchange = String(b.PaymentRef||'').startsWith('EXCHANGE for');
     let retLabel = '—', retCls = '';
@@ -2818,6 +2821,7 @@ function renderBills(){
       <td>${retCls ? '<span class="pill '+retCls+'">'+retLabel+'</span>' : retLabel}</td>
       <td>${fmt(stats.coinBal)}</td>
       <td>${stats.loyaltyPoints}</td>
+      <td>${(stats.lastPurchase||'').substr(0,10) || '—'}</td>
       <td>
         <button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨 Print</button>
         <button class="btn ghost sm" data-a="wa" data-id="${b.BillID}">📱 WhatsApp</button>
@@ -2826,7 +2830,7 @@ function renderBills(){
   });
   if(!list.length){
     if(!bills.length && !term){
-      tb.innerHTML = `<tr><td colspan="10" class="empty">
+      tb.innerHTML = `<tr><td colspan="11" class="empty">
         No bills loaded from the Sheet yet.
         ${state.lastSyncError ? '<br><b>Last sync error:</b> '+state.lastSyncError : ''}
         <br><button class="btn sm mt-8" id="btnBillsRetry">🔄 Retry Sync</button>
@@ -2834,7 +2838,7 @@ function renderBills(){
       const rb = $('#btnBillsRetry');
       if(rb) rb.onclick = () => { toast('Syncing…'); pullAll(); };
     } else {
-      tb.innerHTML = '<tr><td colspan="10" class="empty">No bills found</td></tr>';
+      tb.innerHTML = '<tr><td colspan="11" class="empty">No bills found</td></tr>';
     }
   }
   tb.onclick = e => {
@@ -2850,6 +2854,15 @@ function wireBillsSearch(){
   if(billsSearchWired) return; billsSearchWired = true;
   const el = $('#billsSearch');
   if(el) el.addEventListener('input', renderBills);
+  // Scan a bill's printed barcode straight from this screen — it jumps
+  // right to that bill's full details (same modal used everywhere else:
+  // Print + WhatsApp right there), no typing or scrolling needed.
+  const scanBtn = $('#btnBillsScan');
+  if(scanBtn) scanBtn.addEventListener('click', () => openCamScanner(code => {
+    const bill = findBillByCode(code);
+    if(bill){ openBillDetailsModal(bill); return; }
+    toast('This barcode did not match any bill', 'bad');
+  }));
 }
 // Lets you type/fix the WhatsApp number for ANY bill before sending — built
 // for exactly the bills whose stored mobile is missing or wrong. The Send
@@ -3977,8 +3990,8 @@ function sendCoinWhatsapp(w){
 function openIssueCoinForm(pref){
   openModal('Issue Coin', `
     <div class="grid-2 mb-12">
-      <div class="field"><label>Customer Mobile *</label><input class="inp" id="ciMob" maxlength="10" value="${pref.mobile||''}"></div>
-      <div class="field"><label>Customer Name</label><input class="inp" id="ciName" value="${pref.name||''}"></div>
+      <div class="field"><label>Customer Mobile *</label><input class="inp" id="icMob" maxlength="10" value="${pref.mobile||''}"></div>
+      <div class="field"><label>Customer Name</label><input class="inp" id="icName" value="${pref.name||''}"></div>
     </div>
     <div class="grid-3 mb-12">
       <div class="field"><label>Amount (₹) *</label><input class="inp" id="ciAmt" type="number" min="1" value="${pref.amount||''}"></div>
@@ -3997,12 +4010,12 @@ function openIssueCoinForm(pref){
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Issue Coin', kind:'ok', on: async () => {
-      const mob = $('#ciMob').value.replace(/\D/g,'');
+      const mob = $('#icMob').value.replace(/\D/g,'');
       const amt = Number($('#ciAmt').value||0);
       if(mob.length !== 10 || amt<=0){ toast('Please check the mobile number and amount', 'bad'); return; }
       const r = await apiPost('issueWallet', {
         CustomerMobile: mob,
-        CustomerName: $('#ciName').value.trim(),
+        CustomerName: $('#icName').value.trim(),
         Amount: amt,
         ValidityMonths: Number($('#ciVal').value||12),
         Reason: $('#ciReason').value,
