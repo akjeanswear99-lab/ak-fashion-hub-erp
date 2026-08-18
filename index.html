@@ -688,16 +688,16 @@ tr:hover td{background:#faf9f4;}
       </div>
     </div>
 
-    <!-- ===== BILLS — every bill, old and new, searchable and editable ===== -->
+    <!-- ===== BILLS — every bill, old and new, searchable ===== -->
     <div class="screen" id="scr-bills">
       <div class="pane">
-        <h3>🧾 All Bills <small>Every bill ever made — new and old — search, print, WhatsApp, or edit</small></h3>
+        <h3>🧾 All Bills <small>Every bill ever made — new and old — name, mobile, returns, coins, loyalty, print & WhatsApp</small></h3>
         <div class="row mb-12">
           <div class="field" style="flex:1;"><label>Search</label><input class="inp" id="billsSearch" placeholder="Bill #, customer name, or mobile"></div>
         </div>
         <div class="tbl-wrap"><table id="billsTbl">
-          <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Mobile</th><th>Total</th><th>Mode</th><th>Status</th><th></th></tr></thead>
-          <tbody><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+          <thead><tr><th>Date</th><th>Bill#</th><th>Customer</th><th>Mobile</th><th>Total</th><th>Mode</th><th>Return / Exchange</th><th>Wallet Coin</th><th>Loyalty Pts</th><th></th></tr></thead>
+          <tbody><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
         </table></div>
       </div>
     </div>
@@ -2396,8 +2396,18 @@ async function completeSale(){
   const changeGiven = DENOMS.reduce((s,d)=> s + (changeBreak[d]||0)*d, 0);
 
   const giftItemsText = state.giftItems.join(', ');
-  const custMobile = $('#posCustMob').value.trim();
+  const custMobile = $('#posCustMob').value.replace(/\D/g,'').trim();
   const custName = $('#posCustName').value.trim();
+  // Mobile is optional (walk-in sales are fine with none) — but if one is
+  // being entered at all, it must be a full, exact 10-digit number. This
+  // stops half-typed numbers (9 digits, 6 digits, etc.) from ever getting
+  // saved onto a new bill — that's what used to make old bills' numbers
+  // unreliable in the first place.
+  if(custMobile && custMobile.length !== 10){
+    toast('Customer mobile must be exactly 10 digits — clear it if you don\'t have it, or complete it', 'bad');
+    state.pendingSubmit = false;
+    return;
+  }
   const billID = 'BILL_' + Date.now() + '_' + rnd();  // unique — server also guards
   const billNumber = localBillNumber();               // known instantly, no waiting on the server
 
@@ -2749,6 +2759,134 @@ function refreshLastBillWaLink(){
   const el = $('#btnWhatsappLast'); if(!el) return;
   const href = waHref(state.lastBill);
   el.href = href || '#';
+}
+
+/* ============ BILLS — every bill, old and new, searchable ============ */
+function renderBills(){
+  const term = ($('#billsSearch').value||'').toLowerCase();
+  const bills = state.data.bills||[];
+  const returns = state.data.returns||[];
+  const wallets = state.data.wallet||[];
+  const customers = state.data.customers||[];
+
+  // Wallet-coin balance and loyalty points belong to the CUSTOMER, not the
+  // bill — worked out once per customer here (same rule as the Customers
+  // screen: match by CustomerID first, else by Mobile) so every bill row
+  // below is just a cheap lookup instead of re-scanning everything.
+  const custStatsByKey = {};
+  customers.forEach(c => {
+    const custBills = bills.filter(b =>
+      (c.CustomerID && String(b.CustomerID)===String(c.CustomerID)) ||
+      (!c.CustomerID && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,'')));
+    const totalSpend = custBills.reduce((s,b)=>s+Number(b.Total||0), 0);
+    const coinBal = wallets
+      .filter(w => String(w.CustomerID)===String(c.CustomerID) && w.Status==='Active')
+      .reduce((s,w)=>s+Number(w.RemainingAmount||0), 0);
+    const key = c.CustomerID ? ('c:'+c.CustomerID) : ('m:'+String(c.Mobile||'').replace(/\D/g,''));
+    custStatsByKey[key] = { loyaltyPoints: Math.floor(totalSpend/100), coinBal };
+  });
+  const returnedBillIDs = new Set(returns.map(r => r.BillID));
+
+  const list = bills.filter(b => !term
+    || (b.BillNumber||'').toLowerCase().includes(term)
+    || (b.CustomerName||'').toLowerCase().includes(term)
+    || String(b.CustomerMobile||'').includes(term)
+  ).slice().reverse();
+
+  const tb = $('#billsTbl tbody'); tb.innerHTML = '';
+  list.forEach(b => {
+    const mobDigits = String(b.CustomerMobile||'').replace(/\D/g,'');
+    const custKey = b.CustomerID ? ('c:'+b.CustomerID) : ('m:'+mobDigits);
+    const stats = custStatsByKey[custKey] || { loyaltyPoints: 0, coinBal: 0 };
+    const wasReturned = returnedBillIDs.has(b.BillID);
+    const wasExchange = String(b.PaymentRef||'').startsWith('EXCHANGE for');
+    let retLabel = '—', retCls = '';
+    if(wasReturned && wasExchange){ retLabel = 'Return + Exchange'; retCls='bad'; }
+    else if(wasReturned){ retLabel = 'Returned'; retCls='bad'; }
+    else if(wasExchange){ retLabel = 'Exchange'; retCls='warn'; }
+    const tr = document.createElement('tr');
+    // Mobile is shown exactly as stored — even if it's blank, short, or
+    // clearly wrong — old bills were never validated, and hiding a bad
+    // number here would just make it harder to notice and fix.
+    tr.innerHTML = `
+      <td>${(b.CreatedDate||'').substr(0,16).replace('T',' ')}</td>
+      <td>${b.BillNumber||''}</td>
+      <td>${b.CustomerName||'—'}</td>
+      <td>${b.CustomerMobile||'—'}</td>
+      <td>${fmt(b.Total)}</td>
+      <td>${b.PaymentMode||''}</td>
+      <td>${retCls ? '<span class="pill '+retCls+'">'+retLabel+'</span>' : retLabel}</td>
+      <td>${fmt(stats.coinBal)}</td>
+      <td>${stats.loyaltyPoints}</td>
+      <td>
+        <button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨 Print</button>
+        <button class="btn ghost sm" data-a="wa" data-id="${b.BillID}">📱 WhatsApp</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+  if(!list.length){
+    if(!bills.length && !term){
+      tb.innerHTML = `<tr><td colspan="10" class="empty">
+        No bills loaded from the Sheet yet.
+        ${state.lastSyncError ? '<br><b>Last sync error:</b> '+state.lastSyncError : ''}
+        <br><button class="btn sm mt-8" id="btnBillsRetry">🔄 Retry Sync</button>
+      </td></tr>`;
+      const rb = $('#btnBillsRetry');
+      if(rb) rb.onclick = () => { toast('Syncing…'); pullAll(); };
+    } else {
+      tb.innerHTML = '<tr><td colspan="10" class="empty">No bills found</td></tr>';
+    }
+  }
+  tb.onclick = e => {
+    const btn = e.target.closest('button[data-a]'); if(!btn) return;
+    const b = bills.find(x => x.BillID === btn.dataset.id);
+    if(!b) return;
+    if(btn.dataset.a === 'print') printBill(billWithItems(b));
+    else openWaSendModal(b);
+  };
+}
+let billsSearchWired = false;
+function wireBillsSearch(){
+  if(billsSearchWired) return; billsSearchWired = true;
+  const el = $('#billsSearch');
+  if(el) el.addEventListener('input', renderBills);
+}
+// Lets you type/fix the WhatsApp number for ANY bill before sending — built
+// for exactly the bills whose stored mobile is missing or wrong. The Send
+// button stays a real <a href>, kept in sync with the input as you type,
+// so the click is a genuine link-follow (never JS window.open, which some
+// browsers/webviews silently block) — same rule as everywhere else that
+// sends WhatsApp in this app.
+function openWaSendModal(b){
+  const prefill = String(b.CustomerMobile||'').replace(/\D/g,'').slice(0,10);
+  openModal('Send Bill on WhatsApp', `
+    <div class="tag-info mb-12">Bill #${b.BillNumber||''} — ${fmt(b.Total)}</div>
+    <div class="field"><label>Customer Mobile (10 digit)</label><input class="inp" id="waMobIn" maxlength="10" inputmode="numeric" value="${prefill}" placeholder="10-digit mobile"></div>
+    <div class="hint mt-8">Fix or enter the number, then tap Send — WhatsApp opens with the message ready.</div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'📱 Send on WhatsApp', kind:'ok', href:'#' }
+  ]);
+  setTimeout(() => {
+    const input = $('#waMobIn');
+    const link = document.querySelector('#dlgFoot a');
+    if(!input || !link) return;
+    const updateHref = () => {
+      const mob = input.value.replace(/\D/g,'').slice(0,10);
+      link.href = mob.length===10 ? ('https://wa.me/91'+mob+'?text='+encodeURIComponent(buildBillWaMessage(b))) : '#';
+    };
+    updateHref();
+    input.addEventListener('input', updateHref);
+    input.focus();
+    link.addEventListener('click', e => {
+      if(input.value.replace(/\D/g,'').length !== 10){
+        e.preventDefault();
+        toast('Enter a valid 10-digit mobile number', 'warn');
+        return;
+      }
+      closeModal();
+    });
+  }, 50);
 }
 
 /* ------- customer history modal ------- */
@@ -3511,9 +3649,11 @@ function openCollectDueForm(c){
       if(amt <= 0){ toast('Enter a valid amount', 'warn'); return; }
       const mode = $('#cdMode').value;
       const newDue = Math.max(0, due - amt);
-      const cr = await apiPost('updateCustomer', { customerID: c.CustomerID, DueBalance: newDue });
+      closeModal();
+      toast('Collecting '+fmt(amt)+'…', 'ok');
+      const cr = await apiPostBG('updateCustomer', { customerID: c.CustomerID, DueBalance: newDue });
       if(!cr.success){ toast(cr.error||'Update failed', 'bad'); return; }
-      apiPost('addCashTxn', {
+      apiPostBG('addCashTxn', {
         Date: dayKey(nowISO()),
         Time: new Date().toTimeString().substr(0,8),
         Type: mode==='Cash' ? 'IN' : 'ONLINE-IN', Amount: amt,
@@ -3523,13 +3663,13 @@ function openCollectDueForm(c){
       });
       if(mode==='Cash'){
         const approxDelta = breakChange(amt).notes;
-        apiPost('updateDrawerDenoms', {
+        apiPostBG('updateDrawerDenoms', {
           delta: approxDelta, staffID: state.user.staffID, staffName: state.user.name,
           reference: 'DUE-SETTLE-'+c.CustomerID+' (approx notes)'
         });
       }
       toast('Collected '+fmt(amt)+' — remaining due: '+fmt(newDue), 'ok');
-      closeModal(); pullAll();
+      pullAll();
     }}
   ]);
 }
@@ -3553,10 +3693,12 @@ function openCustomerForm(c){
       if(!name || mob.length !== 10){ toast('Name and a valid 10-digit mobile number are required', 'bad'); return; }
       const body = { Name: name, Mobile: mob, City: $('#cfCity').value, Email: $('#cfEmail').value, Address: $('#cfAddr').value };
       if(isEdit){ body.customerID = c.CustomerID; }
-      const r = await apiPost(isEdit?'updateCustomer':'addCustomer', body);
+      closeModal();
+      toast('Saving…', 'ok');
+      const r = await apiPostBG(isEdit?'updateCustomer':'addCustomer', body);
       if(!r.success){ toast(r.error, 'bad'); return; }
       toast(isEdit?'Updated':'Added', 'ok');
-      closeModal(); pullAll();
+      pullAll();
     }}
   ]);
 }
@@ -3666,12 +3808,14 @@ function openSupplierForm(s){
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Save', kind:'ok', on: async () => {
-      const r = await apiPost('addSupplier', {
-        Name: $('#sfName').value, Mobile: $('#sfMob').value,
-        City: $('#sfCity').value, GSTIN: $('#sfGST').value, Address: $('#sfAddr').value
-      });
+      const name = $('#sfName').value.trim();
+      if(!name){ toast('Supplier name is required', 'bad'); return; }
+      const body = { Name: name, Mobile: $('#sfMob').value, City: $('#sfCity').value, GSTIN: $('#sfGST').value, Address: $('#sfAddr').value };
+      closeModal();
+      toast('Saving…', 'ok');
+      const r = await apiPostBG('addSupplier', body);
       if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Supplier added', 'ok'); closeModal(); pullAll();
+      toast('Supplier added', 'ok'); pullAll();
     }}
   ]);
 }
@@ -4385,9 +4529,11 @@ function openPreForm(){
         StaffID: state.user.staffID
       };
       if(!body.CustomerName || body.CustomerMobile.length!==10 || !body.ProductName){ toast('Please fill in all required fields', 'bad'); return; }
-      const r = await apiPost('addPreorder', body);
+      closeModal();
+      toast('Saving…', 'ok');
+      const r = await apiPostBG('addPreorder', body);
       if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Pre-order created', 'ok'); closeModal(); pullAll();
+      toast('Pre-order created', 'ok'); pullAll();
     }}
   ]);
 }
@@ -4457,120 +4603,12 @@ function openStaffForm(s){
         PIN: $('#stPIN').value, Password: $('#stPass').value
       };
       if(!body.Name || body.Mobile.length !== 10){ toast('Name and a valid 10-digit mobile number are required', 'bad'); return; }
-      const r = await apiPost(isEdit?'updateStaff':'addStaff',
+      closeModal();
+      toast('Saving…', 'ok');
+      const r = await apiPostBG(isEdit?'updateStaff':'addStaff',
         isEdit ? Object.assign({ staffID: s.StaffID }, body) : body);
       if(!r.success){ toast(r.error, 'bad'); return; }
-      toast(isEdit?'Updated':'Staff added', 'ok'); closeModal(); pullAll();
-    }}
-  ]);
-}
-
-/* ============ BILLS — every bill, old and new, searchable and editable ============ */
-function renderBills(){
-  const term = ($('#billsSearch').value||'').toLowerCase();
-  const list = (state.data.bills||[])
-    .filter(b => !term
-      || (b.BillNumber||'').toLowerCase().includes(term)
-      || (b.CustomerName||'').toLowerCase().includes(term)
-      || String(b.CustomerMobile||'').includes(term))
-    .slice().reverse();
-  const tb = $('#billsTbl tbody'); tb.innerHTML='';
-  list.forEach(b => {
-    const tr = document.createElement('tr');
-    const href = waHref(b);
-    const waEl = href
-      ? `<a class="btn ghost sm" href="${href}" target="_blank" rel="noopener" title="Send WhatsApp">📱</a>`
-      : `<button class="btn ghost sm" disabled title="No valid mobile on this bill">📱</button>`;
-    tr.innerHTML = `
-      <td>${(b.CreatedDate||'').substr(0,16).replace('T',' ')}</td>
-      <td>${b.BillNumber||''}</td>
-      <td>${b.CustomerName||'—'}</td>
-      <td>${b.CustomerMobile||'—'}</td>
-      <td>${fmt(b.Total)}</td>
-      <td>${b.PaymentMode||''}</td>
-      <td><span class="pill ${b.Status==='Cancelled'?'bad':'ok'}">${b.Status||'Completed'}</span></td>
-      <td>
-        <button class="btn ghost sm" data-a="edit" data-id="${b.BillID}">✎ Edit</button>
-        <button class="btn ghost sm" data-a="print" data-id="${b.BillID}">🖨</button>
-        ${waEl}
-      </td>`;
-    tb.appendChild(tr);
-  });
-  if(!list.length){
-    if(!(state.data.bills||[]).length && !term){
-      tb.innerHTML = `<tr><td colspan="8" class="empty">
-        No bills loaded from the Sheet yet.
-        ${state.lastSyncError ? '<br><b>Last sync error:</b> '+state.lastSyncError : ''}
-        <br><button class="btn sm mt-8" id="btnBillsRetry">🔄 Retry Sync</button>
-      </td></tr>`;
-      const rb = $('#btnBillsRetry');
-      if(rb) rb.onclick = () => { toast('Syncing…'); pullAll(); };
-    } else {
-      tb.innerHTML = '<tr><td colspan="8" class="empty">No bills found</td></tr>';
-    }
-  }
-  tb.onclick = e => {
-    const btn = e.target.closest('button[data-a]'); if(!btn) return;
-    const b = (state.data.bills||[]).find(x => x.BillID === btn.dataset.id);
-    if(!b) return;
-    if(btn.dataset.a === 'edit') openBillEditForm(b);
-    else printBill(billWithItems(b));
-  };
-}
-let billsSearchWired = false;
-function wireBillsSearch(){
-  if(billsSearchWired) return; billsSearchWired = true;
-  const el = $('#billsSearch');
-  if(el) el.addEventListener('input', renderBills);
-}
-// Editable fields deliberately stay to customer info, payment mode/ref,
-// discount, and status — NOT the individual line items, since changing
-// items after the fact would desync stock and profit numbers already
-// applied at sale time. Discount changes automatically recompute Total.
-function openBillEditForm(b){
-  openModal('Edit Bill • '+(b.BillNumber||''), `
-    <div class="grid-2 mb-12">
-      <div class="field"><label>Customer Name</label><input class="inp" id="beName" value="${b.CustomerName||''}"></div>
-      <div class="field"><label>Customer Mobile</label><input class="inp" id="beMob" value="${b.CustomerMobile||''}" maxlength="10"></div>
-    </div>
-    <div class="grid-3 mb-12">
-      <div class="field"><label>Payment Mode</label>
-        <select class="inp" id="bePay">
-          <option value="Cash" ${b.PaymentMode==='Cash'?'selected':''}>Cash</option>
-          <option value="UPI" ${b.PaymentMode==='UPI'?'selected':''}>UPI</option>
-          <option value="Card" ${b.PaymentMode==='Card'?'selected':''}>Card</option>
-          <option value="Online" ${b.PaymentMode==='Online'?'selected':''}>Online</option>
-          <option value="Mixed" ${b.PaymentMode==='Mixed'?'selected':''}>Mixed</option>
-        </select>
-      </div>
-      <div class="field"><label>Discount (₹)</label><input class="inp" id="beDisc" type="number" min="0" value="${Number(b.Discount||0)}"></div>
-      <div class="field"><label>Status</label>
-        <select class="inp" id="beStatus">
-          <option value="Completed" ${b.Status!=='Cancelled'?'selected':''}>Completed</option>
-          <option value="Cancelled" ${b.Status==='Cancelled'?'selected':''}>Cancelled</option>
-        </select>
-      </div>
-    </div>
-    <div class="tag-info">Subtotal: ${fmt(b.Subtotal)} — Total updates automatically as Subtotal − Discount.</div>
-    ${b.NotesIn ? `<div class="tag-info mt-8">💵 Notes received: ${b.NotesIn}</div>` : ''}
-    ${b.NotesOut ? `<div class="tag-info mt-8">💵 Change given: ${b.NotesOut}</div>` : ''}
-  `, [
-    { label:'Cancel', kind:'ghost', on: closeModal },
-    { label:'Save', kind:'ok', on: async () => {
-      const disc = Number($('#beDisc').value||0);
-      const total = Math.max(0, Number(b.Subtotal||0) - disc);
-      const r = await apiPost('updateBill', {
-        BillID: b.BillID,
-        CustomerName: $('#beName').value.trim(),
-        CustomerMobile: $('#beMob').value.replace(/\D/g,''),
-        PaymentMode: $('#bePay').value,
-        Status: $('#beStatus').value,
-        Discount: disc,
-        Total: total,
-        staffID: state.user.staffID, staffName: state.user.name
-      });
-      if(!r.success){ toast(r.error||'Update failed', 'bad'); return; }
-      toast('Bill updated', 'ok'); closeModal(); pullAll();
+      toast(isEdit?'Updated':'Staff added', 'ok'); pullAll();
     }}
   ]);
 }
@@ -4589,13 +4627,18 @@ function wireExpenses(){
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Save', kind:'ok', on: async () => {
-      const r = await apiPost('addExpense', {
+      const amt = Number($('#exAmt').value||0);
+      if(amt <= 0){ toast('Enter a valid amount', 'bad'); return; }
+      const body = {
         Date: $('#exDate').value, Category: $('#exCat').value,
-        Amount: Number($('#exAmt').value||0), Description: $('#exDesc').value,
+        Amount: amt, Description: $('#exDesc').value,
         StaffID: state.user.staffID, StaffName: state.user.name
-      });
+      };
+      closeModal();
+      toast('Saving…', 'ok');
+      const r = await apiPostBG('addExpense', body);
       if(!r.success){ toast(r.error, 'bad'); return; }
-      toast('Expense saved', 'ok'); closeModal(); pullAll();
+      toast('Expense saved', 'ok'); pullAll();
     }}
   ]));
 }
@@ -5656,7 +5699,15 @@ function openModal(title, bodyHTML, actions){
       b.target = '_blank';
       b.rel = 'noopener';
     }
-    if(a.on) b.addEventListener('click', a.on);
+    // One click, once — a real network request is already in flight (or the
+    // modal has already closed) by the time anyone could click a second
+    // time, so a second click is simply ignored. This is what stops the
+    // same Save/Add/Issue from ever firing twice and creating a duplicate.
+    if(a.on) b.addEventListener('click', () => {
+      if(b.disabled) return;
+      b.disabled = true;
+      Promise.resolve(a.on()).finally(() => { b.disabled = false; });
+    });
     foot.appendChild(b);
   });
   $('#veil').classList.add('on');
@@ -5767,10 +5818,3 @@ function requirePin(reason){
 
 
 </body></html>
-
-
-
-
-
-
-  
