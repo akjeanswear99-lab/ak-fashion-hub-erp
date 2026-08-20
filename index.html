@@ -5333,38 +5333,51 @@ async function confirmConvert(){
   closeModal();
   const ok = await requirePin('Enter PIN to authorize this conversion');
   if(!ok) return;
+  toast('Saving conversion\u2026');
+  // Each conversion is 3 dependent writes (log entry -> drawer denom update
+  // -> matching log entry on the other side). Previously none of these were
+  // checked, so a network/backend failure on any step still showed
+  // "Converted" success while the drawer and online balance silently went
+  // out of sync. Now each step is verified before the next runs, and if one
+  // fails the user is told exactly what did/didn't save so it can be fixed.
   if(dir === 'C2O'){
     // Cash leaves the drawer, same amount is credited to Online balance.
     const r1 = await apiPost('addCashTxn', {
       Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
       Type: 'OUT', Amount: amt, Reference: 'CONVERT-TO-ONLINE',
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Converted to Online' + (desc ? ' — '+desc : '') + ' — Notes: ' + noteText
+      Description: 'Converted to Online' + (desc ? ' \u2014 '+desc : '') + ' \u2014 Notes: ' + noteText
     });
+    if(!r1.success){ toast('Conversion failed \u2014 nothing saved: '+(r1.error||''), 'bad'); return; }
     const delta = {}; DENOMS.forEach(d => { delta[d] = -(denomSnapshot[d]||0); });
-    await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'CONVERT-TO-ONLINE' });
-    await apiPost('addCashTxn', {
+    const r2 = await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'CONVERT-TO-ONLINE' });
+    if(!r2.success){ toast('Drawer update failed \u2014 cash-out was logged but notes were not removed. Check the Cash Drawer: '+(r2.error||''), 'bad'); pullAll(); return; }
+    const r3 = await apiPost('addCashTxn', {
       Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
       Type: 'ONLINE-IN', Amount: amt, Reference: 'CONVERT-FROM-CASH',
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Converted from Cash' + (desc ? ' — '+desc : '')
+      Description: 'Converted from Cash' + (desc ? ' \u2014 '+desc : '')
     });
+    if(!r3.success){ toast('Cash side saved but Online credit failed \u2014 add it manually: '+(r3.error||''), 'bad'); pullAll(); return; }
   }else{
     // Online balance decreases, physical cash (the exact notes tapped) enters the drawer.
-    await apiPost('addCashTxn', {
+    const r1 = await apiPost('addCashTxn', {
       Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
       Type: 'ONLINE-OUT', Amount: amt, Reference: 'CONVERT-TO-CASH',
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Converted to Cash' + (desc ? ' — '+desc : '')
+      Description: 'Converted to Cash' + (desc ? ' \u2014 '+desc : '')
     });
-    await apiPost('addCashTxn', {
+    if(!r1.success){ toast('Conversion failed \u2014 nothing saved: '+(r1.error||''), 'bad'); return; }
+    const r2 = await apiPost('addCashTxn', {
       Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
       Type: 'IN', Amount: amt, Reference: 'CONVERT-FROM-ONLINE',
       StaffID: state.user.staffID, StaffName: state.user.name,
-      Description: 'Converted from Online' + (desc ? ' — '+desc : '') + ' — Notes: ' + noteText
+      Description: 'Converted from Online' + (desc ? ' \u2014 '+desc : '') + ' \u2014 Notes: ' + noteText
     });
+    if(!r2.success){ toast('Online side deducted but cash-in was not logged \u2014 add it manually: '+(r2.error||''), 'bad'); pullAll(); return; }
     const delta = {}; DENOMS.forEach(d => { delta[d] = (denomSnapshot[d]||0); });
-    await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'CONVERT-FROM-ONLINE' });
+    const r3 = await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'CONVERT-FROM-ONLINE' });
+    if(!r3.success){ toast('Cash-in was logged but the drawer note count was not updated. Check the Cash Drawer: '+(r3.error||''), 'bad'); pullAll(); return; }
   }
   toast('Converted: '+fmt(amt), 'ok');
   pullAll();
