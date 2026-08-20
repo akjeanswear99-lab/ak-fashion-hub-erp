@@ -1052,7 +1052,7 @@ tr:hover td{background:#faf9f4;}
         </div>
         <div class="pane">
           <h3>🧾 Udhaar / Due Outstanding <small>Customers who owe money</small></h3>
-          <div class="tbl-wrap"><table id="repDue"><thead><tr><th>Customer</th><th>Mobile</th><th>Due Balance</th><th>Last Purchase</th></tr></thead><tbody></tbody></table></div>
+          <div class="tbl-wrap"><table id="repDue"><thead><tr><th>Customer</th><th>Mobile</th><th>Due Balance</th><th>Last Purchase</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
     </div>
@@ -1272,6 +1272,7 @@ const state = {
   lastBill: null,
   denomOpen: {},
   denomClose: {},
+  denomExisting: {},
   tenderedDenoms: {},         // denomination-wise breakdown of CHANGE to give back in POS (for display)
   cashShortfall: false,       // true when Cash received < total — blocks Complete Sale until resolved
   posReceivedDenoms: {},      // actual notes the customer handed over, entered by staff (not assumed)
@@ -1813,6 +1814,10 @@ function renderDash(){
   $('#s-newCust').textContent = newCust + ' new this month';
 
   // last 14 days sales chart
+  const rangeStart = new Date(); rangeStart.setDate(rangeStart.getDate()-13);
+  const rangeEnd = new Date();
+  const fmtRangeDate = d => d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+  $('#dashSalesRange').textContent = `(${fmtRangeDate(rangeStart)} – ${fmtRangeDate(rangeEnd)})`;
   const labels = [], data = [];
   for(let i=13;i>=0;i--){
     const d = new Date(); d.setDate(d.getDate()-i);
@@ -4831,8 +4836,15 @@ function renderReports(){
   const dueCust = (state.data.customers||[]).filter(c => Number(c.DueBalance||0) > 0)
     .sort((a,b)=>Number(b.DueBalance||0)-Number(a.DueBalance||0));
   $('#repDue tbody').innerHTML = dueCust.map(c =>
-    `<tr><td>${c.Name||'—'}</td><td>${c.Mobile||''}</td><td>${fmt(c.DueBalance)}</td><td>${(c.LastPurchaseDate||'').substr(0,10)}</td></tr>`
-  ).join('') || '<tr><td colspan="4" class="empty">No outstanding dues 🎉</td></tr>';
+    `<tr><td>${c.Name||'—'}</td><td>${c.Mobile||''}</td><td>${fmt(c.DueBalance)}</td><td>${(c.LastPurchaseDate||'').substr(0,10)}</td>
+     <td><button class="btn ok sm" data-a="due" data-id="${c.CustomerID}">💰 Collect</button></td></tr>`
+  ).join('') || '<tr><td colspan="5" class="empty">No outstanding dues 🎉</td></tr>';
+  const repDueBody = $('#repDue tbody');
+  if(repDueBody) repDueBody.onclick = e => {
+    const b = e.target.closest('button[data-a="due"]'); if(!b) return;
+    const c = (state.data.customers||[]).find(x => String(x.CustomerID)===String(b.dataset.id));
+    if(c) openCollectDueForm(c);
+  };
 
   // top selling
   const agg = {};
@@ -5132,6 +5144,7 @@ function printTag(pid, vid){
 /* ============ CASH DRAWER ============ */
 function wireCash(){
   $('#btnSaveOpen').addEventListener('click', saveOpening);
+  $('#btnSaveExisting').addEventListener('click', saveExisting);
   $('#btnSaveClose').addEventListener('click', saveClosing);
   $('#btnCashIn').addEventListener('click', () => cashInOut('IN'));
   $('#btnCashOut').addEventListener('click', () => cashInOut('OUT'));
@@ -5149,6 +5162,10 @@ function buildDenomInputs(){
     const total = DENOMS.reduce((s,d)=> s + (state.denomClose[d]||0)*d, 0);
     $('#closeTotal').textContent = fmt(total);
     updateClosingCalc();
+  });
+  renderDenomGrid($('#denomExisting'), state.denomExisting, () => {
+    const total = DENOMS.reduce((s,d)=> s + (state.denomExisting[d]||0)*d, 0);
+    $('#existingTotal').textContent = fmt(total);
   });
 }
 function updateClosingCalc(){
@@ -5407,6 +5424,31 @@ async function confirmBreakNote(){
   pullAll();
 }
 
+// "Existing Cash In Hand" — a one-time (or as-needed) correction that sets
+// the note-wise drawer balance directly, for cash that was already in the
+// shop before this system started tracking it. Previously this whole form
+// (grid, total, button) existed only in HTML — nothing ever read the note
+// counts or saved them anywhere, so tapping "Set as Current Drawer Balance"
+// silently did nothing.
+async function saveExisting(){
+  const total = DENOMS.reduce((s,d)=>s + (state.denomExisting[d]||0)*d, 0);
+  if(total <= 0){ toast('Tap notes to enter the existing cash amount', 'warn'); return; }
+  const r = await apiPost('setDrawerDenoms', {
+    denoms: state.denomExisting, staffID: state.user.staffID, staffName: state.user.name
+  });
+  if(!r.success){ toast(r.error, 'bad'); return; }
+  // Log it as an INFO entry so it shows in the audit trail without being
+  // counted as an IN/OUT cash movement (it's a starting balance, not income).
+  await apiPost('addCashTxn', {
+    Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+    Type: 'INFO', Amount: 0, Reference: 'EXISTING-CASH-SET',
+    StaffID: state.user.staffID, StaffName: state.user.name,
+    Description: 'Existing cash-in-hand set as current drawer balance: '+fmt(total)
+  });
+  toast('Drawer balance set to '+fmt(total), 'ok');
+  state.denomExisting = {};
+  pullAll();
+}
 async function saveOpening(){
   const total = DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0);
   const r = await apiPost('saveCashSnapshot', {
@@ -5689,12 +5731,19 @@ function wireSettings(){
 
   // Master password
   $('#btnPwChange').addEventListener('click', async () => {
+    const oldPw = $('#pwOld').value;
     const p1 = $('#pwNew').value, p2 = $('#pwNew2').value;
+    if(!oldPw){ toast('Please enter your current password', 'bad'); return; }
     if(p1.length < 6 || p1 !== p2){ toast('Please check the password (min 6 characters and matching)', 'bad'); return; }
+    // Verify the old password is actually correct before changing anything —
+    // reuses the same login check the server already does, so a stolen
+    // session at the Settings screen can't silently take over the account.
+    const verify = await apiPost('login', { mobile: state.user.Mobile || state.user.mobile, password: oldPw });
+    if(!verify.success){ toast('Old password is incorrect', 'bad'); return; }
     const r = await apiPost('updateStaff', {
       staffID: state.user.staffID, Password: p1
     });
-    if(r.success){ toast('Password changed', 'ok'); $('#pwNew').value=''; $('#pwNew2').value=''; }
+    if(r.success){ toast('Password changed', 'ok'); $('#pwOld').value=''; $('#pwNew').value=''; $('#pwNew2').value=''; }
     else toast(r.error, 'bad');
   });
 }
