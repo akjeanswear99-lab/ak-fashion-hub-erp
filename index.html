@@ -944,9 +944,8 @@ tr:hover td{background:#faf9f4;}
       <div class="dhint">tap ₹10 to add a note</div>
     </div>
   </div>
-        <div class="grid-3 mb-12">
+        <div class="grid-2 mb-12">
           <div class="stat"><div class="lab">Closing Total</div><div class="val" id="closeTotal">₹0</div></div>
-          <div class="stat"><div class="lab">Expected</div><div class="val" id="closeExpected">₹0</div></div>
           <div class="stat"><div class="lab">Difference</div><div class="val" id="closeDiff">₹0</div></div>
         </div>
         <button class="btn" id="btnSaveClose">Save Closing</button>
@@ -2618,8 +2617,21 @@ function billStyleBlock(isThermal){
   // made smaller/bigger without touching any code.
   const logoSizes = { small: 100, medium: 150, large: 210, xl: 270 };
   const logoH = logoSizes[state.cfg.billLogoSize] || logoSizes.large;
+  // THE FIX for "extra blank paper after the bill" (Chrome print dialog
+  // was set to a fixed paper size like 72/80mm × 150mm, so it always fed
+  // the full 150mm even for a short 2-item bill): declaring @page with
+  // an explicit width but height:auto tells the browser to size the
+  // printed page to exactly however tall the bill content actually is —
+  // on a real thermal/receipt printer this means it cuts right after
+  // the content instead of feeding a fixed extra length of blank paper
+  // every single time. A4 bills keep a normal fixed page since they're
+  // printed on regular sheet paper, not a continuous roll.
+  const pageCss = isThermal
+    ? `@page{ size: 80mm auto; margin: 0; }`
+    : `@page{ size: A4; margin: 10mm; }`;
   return `
   <style>
+    ${pageCss}
     .akfh-bill{font-family:'Manrope',Arial,sans-serif;color:#111;font-size:${fs}px;line-height:1.45;}
     .akfh-bill .ornament{text-align:center;letter-spacing:6px;font-size:${fs-2}px;color:#555;margin:2px 0 6px;}
     .akfh-bill .biz-logo{text-align:center;margin-bottom:2px;}
@@ -2902,7 +2914,6 @@ function openWaSendModal(b){
   }, 50);
 }
 
-/* ------- customer history modal ------- */
 async function viewCustomerHistory(){
   const m = $('#posCustMob').value.replace(/\D/g,'');
   if(m.length !== 10){ toast('Please enter a valid 10-digit mobile number', 'warn'); return; }
@@ -3007,6 +3018,7 @@ async function viewCustomerHistory(){
     if(b) printBill(b);
   };
 }
+
 
 /* ============ PRODUCT SCAN / DETAILS MODAL ============ */
 function openScanDetails(p, hideCP){
@@ -5152,7 +5164,6 @@ function updateClosingCalc(){
         const out_ = (state.data.cashTransactions||[]).filter(t => dayKey(t.Date)===today && t.Type==='OUT').reduce((s,t)=>s+Number(t.Amount||0), 0);
         return opening + in_ - out_;
       })();
-  $('#closeExpected').textContent = fmt(expected);
   $('#closeDiff').textContent = fmt(closing - expected);
 }
 function renderCash(){
@@ -5749,38 +5760,40 @@ function openCamScanner(onCode, opts){
   setTimeout(async () => {
     try{
       camScanner = new Html5Qrcode('camBox');
-      // A bigger scan window + a request for the camera's highest available
-      // resolution means the tag no longer has to be held right up to the
-      // lens to fill the box — it can be scanned from further away and
-      // still have enough sharp detail to decode. Laptop webcams especially
-      // benefit since their sensors are small; asking for 1080p/4K (browser
-      // picks the closest the hardware actually supports) gives the decoder
-      // far more pixels to work with at distance than the old default.
-      await camScanner.start(
-        { facingMode:'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 300, height: 300 },
-          videoConstraints: {
-            facingMode: 'environment',
-            width: { ideal: 3840, min: 1280 },
-            height: { ideal: 2160, min: 720 },
-            advanced: [{ focusMode: 'continuous' }]
-          }
-        },
-        code => {
-          if(continuous){
-            handleScan(code, onCode);
-          }else{
-            handleScan(code, c => { stopCam(); closeModal(); onCode(c); });
-          }
-        },
-        () => {}
-      );
+      const onDecoded = code => {
+        if(continuous){
+          handleScan(code, onCode);
+        }else{
+          handleScan(code, c => { stopCam(); closeModal(); onCode(c); });
+        }
+      };
+      // Reasonable scan window; ask for a decent resolution but only as a
+      // *preference* (ideal), never a hard floor — an exact/min constraint
+      // the hardware can't meet throws OverconstrainedError and the whole
+      // camera fails to start on that device.
+      const scanConfig = {
+        fps: 10,
+        qrbox: { width: 300, height: 300 },
+        videoConstraints: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      };
+      try{
+        // Preferred path: rear/back camera on phones & tablets.
+        await camScanner.start({ facingMode: { ideal: 'environment' } }, scanConfig, onDecoded, () => {});
+      }catch(envErr){
+        // No 'environment' camera to be found — true on every laptop/desktop
+        // and some tablets. Fall back to whatever camera the browser reports
+        // (usually the built-in front-facing webcam) instead of failing.
+        const cams = await Html5Qrcode.getCameras().catch(()=>[]);
+        if(!cams.length) throw envErr;
+        await camScanner.start(cams[0].id, scanConfig, onDecoded, () => {});
+      }
       // Best-effort: nudge the camera into continuous autofocus if the
-      // device/browser supports it (many laptop webcams do). Silently
-      // ignored where unsupported — torch toggle already handles that
-      // pattern the same way.
+      // device/browser supports it. Silently ignored where unsupported —
+      // this is a nice-to-have, not required for scanning to work.
       try{ await camScanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }); }catch(e){}
     }catch(err){ toast('Camera failed: '+err.message, 'bad'); }
   }, 100);
