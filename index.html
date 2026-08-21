@@ -250,6 +250,7 @@ tr:hover td{background:#faf9f4;}
 
       <div class="group">Money</div>
       <a data-scr="cash">💵 Cash Drawer / Galla</a>
+      <a data-scr="lent">🤝 Udhaar Diya</a>
       <a data-scr="expenses">🧾 Expenses</a>
       <a data-scr="reports">📊 Reports</a>
       <a data-scr="attendance">🕐 Attendance</a>
@@ -960,6 +961,25 @@ tr:hover td{background:#faf9f4;}
       </div>
     </div>
 
+    <!-- ===== UDHAAR DIYA (MONEY LENT) ===== -->
+    <div class="screen" id="scr-lent">
+      <div class="pane">
+        <h3>🤝 Udhaar Diya <small><button class="btn sm" id="btnAddLent">＋ Add Entry</button> <span class="dim">Money you have lent to someone (not a customer's purchase due — that's tracked separately under Customers)</span></small></h3>
+        <div class="grid-3 mb-12">
+          <div class="stat"><div class="lab">Total Given</div><div class="val" id="lentTotalGiven">₹0</div></div>
+          <div class="stat"><div class="lab">Total Repaid</div><div class="val" id="lentTotalRepaid">₹0</div></div>
+          <div class="stat"><div class="lab">Outstanding</div><div class="val" id="lentTotalOutstanding">₹0</div></div>
+        </div>
+        <div class="row mb-12">
+          <input class="inp" id="lentSearch" placeholder="Search by name or mobile...">
+        </div>
+        <div class="tbl-wrap"><table id="lentTbl">
+          <thead><tr><th>Name</th><th>Mobile</th><th>Date Given</th><th>Given</th><th>Repaid</th><th>Balance</th><th>Note</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
     <!-- ===== EXPENSES ===== -->
     <div class="screen" id="scr-expenses">
       <div class="pane">
@@ -1288,7 +1308,7 @@ function emptyStore(){
     products:[], customers:[], suppliers:[], purchases:[], bills:[],
     billItems:[], staff:[], preorders:[], expenses:[], returns:[],
     cashTransactions:[], cashDrawer:[], attendance:[], orders:[],
-    wallet:[], walletTransactions:[], drawerDenoms:{}
+    wallet:[], walletTransactions:[], drawerDenoms:{}, lentMoney:[]
   };
 }
 
@@ -1519,6 +1539,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wirePreorders();
   wireWallet();
   wireCash();
+  wireLent();
   wireAttendance();
   wireSettings();
   wireRepRange();
@@ -1639,7 +1660,7 @@ function applyRolePerms(){
   // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
 }
-const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, expenses:1, settings:1, suppliers:1 };
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, expenses:1, settings:1, suppliers:1 };
 function accessDeniedHTML(){
   return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
        + 'If you are an administrator and still see this message, please verify that the Role column for your account '
@@ -1744,6 +1765,7 @@ function render(scr){
     case 'bills':     renderBills(); break;
     case 'tags':      renderTags(); break;
     case 'cash':      renderCash(); break;
+    case 'lent':      renderLent(); break;
     case 'attendance':renderAttendance(); break;
     case 'expenses':  renderExpenses(); break;
     case 'reports':   renderReports(); break;
@@ -4644,6 +4666,127 @@ function openStaffForm(s){
 }
 
 /* ============ EXPENSES ============ */
+/* ============ UDHAAR DIYA (MONEY LENT TO SOMEONE) ============ */
+// Tracks cash the shop has LENT OUT to someone — separate from a
+// customer's purchase-on-credit balance (Customers > Due). Every add and
+// every repayment is saved to the backend sheet via apiPostBG, exactly
+// like Expenses/Customers, so it syncs to every device that opens the app.
+function wireLent(){
+  $('#btnAddLent').addEventListener('click', () => openLentForm());
+  $('#lentSearch').addEventListener('keyup', renderLent);
+}
+function lentBalance(l){
+  return Math.max(0, Number(l.AmountGiven||0) - Number(l.AmountRepaid||0));
+}
+function renderLent(){
+  const q = ($('#lentSearch')?.value || '').trim().toLowerCase();
+  let rows = (state.data.lentMoney||[]).slice();
+  if(q) rows = rows.filter(l => (l.Name||'').toLowerCase().includes(q) || (l.Mobile||'').includes(q));
+  rows.sort((a,b) => new Date(b.DateGiven||0) - new Date(a.DateGiven||0));
+
+  const tb = $('#lentTbl tbody'); tb.innerHTML='';
+  rows.forEach(l => {
+    const bal = lentBalance(l);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${l.Name||''}</td><td>${l.Mobile||''}</td><td>${(l.DateGiven||'').substr(0,10)}</td>
+      <td>${fmt(l.AmountGiven)}</td><td>${fmt(l.AmountRepaid||0)}</td>
+      <td style="color:${bal>0?'var(--bad)':'var(--ok)'}">${fmt(bal)}</td><td>${l.Note||''}</td>
+      <td>${bal>0 ? `<button class="btn ok sm" data-a="repay" data-id="${l.LentID}">💰 Repayment</button>` : '<span class="dim">Settled ✓</span>'}</td>`;
+    tb.appendChild(tr);
+  });
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="8" class="empty">No udhaar entries yet</td></tr>';
+  tb.onclick = e => {
+    const b = e.target.closest('button[data-a="repay"]'); if(!b) return;
+    const l = (state.data.lentMoney||[]).find(x => String(x.LentID)===String(b.dataset.id));
+    if(l) openCollectLentRepayment(l);
+  };
+
+  // Live totals for the whole list (unaffected by the search filter, so
+  // these always reflect the true shop-wide position).
+  const all = state.data.lentMoney||[];
+  const totalGiven = all.reduce((s,l)=>s+Number(l.AmountGiven||0), 0);
+  const totalRepaid = all.reduce((s,l)=>s+Number(l.AmountRepaid||0), 0);
+  $('#lentTotalGiven').textContent = fmt(totalGiven);
+  $('#lentTotalRepaid').textContent = fmt(totalRepaid);
+  $('#lentTotalOutstanding').textContent = fmt(totalGiven - totalRepaid);
+}
+function openLentForm(){
+  openModal('Add Udhaar Entry', `
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Name *</label><input class="inp" id="lentName"></div>
+      <div class="field"><label>Mobile</label><input class="inp" id="lentMob" type="tel" inputmode="numeric" maxlength="10"></div>
+    </div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Amount Given *</label><input class="inp" id="lentAmt" type="number" min="1"></div>
+      <div class="field"><label>Date Given</label><input class="inp" id="lentDate" type="date" value="${dayKey(nowISO())}"></div>
+    </div>
+    <div class="field"><label>Note (reason, when it should come back, etc.)</label><textarea class="inp" id="lentNote" rows="2"></textarea></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Save', kind:'ok', on: async () => {
+      const name = $('#lentName').value.trim();
+      const amt = Number($('#lentAmt').value||0);
+      if(!name){ toast('Enter a name', 'bad'); return; }
+      if(amt <= 0){ toast('Enter a valid amount', 'bad'); return; }
+      const body = {
+        Name: name, Mobile: $('#lentMob').value.trim(),
+        AmountGiven: amt, AmountRepaid: 0,
+        DateGiven: $('#lentDate').value, Note: $('#lentNote').value.trim(),
+        StaffID: state.user.staffID, StaffName: state.user.name
+      };
+      closeModal();
+      toast('Saving…');
+      const r = await apiPostBG('addLentMoney', body);
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Money leaving the shop as a loan is real cash out of the drawer —
+      // log it in Cash Drawer too so the drawer balance stays correct.
+      apiPostBG('addCashTxn', {
+        Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+        Type: 'OUT', Amount: amt, Reference: 'LENT-'+(r.data?.LentID||name),
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Udhaar given to '+name
+      });
+      toast('Udhaar entry saved', 'ok');
+      pullAll();
+    }}
+  ]);
+}
+function openCollectLentRepayment(l){
+  const bal = lentBalance(l);
+  openModal('Collect Repayment • '+(l.Name||l.Mobile), `
+    <div class="tag-info mb-12">Outstanding: <b>${fmt(bal)}</b></div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Amount Received (₹)</label><input class="inp" id="lrAmt" type="number" min="1" max="${bal}" value="${bal}"></div>
+      <div class="field"><label>Received Via</label>
+        <select class="inp" id="lrMode">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online / UPI</option>
+        </select>
+      </div>
+    </div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Collect', kind:'ok', on: async () => {
+      const amt = Math.min(bal, Math.max(0, Number($('#lrAmt').value||0)));
+      if(amt <= 0){ toast('Enter a valid amount', 'bad'); return; }
+      const mode = $('#lrMode').value;
+      const newRepaid = Number(l.AmountRepaid||0) + amt;
+      closeModal();
+      toast('Saving…');
+      const r = await apiPostBG('updateLentMoney', { lentID: l.LentID, AmountRepaid: newRepaid });
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      apiPostBG('addCashTxn', {
+        Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+        Type: mode==='Cash' ? 'IN' : 'ONLINE-IN', Amount: amt,
+        Reference: 'LENT-REPAY-'+l.LentID,
+        StaffID: state.user.staffID, StaffName: state.user.name,
+        Description: 'Udhaar repayment from '+(l.Name||l.Mobile)+' via '+mode
+      });
+      toast('Repayment recorded: '+fmt(amt), 'ok');
+      pullAll();
+    }}
+  ]);
+}
 function wireExpenses(){
   $('#btnAddExp').addEventListener('click', () => openModal('Add Expense', `
     <div class="grid-3 mb-12">
