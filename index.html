@@ -1,4 +1,6 @@
 
+
+
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://ak-fashion-hub-erp.vercel.app/ -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -251,6 +253,8 @@ tr:hover td{background:#faf9f4;}
       <div class="group">Money</div>
       <a data-scr="cash">💵 Cash Drawer / Galla</a>
       <a data-scr="lent">🤝 Udhaar Diya</a>
+      <a data-scr="emi">💳 EMI</a>
+      <a data-scr="rent">🏠 Rent</a>
       <a data-scr="expenses">🧾 Expenses</a>
       <a data-scr="reports">📊 Reports</a>
       <a data-scr="attendance">🕐 Attendance</a>
@@ -980,6 +984,36 @@ tr:hover td{background:#faf9f4;}
       </div>
     </div>
 
+    <!-- ===== EMI ===== -->
+    <div class="screen" id="scr-emi">
+      <div class="pane">
+        <h3>💳 EMI <small><button class="btn sm" id="btnAddEmi">＋ Nayi EMI</button> <span class="dim">Customer ko installment par diya gaya saaman — interest auto-calculate hota hai</span></small></h3>
+        <div class="grid-3 mb-12">
+          <div class="stat"><div class="lab">Total Principal</div><div class="val" id="emiTotalPrincipal">₹0</div></div>
+          <div class="stat"><div class="lab">Total Collected</div><div class="val" id="emiTotalPaid">₹0</div></div>
+          <div class="stat"><div class="lab">Baaki (Outstanding)</div><div class="val" id="emiTotalOutstanding">₹0</div></div>
+        </div>
+        <div class="row mb-12">
+          <input class="inp" id="emiSearch" placeholder="Search by name or mobile...">
+        </div>
+        <div class="tbl-wrap"><table id="emiTbl">
+          <thead><tr><th></th><th>Customer</th><th>Item</th><th>Principal</th><th>Interest</th><th>Total Payable</th><th>Paid</th><th>Baaki</th><th>Kisten</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ===== RENT ===== -->
+    <div class="screen" id="scr-rent">
+      <div class="pane">
+        <h3>🏠 Rent <small><button class="btn sm" id="btnAddRent">＋ Naya Rent Bill</button></small></h3>
+        <div class="tbl-wrap"><table id="rentTbl">
+          <thead><tr><th>Period</th><th>Amount</th><th>Due Date</th><th>Status</th><th>Cash</th><th>Online</th><th>Paid Date</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
     <!-- ===== EXPENSES ===== -->
     <div class="screen" id="scr-expenses">
       <div class="pane">
@@ -1308,7 +1342,8 @@ function emptyStore(){
     products:[], customers:[], suppliers:[], purchases:[], bills:[],
     billItems:[], staff:[], preorders:[], expenses:[], returns:[],
     cashTransactions:[], cashDrawer:[], attendance:[], orders:[],
-    wallet:[], walletTransactions:[], drawerDenoms:{}, lentMoney:[]
+    wallet:[], walletTransactions:[], drawerDenoms:{}, lentMoney:[],
+    emis:[], emiInstallments:[], rent:[]
   };
 }
 
@@ -1540,6 +1575,8 @@ window.addEventListener('DOMContentLoaded', () => {
   wireWallet();
   wireCash();
   wireLent();
+  wireEmi();
+  wireRent();
   wireAttendance();
   wireSettings();
   wireRepRange();
@@ -1660,7 +1697,7 @@ function applyRolePerms(){
   // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
 }
-const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, expenses:1, settings:1, suppliers:1 };
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, emi:1, rent:1, expenses:1, settings:1, suppliers:1 };
 function accessDeniedHTML(){
   return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
        + 'If you are an administrator and still see this message, please verify that the Role column for your account '
@@ -1766,6 +1803,8 @@ function render(scr){
     case 'tags':      renderTags(); break;
     case 'cash':      renderCash(); break;
     case 'lent':      renderLent(); break;
+    case 'emi':       renderEmi(); break;
+    case 'rent':      renderRent(); break;
     case 'attendance':renderAttendance(); break;
     case 'expenses':  renderExpenses(); break;
     case 'reports':   renderReports(); break;
@@ -4787,6 +4826,282 @@ function openCollectLentRepayment(l){
     }}
   ]);
 }
+/* ============ EMI ============ */
+function wireEmi(){
+  $('#btnAddEmi').addEventListener('click', () => openEmiForm());
+  $('#emiSearch').addEventListener('keyup', renderEmi);
+}
+function emiInstallmentsFor(emiID){
+  return (state.data.emiInstallments||[]).filter(i => String(i.EMIID)===String(emiID))
+    .sort((a,b)=> Number(a.InstallmentNumber||0) - Number(b.InstallmentNumber||0));
+}
+function renderEmi(){
+  const q = ($('#emiSearch')?.value || '').trim().toLowerCase();
+  let rows = (state.data.emis||[]).slice();
+  if(q) rows = rows.filter(e => (e.CustomerName||'').toLowerCase().includes(q) || (e.CustomerMobile||'').includes(q));
+  rows.sort((a,b) => new Date(b.CreatedDate||0) - new Date(a.CreatedDate||0));
+
+  const tb = $('#emiTbl tbody'); tb.innerHTML='';
+  rows.forEach((e, idx) => {
+    const insts = emiInstallmentsFor(e.EMIID);
+    const tr = document.createElement('tr');
+    tr.className = 'emi-row';
+    tr.innerHTML = `<td><button class="btn ghost sm" data-a="tog" data-id="${e.EMIID}">▸</button></td>
+      <td>${e.CustomerName||'—'}<br><span class="dim">${e.CustomerMobile||''}</span></td>
+      <td>${e.ItemDescription||'—'}</td>
+      <td>${fmt(e.PrincipalAmount)}</td>
+      <td>${fmt(e.InterestAmount)} (${e.InterestRate||0}%)</td>
+      <td>${fmt(e.TotalPayable)}</td>
+      <td>${fmt(e.TotalPaid)}</td>
+      <td style="color:${Number(e.TotalRemaining)>0?'var(--bad)':'var(--ok)'}"><b>${fmt(e.TotalRemaining)}</b></td>
+      <td>${e.InstallmentsPaid||0} / ${e.NumberOfInstallments}</td>
+      <td>${e.Status||''}</td>
+      <td>${e.Status==='Active' ? `<button class="btn ok sm" data-a="collect" data-id="${e.EMIID}">💰 Kist Lo</button>` : ''}</td>`;
+    tb.appendChild(tr);
+    const dr = document.createElement('tr');
+    dr.className = 'emi-detail'; dr.style.display='none';
+    dr.innerHTML = `<td colspan="11"><table class="mini-tbl" style="width:100%">
+      <thead><tr><th>#</th><th>Due Date</th><th>Amount</th><th>Paid</th><th>Status</th><th>Mode</th></tr></thead>
+      <tbody>${insts.map(i => `<tr><td>#${i.InstallmentNumber}</td><td>${(i.DueDate||'').substr(0,10)}</td><td>${fmt(i.Amount)}</td><td>${fmt(i.PaidAmount)}</td><td>${i.Status||''}</td><td>${i.PaymentMode||'—'}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Koi installment nahi</td></tr>'}</tbody>
+    </table></td>`;
+    tb.appendChild(dr);
+  });
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="11" class="empty">Koi EMI plan nahi hai</td></tr>';
+
+  tb.onclick = e => {
+    const togBtn = e.target.closest('button[data-a="tog"]');
+    if(togBtn){
+      const row = togBtn.closest('tr');
+      const detail = row.nextElementSibling;
+      if(detail && detail.classList.contains('emi-detail')){
+        const on = detail.style.display !== 'none';
+        detail.style.display = on ? 'none' : '';
+        togBtn.textContent = on ? '▸' : '▾';
+      }
+      return;
+    }
+    const colBtn = e.target.closest('button[data-a="collect"]'); if(!colBtn) return;
+    const emi = (state.data.emis||[]).find(x => String(x.EMIID)===String(colBtn.dataset.id));
+    if(emi) openCollectEmiPayment(emi);
+  };
+
+  const all = state.data.emis||[];
+  $('#emiTotalPrincipal').textContent = fmt(all.reduce((s,e)=>s+Number(e.PrincipalAmount||0),0));
+  $('#emiTotalPaid').textContent = fmt(all.reduce((s,e)=>s+Number(e.TotalPaid||0),0));
+  $('#emiTotalOutstanding').textContent = fmt(all.reduce((s,e)=>s+Number(e.TotalRemaining||0),0));
+}
+function openEmiForm(){
+  openModal('Nayi EMI Plan', `
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Customer Mobile</label><input class="inp" id="emiMob" type="tel" inputmode="numeric" maxlength="10"></div>
+      <div class="field"><label>Customer Name</label><input class="inp" id="emiName"></div>
+    </div>
+    <div class="field mb-12"><label>Item / Description</label><input class="inp" id="emiItem"></div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Principal Amount *</label><input class="inp" id="emiPrincipal" type="number" min="1"></div>
+      <div class="field"><label>Interest Rate (% per saal)</label><input class="inp" id="emiRate" type="number" min="0" value="0"></div>
+    </div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Number of Installments *</label><input class="inp" id="emiMonths" type="number" min="1" value="3"></div>
+      <div class="field"><label>Start Date</label><input class="inp" id="emiStart" type="date" value="${dayKey(nowISO())}"></div>
+    </div>
+    <div class="dim" id="emiPreview" style="margin-top:-4px;"></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'EMI Plan Banao', kind:'ok', on: async () => {
+      const principal = Number($('#emiPrincipal').value||0);
+      const months = Number($('#emiMonths').value||0);
+      if(principal<=0){ toast('Principal amount daalo', 'bad'); return; }
+      if(months<=0){ toast('Installments ki sankhya daalo', 'bad'); return; }
+      const body = {
+        CustomerMobile: $('#emiMob').value.trim(), CustomerName: $('#emiName').value.trim(),
+        ItemDescription: $('#emiItem').value.trim(), PrincipalAmount: principal,
+        InterestRate: Number($('#emiRate').value||0), NumberOfInstallments: months,
+        StartDate: $('#emiStart').value,
+        StaffID: state.user.staffID, StaffName: state.user.name
+      };
+      closeModal();
+      toast('Saving…');
+      const r = await apiPostBG('addEmi', body);
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      toast('EMI plan ban gaya', 'ok');
+      pullAll();
+    }}
+  ]);
+  ['emiPrincipal','emiRate','emiMonths'].forEach(id => $('#'+id).addEventListener('input', () => {
+    const p = Number($('#emiPrincipal').value||0), r = Number($('#emiRate').value||0), m = Number($('#emiMonths').value||1);
+    const interest = p * (r/100) * (m/12);
+    const total = p + interest;
+    $('#emiPreview').textContent = 'Interest: '+fmt(interest)+' | Total payable: '+fmt(total)+' | Har kist ~ '+fmt(total/(m||1));
+  }));
+}
+function openCollectEmiPayment(emi){
+  const insts = emiInstallmentsFor(emi.EMIID);
+  const next = insts.find(i => i.Status!=='Paid');
+  const due = next ? (Number(next.Amount) - Number(next.PaidAmount||0)) : 0;
+  const denomState = {};
+  openModal('EMI Kist Collect Karo • '+(emi.CustomerName||emi.CustomerMobile), `
+    <div class="tag-info mb-12">Kist #${next?next.InstallmentNumber:'—'} | Due: <b>${fmt(due)}</b></div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Amount Collect</label><input class="inp" id="emiPayAmt" type="number" min="1" value="${due}"></div>
+      <div class="field"><label>Payment Mode</label>
+        <select class="inp" id="emiPayMode">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online / UPI</option>
+          <option value="Mixed">Mixed</option>
+        </select>
+      </div>
+    </div>
+    <div id="emiPayOnlineWrap" class="field mb-12" style="display:none"><label>Online Amount</label><input class="inp" id="emiPayOnlineAmt" type="number" min="0"></div>
+    <div id="emiPayDenomWrap"><label class="dim">Cash denominations:</label><div class="denom-grid" id="emiPayDenom"></div></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Collect', kind:'ok', on: async () => {
+      const amt = Number($('#emiPayAmt').value||0);
+      if(amt<=0){ toast('Amount daalo', 'bad'); return; }
+      const mode = $('#emiPayMode').value;
+      const cashAmt = mode==='Online' ? 0 : (mode==='Mixed' ? DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0) : amt);
+      const onlineAmt = mode==='Cash' ? 0 : (mode==='Mixed' ? Number($('#emiPayOnlineAmt').value||0) : (mode==='Online'?amt:0));
+      const payload = {
+        EMIID: emi.EMIID, Amount: amt, PaymentMode: mode,
+        CashAmount: cashAmt, OnlineAmount: onlineAmt,
+        StaffID: state.user.staffID, StaffName: state.user.name
+      };
+      if(next) payload.InstallmentID = next.InstallmentID;
+      if(cashAmt>0) payload.denoms = denomState;
+      closeModal();
+      toast('Saving…');
+      const r = await apiPostBG('payEmiInstallment', payload);
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      if(cashAmt>0){
+        const delta = {}; DENOMS.forEach(d => { if(denomState[d]) delta[d] = Math.abs(denomState[d]); });
+        apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EMI-'+emi.EMIID });
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'IN', Amount: cashAmt, Reference: 'EMI-'+emi.EMIID,
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'EMI kist collected from '+(emi.CustomerName||emi.CustomerMobile)
+        });
+      }
+      toast('Kist collect ho gayi: '+fmt(amt), 'ok');
+      pullAll();
+    }}
+  ]);
+  renderDenomGrid($('#emiPayDenom'), denomState, () => {});
+  $('#emiPayMode').addEventListener('change', () => {
+    const mode = $('#emiPayMode').value;
+    $('#emiPayDenomWrap').style.display = mode==='Online' ? 'none' : '';
+    $('#emiPayOnlineWrap').style.display = mode==='Cash' ? 'none' : '';
+  });
+}
+
+/* ============ RENT ============ */
+function wireRent(){
+  $('#btnAddRent').addEventListener('click', () => openAddRentForm());
+}
+function renderRent(){
+  let rows = (state.data.rent||[]).slice();
+  rows.sort((a,b) => new Date(b.CreatedDate||0) - new Date(a.CreatedDate||0));
+  const tb = $('#rentTbl tbody'); tb.innerHTML='';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.Period||''}</td><td>${fmt(r.Amount)}</td><td>${(r.DueDate||'').substr(0,10)}</td>
+      <td>${r.Status||''}</td><td>${fmt(r.CashAmount||0)}</td><td>${fmt(r.OnlineAmount||0)}</td>
+      <td>${(r.PaidDate||'').substr(0,10)}</td>
+      <td>${r.Status!=='Paid' ? `<button class="btn ok sm" data-a="pay" data-id="${r.RentID}">Pay Karo</button>` : '<span class="dim">Paid ✓</span>'}</td>`;
+    tb.appendChild(tr);
+  });
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="8" class="empty">Koi rent bill nahi hai</td></tr>';
+  tb.onclick = e => {
+    const b = e.target.closest('button[data-a="pay"]'); if(!b) return;
+    const r = (state.data.rent||[]).find(x => String(x.RentID)===String(b.dataset.id));
+    if(r) openPayRentForm(r);
+  };
+}
+function openAddRentForm(){
+  const today = new Date();
+  const monthLabel = today.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  openModal('Naya Rent Bill', `
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Period</label><input class="inp" id="rentPeriod" value="${monthLabel}"></div>
+      <div class="field"><label>Amount *</label><input class="inp" id="rentAmt" type="number" min="1"></div>
+    </div>
+    <div class="field mb-12"><label>Due Date</label><input class="inp" id="rentDue" type="date" value="${dayKey(nowISO())}"></div>
+    <div class="field"><label>Notes</label><textarea class="inp" id="rentNotes" rows="2"></textarea></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Bill Banao', kind:'ok', on: async () => {
+      const amt = Number($('#rentAmt').value||0);
+      if(amt<=0){ toast('Amount daalo', 'bad'); return; }
+      closeModal();
+      toast('Saving…');
+      const r = await apiPostBG('addRent', {
+        Period: $('#rentPeriod').value.trim(), Amount: amt, DueDate: $('#rentDue').value,
+        Notes: $('#rentNotes').value.trim(), StaffID: state.user.staffID, StaffName: state.user.name
+      });
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      toast('Rent bill ban gaya', 'ok');
+      pullAll();
+    }}
+  ]);
+}
+function openPayRentForm(r){
+  const pending = Number(r.Amount||0) - Number(r.CashAmount||0) - Number(r.OnlineAmount||0);
+  const denomState = {};
+  openModal('Rent Pay Karo • '+(r.Period||''), `
+    <div class="tag-info mb-12">Pending: <b>${fmt(pending)}</b></div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Amount</label><input class="inp" id="rentPayAmt" type="number" min="1" value="${pending}"></div>
+      <div class="field"><label>Payment Mode</label>
+        <select class="inp" id="rentPayMode">
+          <option value="Cash">Cash</option>
+          <option value="Online">Online / UPI</option>
+          <option value="Mixed">Mixed</option>
+        </select>
+      </div>
+    </div>
+    <div id="rentPayOnlineWrap" class="field mb-12" style="display:none"><label>Online Amount</label><input class="inp" id="rentPayOnlineAmt" type="number" min="0"></div>
+    <div id="rentPayDenomWrap"><label class="dim">Notes diye (drawer se minus honge):</label><div class="denom-grid" id="rentPayDenom"></div></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Pay Karo', kind:'ok', on: async () => {
+      const amt = Number($('#rentPayAmt').value||0);
+      if(amt<=0){ toast('Amount daalo', 'bad'); return; }
+      const mode = $('#rentPayMode').value;
+      const cashAmt = mode==='Online' ? 0 : (mode==='Mixed' ? DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0) : amt);
+      const onlineAmt = mode==='Cash' ? 0 : (mode==='Mixed' ? Number($('#rentPayOnlineAmt').value||0) : (mode==='Online'?amt:0));
+      const payload = {
+        RentID: r.RentID, Amount: amt, PaymentMode: mode,
+        CashAmount: cashAmt, OnlineAmount: onlineAmt,
+        StaffID: state.user.staffID, StaffName: state.user.name
+      };
+      if(cashAmt>0) payload.denoms = denomState;
+      closeModal();
+      toast('Saving…');
+      const res = await apiPostBG('payRent', payload);
+      if(!res.success){ toast(res.error||'Save failed', 'bad'); return; }
+      if(cashAmt>0){
+        const delta = {}; DENOMS.forEach(d => { if(denomState[d]) delta[d] = -Math.abs(denomState[d]); });
+        apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RENT-'+r.RentID });
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'OUT', Amount: cashAmt, Reference: 'RENT-'+r.RentID,
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Rent paid for '+(r.Period||'')
+        });
+      }
+      toast('Rent pay ho gaya: '+fmt(amt), 'ok');
+      pullAll();
+    }}
+  ]);
+  renderDenomGrid($('#rentPayDenom'), denomState, () => {});
+  $('#rentPayMode').addEventListener('change', () => {
+    const mode = $('#rentPayMode').value;
+    $('#rentPayDenomWrap').style.display = mode==='Online' ? 'none' : '';
+    $('#rentPayOnlineWrap').style.display = mode==='Cash' ? 'none' : '';
+  });
+}
+
 function wireExpenses(){
   $('#btnAddExp').addEventListener('click', () => openModal('Add Expense', `
     <div class="grid-3 mb-12">
