@@ -255,6 +255,7 @@ tr:hover td{background:#faf9f4;}
       <a data-scr="lent">🤝 Udhaar Diya</a>
       <a data-scr="emi">💳 EMI</a>
       <a data-scr="rent">🏠 Rent</a>
+      <a data-scr="savings">💰 Savings</a>
       <a data-scr="expenses">🧾 Expenses</a>
       <a data-scr="reports">📊 Reports</a>
       <a data-scr="attendance">🕐 Attendance</a>
@@ -857,6 +858,7 @@ tr:hover td{background:#faf9f4;}
           <button class="btn bad sm" id="btnCashOut">－ Cash Out</button>
           <button class="btn ghost sm" id="btnConvert">🔁 Convert Cash ⇄ Online</button>
           <button class="btn ghost sm" id="btnBreakNote">💱 Break a Note (change notes)</button>
+          <button class="btn ghost sm" id="btnSettlement">🔒 Settlement (set note counts)</button>
         </div>
       </div>
 
@@ -1009,6 +1011,22 @@ tr:hover td{background:#faf9f4;}
         <h3>🏠 Rent <small><button class="btn sm" id="btnAddRent">＋ Naya Rent Bill</button></small></h3>
         <div class="tbl-wrap"><table id="rentTbl">
           <thead><tr><th>Period</th><th>Amount</th><th>Due Date</th><th>Status</th><th>Cash</th><th>Online</th><th>Paid Date</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- ===== SAVINGS ===== -->
+    <div class="screen" id="scr-savings">
+      <div class="pane">
+        <h3>💰 Savings <small><button class="btn sm" id="btnAddSaving">＋ Savings Rakho</button></small></h3>
+        <div class="grid-3 mb-12">
+          <div class="stat"><div class="lab">Total Savings</div><div class="val" id="savTotal">₹0</div></div>
+          <div class="stat"><div class="lab">Cash (notes)</div><div class="val" id="savCashTotal">₹0</div></div>
+          <div class="stat"><div class="lab">Online</div><div class="val" id="savOnlineTotal">₹0</div></div>
+        </div>
+        <div class="tbl-wrap"><table id="savingsTbl">
+          <thead><tr><th>Date</th><th>Amount</th><th>Mode</th><th>Notes</th><th>Note / Reason</th><th>By</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1343,7 +1361,7 @@ function emptyStore(){
     billItems:[], staff:[], preorders:[], expenses:[], returns:[],
     cashTransactions:[], cashDrawer:[], attendance:[], orders:[],
     wallet:[], walletTransactions:[], drawerDenoms:{}, lentMoney:[],
-    emis:[], emiInstallments:[], rent:[]
+    emis:[], emiInstallments:[], rent:[], savings:[]
   };
 }
 
@@ -1577,6 +1595,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireLent();
   wireEmi();
   wireRent();
+  wireSavings();
   wireAttendance();
   wireSettings();
   wireRepRange();
@@ -1697,7 +1716,7 @@ function applyRolePerms(){
   // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
 }
-const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, emi:1, rent:1, expenses:1, settings:1, suppliers:1 };
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, emi:1, rent:1, savings:1, expenses:1, settings:1, suppliers:1 };
 function accessDeniedHTML(){
   return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
        + 'If you are an administrator and still see this message, please verify that the Role column for your account '
@@ -1805,6 +1824,7 @@ function render(scr){
     case 'lent':      renderLent(); break;
     case 'emi':       renderEmi(); break;
     case 'rent':      renderRent(); break;
+    case 'savings':   renderSavings(); break;
     case 'attendance':renderAttendance(); break;
     case 'expenses':  renderExpenses(); break;
     case 'reports':   renderReports(); break;
@@ -3580,7 +3600,13 @@ function wireInventory(){
   }));
 }
 function renderInventory(){
-  const term = ($('#invSearch').value||'').toLowerCase();
+  const raw = ($('#invSearch').value||'').trim();
+  const term = raw.toLowerCase();
+  // "S28" / "s 30" / bare "28" → size-and-above search: shows this size
+  // and every larger numeric size too (useful when the exact size is out
+  // of stock and staff wants to see what bigger sizes are available).
+  const sizeThresholdMatch = term.match(/^s?\s*(\d{1,3})$/i);
+  const minSize = sizeThresholdMatch ? parseInt(sizeThresholdMatch[1], 10) : null;
   const isAdmin = isAdminUser();
   // Cost Price is intentionally NOT shown on the Inventory screen (it still
   // shows everywhere else — Products catalog, POS scan details, etc.)
@@ -3590,12 +3616,18 @@ function renderInventory(){
   let totalU = 0;
   (state.data.products||[]).forEach(p => {
     (p.variants||[]).forEach(v => {
-      const line = [p.UID, p.Name, v.Color, v.Size, v.BatchNumber||p.BatchNumber||'', v.Location||''].join(' ').toLowerCase();
-      if(term && !line.includes(term)) return;
+      if(minSize !== null){
+        const sizeNum = parseInt(String(v.Size||'').replace(/[^\d]/g,''), 10);
+        if(isNaN(sizeNum) || sizeNum < minSize) return;
+      } else if(term){
+        const line = [p.UID, p.Name, v.Color, v.Size, v.BatchNumber||p.BatchNumber||'', v.Location||''].join(' ').toLowerCase();
+        if(!line.includes(term)) return;
+      }
       totalU += Number(v.Stock||0);
       rows.push({ p, v });
     });
   });
+  if(minSize !== null) rows.sort((a,b) => parseInt(String(a.v.Size).replace(/[^\d]/g,''),10) - parseInt(String(b.v.Size).replace(/[^\d]/g,''),10));
   $('#invTotalUnits').textContent = totalU;
   const tb = $('#invTbl tbody'); tb.innerHTML='';
   rows.forEach(({p,v}) => {
@@ -4750,6 +4782,7 @@ function renderLent(){
   $('#lentTotalOutstanding').textContent = fmt(totalGiven - totalRepaid);
 }
 function openLentForm(){
+  const denomState = {};
   openModal('Add Udhaar Entry', `
     <div class="grid-2 mb-12">
       <div class="field"><label>Name *</label><input class="inp" id="lentName"></div>
@@ -4759,7 +4792,20 @@ function openLentForm(){
       <div class="field"><label>Amount Given *</label><input class="inp" id="lentAmt" type="number" min="1"></div>
       <div class="field"><label>Date Given</label><input class="inp" id="lentDate" type="date" value="${dayKey(nowISO())}"></div>
     </div>
-    <div class="field"><label>Note (reason, when it should come back, etc.)</label><textarea class="inp" id="lentNote" rows="2"></textarea></div>
+    <div class="field mb-12"><label>Kaise diya — Payment Mode</label>
+      <select class="inp" id="lentMode">
+        <option value="Cash">Cash (galle se)</option>
+        <option value="Online">Online</option>
+        <option value="Mixed">Mixed (Cash + Online)</option>
+      </select>
+    </div>
+    <div id="lentOnlineWrap" class="field mb-12" style="display:none"><label>Online Amount</label><input class="inp" id="lentOnlineAmt" type="number" min="0"></div>
+    <div id="lentDenomWrap">
+      <label class="dim">Kaunse note diye:</label>
+      <div class="denom-grid" id="lentDenomGrid"></div>
+      <div class="stat mt-8"><div class="lab">Cash Amount (notes se)</div><div class="val" id="lentDenomTotal">₹0</div></div>
+    </div>
+    <div class="field mt-8"><label>Note (reason, when it should come back, etc.)</label><textarea class="inp" id="lentNote" rows="2"></textarea></div>
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Save', kind:'ok', on: async () => {
@@ -4767,28 +4813,67 @@ function openLentForm(){
       const amt = Number($('#lentAmt').value||0);
       if(!name){ toast('Enter a name', 'bad'); return; }
       if(amt <= 0){ toast('Enter a valid amount', 'bad'); return; }
+      const mode = $('#lentMode').value;
+      const denomsSnapshot = { ...denomState };
+      const cashAmt = mode==='Online' ? 0 : (mode==='Mixed' ? DENOMS.reduce((s,d)=>s+(denomsSnapshot[d]||0)*d,0) : amt);
+      const onlineAmt = mode==='Cash' ? 0 : (mode==='Mixed' ? Number($('#lentOnlineAmt').value||0) : (mode==='Online'?amt:0));
+      if(mode==='Cash' && cashAmt!==amt){ toast('Notes ka total ('+fmt(cashAmt)+') Amount Given ('+fmt(amt)+') se match nahi kar raha', 'bad'); return; }
+      if(mode==='Mixed' && (cashAmt+onlineAmt)!==amt){ toast('Cash + Online ('+fmt(cashAmt+onlineAmt)+') Amount Given ('+fmt(amt)+') se match nahi kar raha', 'bad'); return; }
       const body = {
         Name: name, Mobile: $('#lentMob').value.trim(),
         AmountGiven: amt, AmountRepaid: 0,
         DateGiven: $('#lentDate').value, Note: $('#lentNote').value.trim(),
+        PaymentMode: mode, CashAmount: cashAmt, OnlineAmount: onlineAmt,
         StaffID: state.user.staffID, StaffName: state.user.name
       };
       closeModal();
       toast('Saving…');
       const r = await apiPostBG('addLentMoney', body);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Optimistic local update — show it immediately even before the next
+      // background sync confirms it, so the entry never feels like it
+      // "disappeared". The returned object's exact shape can vary by
+      // backend version, so we fall back to what we just sent if the
+      // server didn't echo a full row back.
+      const savedRow = (r.data && (r.data.lent || r.data.lentMoney || r.data)) || {};
+      const localRow = Object.assign({ LentID: savedRow.LentID || ('TEMP-'+Date.now()) }, body, savedRow);
+      state.data.lentMoney = state.data.lentMoney || [];
+      state.data.lentMoney.push(localRow);
+      render(currentScreen());
       // Money leaving the shop as a loan is real cash out of the drawer —
-      // log it in Cash Drawer too so the drawer balance stays correct.
-      apiPostBG('addCashTxn', {
-        Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
-        Type: 'OUT', Amount: amt, Reference: 'LENT-'+(r.data?.LentID||name),
-        StaffID: state.user.staffID, StaffName: state.user.name,
-        Description: 'Udhaar given to '+name
-      });
+      // deduct the exact notes given from the drawer count, and log it in
+      // Cash Drawer too so the drawer balance stays correct.
+      if(cashAmt>0){
+        const delta = {}; DENOMS.forEach(d => { if(denomsSnapshot[d]) delta[d] = -Math.abs(denomsSnapshot[d]); });
+        apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'LENT-'+(localRow.LentID||name) });
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'OUT', Amount: cashAmt, Reference: 'LENT-'+(localRow.LentID||name),
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Udhaar given to '+name+' — Notes: '+denomText(denomsSnapshot)
+        });
+      }
+      if(onlineAmt>0){
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'ONLINE-OUT', Amount: onlineAmt, Reference: 'LENT-'+(localRow.LentID||name),
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Udhaar given to '+name+' (Online)'
+        });
+      }
       toast('Udhaar entry saved', 'ok');
-      pullAll();
+      pullAll(true);
     }}
   ]);
+  renderDenomGrid($('#lentDenomGrid'), denomState, () => {
+    const total = DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0);
+    $('#lentDenomTotal').textContent = fmt(total);
+  });
+  $('#lentMode').addEventListener('change', () => {
+    const mode = $('#lentMode').value;
+    $('#lentDenomWrap').style.display = mode==='Online' ? 'none' : '';
+    $('#lentOnlineWrap').style.display = mode==='Cash' ? 'none' : '';
+  });
 }
 function openCollectLentRepayment(l){
   const bal = lentBalance(l);
@@ -4814,6 +4899,10 @@ function openCollectLentRepayment(l){
       toast('Saving…');
       const r = await apiPostBG('updateLentMoney', { lentID: l.LentID, AmountRepaid: newRepaid });
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Optimistic local update — reflect the new repaid amount immediately.
+      const localRow = state.data.lentMoney.find(x => String(x.LentID)===String(l.LentID));
+      if(localRow) localRow.AmountRepaid = newRepaid;
+      render(currentScreen());
       apiPostBG('addCashTxn', {
         Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
         Type: mode==='Cash' ? 'IN' : 'ONLINE-IN', Amount: amt,
@@ -4822,11 +4911,27 @@ function openCollectLentRepayment(l){
         Description: 'Udhaar repayment from '+(l.Name||l.Mobile)+' via '+mode
       });
       toast('Repayment recorded: '+fmt(amt), 'ok');
-      pullAll();
+      pullAll(true);
     }}
   ]);
 }
 /* ============ EMI ============ */
+function computeEmiScheduleLocal(principal, rateAnnual, months, startDate){
+  const interest = Math.round(principal * (rateAnnual/100) * (months/12) * 100) / 100;
+  const totalPayable = Math.round((principal + interest) * 100) / 100;
+  const base = Math.floor((totalPayable / months) * 100) / 100;
+  const schedule = [];
+  const start = startDate ? new Date(startDate) : new Date();
+  let running = 0;
+  for(let i=1; i<=months; i++){
+    const due = new Date(start);
+    due.setMonth(due.getMonth()+i);
+    const amt = (i===months) ? Math.round((totalPayable-running)*100)/100 : base;
+    running += amt;
+    schedule.push({ n:i, dueDate: due.toISOString(), amount: amt });
+  }
+  return { interest, totalPayable, installmentAmt: base, schedule };
+}
 function wireEmi(){
   $('#btnAddEmi').addEventListener('click', () => openEmiForm());
   $('#emiSearch').addEventListener('keyup', renderEmi);
@@ -4924,8 +5029,26 @@ function openEmiForm(){
       toast('Saving…');
       const r = await apiPostBG('addEmi', body);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Optimistic local update — build the plan + schedule locally (same
+      // math as the backend) so it's visible right away even before sync.
+      const savedEmi = (r.data && (r.data.emi || r.data)) || {};
+      const localCalc = computeEmiScheduleLocal(principal, Number($('#emiRate').value||0), months, body.StartDate);
+      const eid = savedEmi.EMIID || ('TEMP-'+Date.now());
+      const localEmi = Object.assign({
+        EMIID: eid, TotalPayable: localCalc.totalPayable, InterestAmount: localCalc.interest,
+        TotalPaid: 0, TotalRemaining: localCalc.totalPayable, InstallmentsPaid: 0,
+        InstallmentsRemaining: months, Status: 'Active'
+      }, body, savedEmi);
+      state.data.emis = state.data.emis || [];
+      state.data.emis.push(localEmi);
+      state.data.emiInstallments = state.data.emiInstallments || [];
+      (savedEmi.installments || localCalc.schedule.map(s => ({
+        InstallmentID: 'TEMP-'+eid+'-'+s.n, EMIID: eid, InstallmentNumber: s.n,
+        DueDate: s.dueDate, Amount: s.amount, PaidAmount: 0, Status: 'Pending'
+      }))).forEach(i => state.data.emiInstallments.push(i));
+      render(currentScreen());
       toast('EMI plan ban gaya', 'ok');
-      pullAll();
+      pullAll(true);
     }}
   ]);
   ['emiPrincipal','emiRate','emiMonths'].forEach(id => $('#'+id).addEventListener('input', () => {
@@ -4973,6 +5096,27 @@ function openCollectEmiPayment(emi){
       toast('Saving…');
       const r = await apiPostBG('payEmiInstallment', payload);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Optimistic local update
+      if(next){
+        const localInst = state.data.emiInstallments.find(i => String(i.InstallmentID)===String(next.InstallmentID));
+        if(localInst){
+          localInst.PaidAmount = Number(localInst.PaidAmount||0) + amt;
+          localInst.Status = localInst.PaidAmount >= Number(localInst.Amount) ? 'Paid' : 'Partial';
+          localInst.PaymentMode = mode;
+        }
+      }
+      const localEmi = state.data.emis.find(e => String(e.EMIID)===String(emi.EMIID));
+      if(localEmi){
+        localEmi.TotalPaid = Number(localEmi.TotalPaid||0) + amt;
+        localEmi.TotalRemaining = Math.max(0, Number(localEmi.TotalPayable||0) - localEmi.TotalPaid);
+        if(next && next.Status !== 'Paid' && localEmi._justPaidThis !== next.InstallmentID){
+          const nowPaidCount = emiInstallmentsFor(emi.EMIID).filter(i=>i.Status==='Paid').length;
+          localEmi.InstallmentsPaid = nowPaidCount;
+          localEmi.InstallmentsRemaining = Number(localEmi.NumberOfInstallments||0) - nowPaidCount;
+        }
+        if(localEmi.TotalRemaining <= 0) localEmi.Status = 'Completed';
+      }
+      render(currentScreen());
       if(cashAmt>0){
         const delta = {}; DENOMS.forEach(d => { if(denomState[d]) delta[d] = Math.abs(denomState[d]); });
         apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EMI-'+emi.EMIID });
@@ -4984,7 +5128,7 @@ function openCollectEmiPayment(emi){
         });
       }
       toast('Kist collect ho gayi: '+fmt(amt), 'ok');
-      pullAll();
+      pullAll(true);
     }}
   ]);
   renderDenomGrid($('#emiPayDenom'), denomState, () => {});
@@ -5035,13 +5179,19 @@ function openAddRentForm(){
       if(amt<=0){ toast('Amount daalo', 'bad'); return; }
       closeModal();
       toast('Saving…');
-      const r = await apiPostBG('addRent', {
+      const body = {
         Period: $('#rentPeriod').value.trim(), Amount: amt, DueDate: $('#rentDue').value,
         Notes: $('#rentNotes').value.trim(), StaffID: state.user.staffID, StaffName: state.user.name
-      });
+      };
+      const r = await apiPostBG('addRent', body);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      const savedRent = (r.data && (r.data.rent || r.data)) || {};
+      const localRent = Object.assign({ RentID: savedRent.RentID || ('TEMP-'+Date.now()), Status:'Pending', CashAmount:0, OnlineAmount:0 }, body, savedRent);
+      state.data.rent = state.data.rent || [];
+      state.data.rent.push(localRent);
+      render(currentScreen());
       toast('Rent bill ban gaya', 'ok');
-      pullAll();
+      pullAll(true);
     }}
   ]);
 }
@@ -5080,6 +5230,15 @@ function openPayRentForm(r){
       toast('Saving…');
       const res = await apiPostBG('payRent', payload);
       if(!res.success){ toast(res.error||'Save failed', 'bad'); return; }
+      // Optimistic local update
+      const localRent = state.data.rent.find(x => String(x.RentID)===String(r.RentID));
+      if(localRent){
+        localRent.CashAmount = Number(localRent.CashAmount||0) + cashAmt;
+        localRent.OnlineAmount = Number(localRent.OnlineAmount||0) + onlineAmt;
+        localRent.Status = (localRent.CashAmount + localRent.OnlineAmount) >= Number(localRent.Amount) ? 'Paid' : 'Partial';
+        localRent.PaymentMode = mode;
+      }
+      render(currentScreen());
       if(cashAmt>0){
         const delta = {}; DENOMS.forEach(d => { if(denomState[d]) delta[d] = -Math.abs(denomState[d]); });
         apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RENT-'+r.RentID });
@@ -5091,7 +5250,7 @@ function openPayRentForm(r){
         });
       }
       toast('Rent pay ho gaya: '+fmt(amt), 'ok');
-      pullAll();
+      pullAll(true);
     }}
   ]);
   renderDenomGrid($('#rentPayDenom'), denomState, () => {});
@@ -5099,6 +5258,116 @@ function openPayRentForm(r){
     const mode = $('#rentPayMode').value;
     $('#rentPayDenomWrap').style.display = mode==='Online' ? 'none' : '';
     $('#rentPayOnlineWrap').style.display = mode==='Cash' ? 'none' : '';
+  });
+}
+
+/* ============ SAVINGS ============ */
+// Manual, staff-entered savings — no auto-calculation from bill profit.
+// Cash savings physically leave the drawer (denoms deducted, just like
+// Rent) so the drawer count stays accurate; Online savings just logs the
+// amount. Nothing here touches billing/profit math at all.
+function wireSavings(){
+  $('#btnAddSaving').addEventListener('click', () => openAddSavingsForm());
+}
+function renderSavings(){
+  let rows = (state.data.savings||[]).slice();
+  rows.sort((a,b) => new Date(b.CreatedDate||0) - new Date(a.CreatedDate||0));
+  const tb = $('#savingsTbl tbody'); tb.innerHTML='';
+  rows.forEach(s => {
+    const notesTxt = s.Mode==='Online' ? '—' : (s.DenomText || denomText(safeParseDenoms(s.Denoms)));
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${(s.Date||s.CreatedDate||'').substr(0,10)}</td><td>${fmt(s.Amount)}</td>
+      <td>${s.Mode||''}</td><td>${notesTxt}</td><td>${s.Note||'—'}</td><td>${s.StaffName||''}</td>`;
+    tb.appendChild(tr);
+  });
+  if(!rows.length) tb.innerHTML = '<tr><td colspan="6" class="empty">Koi savings entry nahi hai</td></tr>';
+
+  const all = state.data.savings||[];
+  const total = all.reduce((s,x)=>s+Number(x.Amount||0),0);
+  const cashTotal = all.filter(x=>x.Mode!=='Online').reduce((s,x)=>s+Number(x.Amount||0),0);
+  const onlineTotal = all.filter(x=>x.Mode==='Online').reduce((s,x)=>s+Number(x.Amount||0),0);
+  $('#savTotal').textContent = fmt(total);
+  $('#savCashTotal').textContent = fmt(cashTotal);
+  $('#savOnlineTotal').textContent = fmt(onlineTotal);
+}
+function safeParseDenoms(txt){
+  try{ return typeof txt==='string' ? JSON.parse(txt) : (txt||{}); }catch(e){ return {}; }
+}
+function openAddSavingsForm(){
+  const denomState = {};
+  openModal('💰 Savings Rakho', `
+    <div class="tag-info mb-12">Ye manual entry hai — jab chaho, jitna chaho rakh do. Cash rakhoge to galle (drawer) se utne note minus ho jayenge.</div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Mode</label>
+        <select class="inp" id="savMode">
+          <option value="Cash">Cash (galle se)</option>
+          <option value="Online">Online</option>
+        </select>
+      </div>
+      <div class="field" id="savOnlineAmtWrap" style="display:none"><label>Amount</label><input class="inp" id="savOnlineAmt" type="number" min="1"></div>
+    </div>
+    <div id="savDenomWrap">
+      <label class="dim">Kaunse note rakhe:</label>
+      <div class="denom-grid" id="savDenomGrid"></div>
+      <div class="stat mt-8"><div class="lab">Amount</div><div class="val" id="savDenomTotal">₹0</div></div>
+    </div>
+    <div class="field mt-8"><label>Note / Reason (optional)</label><input class="inp" id="savNote" placeholder="e.g. Ghar kharch, personal bachat..."></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Save', kind:'ok', on: async () => {
+      const mode = $('#savMode').value;
+      const amt = mode==='Online'
+        ? Number($('#savOnlineAmt').value||0)
+        : DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0);
+      if(amt<=0){ toast('Amount daalo', 'bad'); return; }
+      const note = $('#savNote').value.trim();
+      const denomsSnapshot = { ...denomState };
+      const body = {
+        Amount: amt, Mode: mode, Note: note,
+        Denoms: mode==='Cash' ? JSON.stringify(denomsSnapshot) : '',
+        Date: dayKey(nowISO()),
+        StaffID: state.user.staffID, StaffName: state.user.name
+      };
+      closeModal();
+      toast('Saving…');
+      const r = await apiPostBG('addSaving', body);
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Optimistic local update
+      const savedRow = (r.data && (r.data.saving || r.data)) || {};
+      const localRow = Object.assign({ SavingID: savedRow.SavingID || ('TEMP-'+Date.now()), CreatedDate: nowISO(), DenomText: mode==='Cash' ? denomText(denomsSnapshot) : '' }, body, savedRow);
+      state.data.savings = state.data.savings || [];
+      state.data.savings.push(localRow);
+      render(currentScreen());
+      // Cash savings physically leave the drawer.
+      if(mode==='Cash'){
+        const delta = {}; DENOMS.forEach(d => { if(denomsSnapshot[d]) delta[d] = -Math.abs(denomsSnapshot[d]); });
+        apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'SAVINGS-'+localRow.SavingID });
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'OUT', Amount: amt, Reference: 'SAVINGS-'+localRow.SavingID,
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Savings set aside' + (note ? ' — '+note : '') + ' — Notes: ' + denomText(denomsSnapshot)
+        });
+      } else {
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'ONLINE-OUT', Amount: amt, Reference: 'SAVINGS-'+localRow.SavingID,
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Savings set aside (Online)' + (note ? ' — '+note : '')
+        });
+      }
+      toast('Savings save ho gayi: '+fmt(amt), 'ok');
+      pullAll(true);
+    }}
+  ]);
+  renderDenomGrid($('#savDenomGrid'), denomState, () => {
+    const total = DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0);
+    $('#savDenomTotal').textContent = fmt(total);
+  });
+  $('#savMode').addEventListener('change', () => {
+    const mode = $('#savMode').value;
+    $('#savDenomWrap').style.display = mode==='Online' ? 'none' : '';
+    $('#savOnlineAmtWrap').style.display = mode==='Online' ? '' : 'none';
   });
 }
 
@@ -5610,6 +5879,7 @@ function wireCash(){
   $('#btnOnlineOut').addEventListener('click', () => onlineInOut('ONLINE-OUT'));
   $('#btnConvert').addEventListener('click', openConvertModal);
   $('#btnBreakNote').addEventListener('click', openBreakNoteModal);
+  $('#btnSettlement').addEventListener('click', openSettlementModal);
 }
 function buildDenomInputs(){
   renderDenomGrid($('#denomOpen'), state.denomOpen, () => {
@@ -5893,6 +6163,59 @@ async function confirmBreakNote(){
   await apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'BREAK-NOTE' });
   toast('Notes swapped — drawer total unchanged', 'ok');
   pullAll();
+}
+
+/* ---- Settlement — quickly arrange/align the drawer's exact note counts
+   (which notes you have how many of, which you have none of) in one
+   single-screen entry, PIN-protected since it directly overwrites the
+   drawer's truth. Pre-filled from the current live count so staff only
+   needs to correct what's actually different — no re-typing everything. ---- */
+state.settleDenoms = {};
+function openSettlementModal(){
+  const dd = state.data.drawerDenoms || {};
+  state.settleDenoms = {};
+  DENOMS.forEach(d => { state.settleDenoms[d] = Number(dd['Denom'+d] || 0); });
+  const currentTotal = DENOMS.reduce((s,d)=> s + (state.settleDenoms[d]||0)*d, 0);
+  openModal('🔒 Settlement — Note Counts Set Karo', `
+    <div class="tag-info mb-12">Abhi jitne note system mein dikha raha hai, wahi pre-filled hai — sirf jo alag hai wahi badlo. Jis note ka 0 karna hai, use 0 kar do. Confirm karne se pehle PIN maangega.</div>
+    <div class="denom-grid mb-12" id="settleDenomGrid"></div>
+    <div class="row">
+      <div class="stat"><div class="lab">Pehle (System)</div><div class="val">${fmt(currentTotal)}</div></div>
+      <div class="stat"><div class="lab">Ab (Naya)</div><div class="val" id="settleNewTotal">${fmt(currentTotal)}</div></div>
+      <div class="stat"><div class="lab">Fark</div><div class="val" id="settleDiff">₹0</div></div>
+    </div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Confirm Settlement', kind:'ok', on: confirmSettlement }
+  ]);
+  renderDenomGrid($('#settleDenomGrid'), state.settleDenoms, () => {
+    const newTotal = DENOMS.reduce((s,d)=> s + (state.settleDenoms[d]||0)*d, 0);
+    $('#settleNewTotal').textContent = fmt(newTotal);
+    $('#settleDiff').textContent = fmt(newTotal - currentTotal);
+  });
+}
+async function confirmSettlement(){
+  const dd = state.data.drawerDenoms || {};
+  const before = {}; DENOMS.forEach(d => { before[d] = Number(dd['Denom'+d] || 0); });
+  const beforeTotal = DENOMS.reduce((s,d)=> s + before[d]*d, 0);
+  const afterSnapshot = { ...state.settleDenoms };
+  const afterTotal = DENOMS.reduce((s,d)=> s + (afterSnapshot[d]||0)*d, 0);
+  closeModal();
+  const ok = await requirePin('Settlement confirm karne ke liye PIN daalo');
+  if(!ok) return;
+  toast('Saving…');
+  const r = await apiPost('setDrawerDenoms', {
+    denoms: afterSnapshot, staffID: state.user.staffID, staffName: state.user.name
+  });
+  if(!r.success){ toast(r.error||'Settlement save failed', 'bad'); return; }
+  await apiPost('addCashTxn', {
+    Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+    Type: 'INFO', Amount: 0, Reference: 'SETTLEMENT',
+    StaffID: state.user.staffID, StaffName: state.user.name,
+    Description: 'Settlement: '+fmt(beforeTotal)+' → '+fmt(afterTotal)+' (fark: '+fmt(afterTotal-beforeTotal)+') — New count: '+denomText(afterSnapshot)
+  });
+  toast('Settlement ho gaya: '+fmt(afterTotal), 'ok');
+  pullAll(true);
 }
 
 // "Existing Cash In Hand" — a one-time (or as-needed) correction that sets
@@ -6279,7 +6602,26 @@ function openCamScanner(onCode, opts){
   ]);
   setTimeout(async () => {
     try{
-      camScanner = new Html5Qrcode('camBox');
+      camScanner = new Html5Qrcode('camBox', {
+        // Explicitly listing formats (instead of relying on the library's
+        // default guess) fixes Code128/EAN/UPC (the "lining wala" printed
+        // bill barcodes) not being picked up reliably.
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        // Uses the browser's native BarcodeDetector API when available —
+        // much better at 1D/linear barcodes than the JS-only decoder.
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        verbose: false
+      });
       const onDecoded = code => {
         if(continuous){
           handleScan(code, onCode);
@@ -6291,9 +6633,14 @@ function openCamScanner(onCode, opts){
       // *preference* (ideal), never a hard floor — an exact/min constraint
       // the hardware can't meet throws OverconstrainedError and the whole
       // camera fails to start on that device.
+      // qrbox is now a WIDE rectangle instead of a square — a square box
+      // crops the sides off a linear (Code128) barcode, which was the main
+      // reason printed bill barcodes weren't scanning.
       const scanConfig = {
-        fps: 10,
-        qrbox: { width: 300, height: 300 },
+        fps: 12,
+        qrbox: { width: 320, height: 140 },
+        aspectRatio: 1.7777778,
+        disableFlip: false,
         videoConstraints: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1920 },
