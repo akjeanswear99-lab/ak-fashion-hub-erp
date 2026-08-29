@@ -4966,8 +4966,9 @@ function renderEmi(){
     const dr = document.createElement('tr');
     dr.className = 'emi-detail'; dr.style.display='none';
     dr.innerHTML = `<td colspan="11"><table class="mini-tbl" style="width:100%">
-      <thead><tr><th>#</th><th>Due Date</th><th>Amount</th><th>Paid</th><th>Status</th><th>Mode</th></tr></thead>
-      <tbody>${insts.map(i => `<tr><td>#${i.InstallmentNumber}</td><td>${(i.DueDate||'').substr(0,10)}</td><td>${fmt(i.Amount)}</td><td>${fmt(i.PaidAmount)}</td><td>${i.Status||''}</td><td>${i.PaymentMode||'—'}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Koi installment nahi</td></tr>'}</tbody>
+      <thead><tr><th>#</th><th>Due Date</th><th>Amount</th><th>Paid</th><th>Status</th><th>Mode</th><th></th></tr></thead>
+      <tbody>${insts.map(i => `<tr><td>#${i.InstallmentNumber}</td><td>${(i.DueDate||'').substr(0,10)}</td><td>${fmt(i.Amount)}</td><td>${fmt(i.PaidAmount)}</td><td>${i.Status||''}</td><td>${i.PaymentMode||'—'}</td>
+        <td>${i.Status!=='Pending' ? `<button class="btn ghost sm" data-a="editinst" data-id="${i.InstallmentID}">🔒 Edit</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Koi installment nahi</td></tr>'}</tbody>
     </table></td>`;
     tb.appendChild(dr);
   });
@@ -4985,9 +4986,15 @@ function renderEmi(){
       }
       return;
     }
-    const colBtn = e.target.closest('button[data-a="collect"]'); if(!colBtn) return;
-    const emi = (state.data.emis||[]).find(x => String(x.EMIID)===String(colBtn.dataset.id));
-    if(emi) openCollectEmiPayment(emi);
+    const colBtn = e.target.closest('button[data-a="collect"]');
+    if(colBtn){
+      const emi = (state.data.emis||[]).find(x => String(x.EMIID)===String(colBtn.dataset.id));
+      if(emi) openCollectEmiPayment(emi);
+      return;
+    }
+    const editBtn = e.target.closest('button[data-a="editinst"]'); if(!editBtn) return;
+    const inst = (state.data.emiInstallments||[]).find(x => String(x.InstallmentID)===String(editBtn.dataset.id));
+    if(inst) openEditEmiInstallment(inst);
   };
 
   const all = state.data.emis||[];
@@ -5064,7 +5071,8 @@ function openCollectEmiPayment(emi){
   const due = next ? (Number(next.Amount) - Number(next.PaidAmount||0)) : 0;
   const denomState = {};
   openModal('EMI Kist Collect Karo • '+(emi.CustomerName||emi.CustomerMobile), `
-    <div class="tag-info mb-12">Kist #${next?next.InstallmentNumber:'—'} | Due: <b>${fmt(due)}</b></div>
+    <div class="tag-info mb-12">Kist #${next?next.InstallmentNumber:'—'} | Due: <b>${fmt(due)}</b><br>
+      <span class="dim">Agar isse zyada amount doge, bacha hua paisa apne aap agli kist(o) mein cut hota rahega.</span></div>
     <div class="grid-2 mb-12">
       <div class="field"><label>Amount Collect</label><input class="inp" id="emiPayAmt" type="number" min="1" value="${due}"></div>
       <div class="field"><label>Payment Mode</label>
@@ -5096,25 +5104,32 @@ function openCollectEmiPayment(emi){
       toast('Saving…');
       const r = await apiPostBG('payEmiInstallment', payload);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
-      // Optimistic local update
-      if(next){
-        const localInst = state.data.emiInstallments.find(i => String(i.InstallmentID)===String(next.InstallmentID));
-        if(localInst){
-          localInst.PaidAmount = Number(localInst.PaidAmount||0) + amt;
-          localInst.Status = localInst.PaidAmount >= Number(localInst.Amount) ? 'Paid' : 'Partial';
-          localInst.PaymentMode = mode;
-        }
+      // Optimistic local update — cascade the payment across installments
+      // exactly like the backend does, so overpayment rolling into the
+      // next kist(en) shows immediately.
+      let remaining = amt;
+      const queue = insts.filter(i => Number(i.InstallmentNumber) >= Number(next ? next.InstallmentNumber : 0) && i.Status!=='Paid');
+      for(const inst of queue){
+        if(remaining <= 0.004) break;
+        const localInst = state.data.emiInstallments.find(i => String(i.InstallmentID)===String(inst.InstallmentID));
+        if(!localInst) continue;
+        const due2 = Number(localInst.Amount) - Number(localInst.PaidAmount||0);
+        const apply = Math.min(due2, remaining);
+        localInst.PaidAmount = Number(localInst.PaidAmount||0) + apply;
+        localInst.Status = localInst.PaidAmount >= Number(localInst.Amount) - 0.005 ? 'Paid' : 'Partial';
+        localInst.PaymentMode = mode;
+        remaining -= apply;
       }
       const localEmi = state.data.emis.find(e => String(e.EMIID)===String(emi.EMIID));
       if(localEmi){
-        localEmi.TotalPaid = Number(localEmi.TotalPaid||0) + amt;
-        localEmi.TotalRemaining = Math.max(0, Number(localEmi.TotalPayable||0) - localEmi.TotalPaid);
-        if(next && next.Status !== 'Paid' && localEmi._justPaidThis !== next.InstallmentID){
-          const nowPaidCount = emiInstallmentsFor(emi.EMIID).filter(i=>i.Status==='Paid').length;
-          localEmi.InstallmentsPaid = nowPaidCount;
-          localEmi.InstallmentsRemaining = Number(localEmi.NumberOfInstallments||0) - nowPaidCount;
-        }
-        if(localEmi.TotalRemaining <= 0) localEmi.Status = 'Completed';
+        const allInst = emiInstallmentsFor(emi.EMIID);
+        const totalPaid = allInst.reduce((s,i)=>s+Number(i.PaidAmount||0),0);
+        localEmi.TotalPaid = totalPaid;
+        localEmi.TotalRemaining = Math.max(0, Number(localEmi.TotalPayable||0) - totalPaid);
+        const paidCount = allInst.filter(i=>i.Status==='Paid').length;
+        localEmi.InstallmentsPaid = paidCount;
+        localEmi.InstallmentsRemaining = Number(localEmi.NumberOfInstallments||0) - paidCount;
+        localEmi.Status = localEmi.TotalRemaining<=0 ? 'Completed' : 'Active';
       }
       render(currentScreen());
       if(cashAmt>0){
@@ -5140,6 +5155,61 @@ function openCollectEmiPayment(emi){
 }
 
 /* ============ RENT ============ */
+// PIN-gated correction of an already-collected (Paid/Partial) installment —
+// use this to fix a mistaken entry, not for routine collection.
+function openEditEmiInstallment(inst){
+  openModal('🔒 Purani Kist Edit Karo — #'+inst.InstallmentNumber, `
+    <div class="tag-info mb-12">Ye ek correction hai (galti se galat entry ho gayi ho). Confirm karne se pehle PIN maangega.</div>
+    <div class="grid-2 mb-12">
+      <div class="field"><label>Amount jo asal mein collect hua</label><input class="inp" id="eiPaid" type="number" min="0" value="${Number(inst.PaidAmount||0)}"></div>
+      <div class="field"><label>Payment Mode</label>
+        <select class="inp" id="eiMode">
+          <option value="Cash" ${inst.PaymentMode==='Cash'?'selected':''}>Cash</option>
+          <option value="Online" ${inst.PaymentMode==='Online'?'selected':''}>Online</option>
+          <option value="Mixed" ${inst.PaymentMode==='Mixed'?'selected':''}>Mixed</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Paid Date</label><input class="inp" id="eiDate" type="date" value="${(inst.PaidDate||dayKey(nowISO())).substr(0,10)}"></div>
+  `, [
+    { label:'Cancel', kind:'ghost', on: closeModal },
+    { label:'Confirm Correction', kind:'ok', on: async () => {
+      const newPaid = Number($('#eiPaid').value||0);
+      const mode = $('#eiMode').value;
+      const dateVal = $('#eiDate').value;
+      closeModal();
+      const ok = await requirePin('Is kist ko edit karne ke liye PIN daalo');
+      if(!ok) return;
+      toast('Saving…');
+      const r = await apiPostBG('editEmiInstallment', {
+        InstallmentID: inst.InstallmentID, PaidAmount: newPaid, PaymentMode: mode,
+        PaidDate: dateVal, StaffID: state.user.staffID, StaffName: state.user.name
+      });
+      if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
+      // Optimistic local update
+      const localInst = state.data.emiInstallments.find(i => String(i.InstallmentID)===String(inst.InstallmentID));
+      if(localInst){
+        localInst.PaidAmount = newPaid; localInst.PaymentMode = mode; localInst.PaidDate = dateVal;
+        localInst.Status = newPaid<=0 ? 'Pending' : (newPaid >= Number(localInst.Amount) ? 'Paid' : 'Partial');
+      }
+      const localEmi = state.data.emis.find(e => String(e.EMIID)===String(inst.EMIID));
+      if(localEmi){
+        const allInst = emiInstallmentsFor(inst.EMIID);
+        const totalPaid = allInst.reduce((s,i)=>s+Number(i.PaidAmount||0),0);
+        localEmi.TotalPaid = totalPaid;
+        localEmi.TotalRemaining = Math.max(0, Number(localEmi.TotalPayable||0) - totalPaid);
+        const paidCount = allInst.filter(i=>i.Status==='Paid').length;
+        localEmi.InstallmentsPaid = paidCount;
+        localEmi.InstallmentsRemaining = Number(localEmi.NumberOfInstallments||0) - paidCount;
+        localEmi.Status = localEmi.TotalRemaining<=0 ? 'Completed' : 'Active';
+      }
+      render(currentScreen());
+      toast('Kist correct kar di gayi', 'ok');
+      pullAll(true);
+    }}
+  ]);
+}
+
 function wireRent(){
   $('#btnAddRent').addEventListener('click', () => openAddRentForm());
 }
@@ -5804,18 +5874,22 @@ function printStickerSheet(){
 
   const sheetHtml = `
     <style>
-      @page { size: 4in 6in; margin: 1.5mm; }
+      @page { size: 4in 6in; margin: 0; }
       .stk-page {
         width:4in; height:6in; box-sizing:border-box;
         display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:1.5mm;
-        page-break-after: always;
+        padding:1.5mm;
+        page-break-after: always; break-after: page;
+        page-break-inside: avoid; break-inside: avoid;
+        overflow:hidden;
       }
-      .stk-page:last-child{ page-break-after: auto; }
+      .stk-page:last-child{ page-break-after: auto; break-after: auto; }
       .stk { position:relative; padding:1.5mm 1mm; overflow:hidden;
               font-family:'Manrope', Arial, sans-serif; font-size:${fs}px;
               display:flex; flex-direction:column; align-items:center; justify-content:center;
               text-align:center; line-height:1.15; box-sizing:border-box;
-              border:0.3mm solid #000; border-radius:1.2mm; }
+              border:0.3mm solid #000; border-radius:1.2mm;
+              page-break-inside: avoid; break-inside: avoid; }
       .stk-shop { font-weight:800; font-size:${fs-1}px; letter-spacing:.3px; text-transform:uppercase;
                   border-bottom:0.3mm solid #000; width:92%; padding-bottom:0.8mm; margin-bottom:0.8mm; }
       .stk-name { font-weight:700; font-size:${fs}px; }
@@ -6615,6 +6689,7 @@ function openCamScanner(onCode, opts){
           Html5QrcodeSupportedFormats.UPC_A,
           Html5QrcodeSupportedFormats.UPC_E,
           Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
           Html5QrcodeSupportedFormats.QR_CODE
         ],
         // Uses the browser's native BarcodeDetector API when available —
