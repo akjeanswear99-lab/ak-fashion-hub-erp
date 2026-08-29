@@ -1977,6 +1977,7 @@ function wirePOS(){
     if(m.length === 10){
       const c = (state.data.customers||[]).find(c => String(c.Mobile).replace(/\D/g,'')===m);
       if(c) $('#posCustName').value = c.Name || '';
+      autoApplyCoinForMobile(m);
     }
   });
   $('#btnScanCam').addEventListener('click', ()=> openCamScanner(code=>{
@@ -2296,6 +2297,21 @@ function refreshCart(){
     $('#posCoinLine').style.display='block';
     $('#posCoinView').textContent = '-'+fmt(coinUse);
   }else{ $('#posCoinLine').style.display='none'; }
+  // If the coin's balance is bigger than what this bill can absorb, tell
+  // the customer how much more shopping unlocks the rest of it.
+  if(state.activeCoin){
+    const remaining = Number(state.activeCoin.RemainingAmount||0);
+    const shortfall = Math.round((remaining - coinUse) * 100) / 100;
+    const box = $('#coinApplyBox');
+    if(box){
+      box.style.display='block';
+      if(shortfall > 0.5){
+        box.innerHTML = `Coin <b>${state.activeCoin.WalletID}</b> — ₹${remaining} balance. Is bill par ₹${fmt(coinUse)} use ho raha hai — pura coin redeem karne ke liye <b>₹${fmt(shortfall)} ki aur shopping</b> karni hogi.`;
+      } else {
+        box.innerHTML = `Coin <b>${state.activeCoin.WalletID}</b> — ₹${remaining} balance available. It will be deducted from the bill automatically.`;
+      }
+    }
+  }
   updatePosCashCalc(total);
   updatePosSplit(total);
 }
@@ -2408,6 +2424,27 @@ function updatePosCashCalc(total){
     DENOMS.forEach(d => { state.posChangeDenoms[d] = 0; });
     state.posLastChangeAmt = 0;
   }
+}
+// Mobile number type karte hi is customer ka koi active coupon/coin ho to
+// khud-ba-khud apply ho jata hai — staff ko code manually daalne ki zarurat
+// nahi. Agar isi mobile pe ek se zyada active coin hain, sabse bada balance
+// wala choose hota hai (customer ke liye sabse zyada faida).
+function autoApplyCoinForMobile(mobile){
+  if(state.activeCoin) return; // already applied (manually or before) — don't override
+  const now = new Date();
+  const candidates = (state.data.wallet||[]).filter(w =>
+    String(w.CustomerMobile||'').replace(/\D/g,'')===mobile &&
+    String(w.Status)==='Active' &&
+    new Date(w.ExpiryDate) >= now
+  ).sort((a,b) => Number(b.RemainingAmount||0) - Number(a.RemainingAmount||0));
+  if(!candidates.length) return;
+  const w = candidates[0];
+  state.activeCoin = w;
+  $('#posCoin').value = w.WalletID;
+  $('#coinApplyBox').style.display='block';
+  $('#coinApplyBox').innerHTML = `Coin <b>${w.WalletID}</b> auto-detected for this number — ₹${w.RemainingAmount} balance available. It will be deducted from the bill automatically.`;
+  toast('Coupon auto-applied: '+w.WalletID, 'ok');
+  refreshCart();
 }
 async function checkCoin(){
   const code = $('#posCoin').value.trim();
@@ -4335,7 +4372,7 @@ function showBillForReturn(b, highlightVariantID){
   // wire refund calc
   const box = $('#retResult');
   const items2 = items;
-  state.retExchangePick = null;
+  state.retExchangePicks = [];
   $('#btnPrintOrigBill').addEventListener('click', () => printBill(billWithItems(b)));
   function recalcReturnTotal(){
     let total = 0;
@@ -4359,22 +4396,65 @@ function showBillForReturn(b, highlightVariantID){
   });
   function renderExPicked(){
     const pbox = $('#exPicked');
-    if(!state.retExchangePick){ pbox.style.display='none'; return; }
-    const {product,variant,qty,price} = state.retExchangePick;
+    if(!state.retExchangePicks.length){ pbox.style.display='none'; return; }
     pbox.style.display='block';
-    pbox.innerHTML = `Exchanging for: <b>${product.Name}</b> ${variant.Color||''} ${variant.Size||''}
-      <div class="row mt-8" style="align-items:flex-end;">
-        <div class="field" style="max-width:100px;"><label>Qty</label><input class="inp" id="exQty" type="number" min="1" max="${variant.Stock||99}" value="${qty}"></div>
-        <div class="field" style="max-width:120px;"><label>Sell Price (₹)</label><input class="inp" id="exPrice" type="number" min="0" value="${Math.round(price)}"></div>
-        <button class="btn ghost sm" id="exClear">✕ Clear</button>
+    const rows = state.retExchangePicks.map((pick, i) => {
+      const {product,variant,qty,price} = pick;
+      return `
+        <div class="row mt-8" style="align-items:flex-end;border-bottom:1px solid var(--line);padding-bottom:8px;">
+          <div style="flex:1;">${product.Name} <span class="dim">${variant.Color||''} ${variant.Size||''}</span></div>
+          <div class="field" style="max-width:90px;"><label>Qty</label><input class="inp" data-exqty="${i}" type="number" min="1" max="${variant.Stock||99}" value="${qty}"></div>
+          <div class="field" style="max-width:110px;"><label>Sell Price (₹)</label><input class="inp" data-exprice="${i}" type="number" min="0" value="${Math.round(price)}"></div>
+          <div style="min-width:70px;text-align:right;">${fmt(qty*price)}</div>
+          <button class="btn ghost sm" data-exremove="${i}">✕</button>
+        </div>`;
+    }).join('');
+    const newItemTotal = state.retExchangePicks.reduce((s,p)=>s+p.qty*p.price, 0);
+    const totalRefund = recalcReturnTotal();
+    const diff = newItemTotal - totalRefund;
+    const diffMsg = diff > 0.5
+      ? `Customer ko <b>${fmt(diff)}</b> extra dene honge (naye items refund value se zyada hain).`
+      : diff < -0.5
+        ? `Customer ko <b>${fmt(-diff)}</b> wapas milenge (naye items refund value se kam hain).`
+        : `Bilkul barabar hai — koi extra lena-dena nahi.`;
+    pbox.innerHTML = `
+      <div class="strong mb-4">Exchange — ${state.retExchangePicks.length} item(s) picked</div>
+      ${rows}
+      <div class="row mt-8" style="justify-content:space-between;font-weight:700;">
+        <span>New item(s) total</span><span>${fmt(newItemTotal)}</span>
       </div>
-      <div class="tag-note mt-8">Catalog price is ${fmt(Number(variant.SalePrice||product.SalePrice||0))} — edit above to sell it for the same, more, or less (e.g. same-value swap, or upgrade with extra payment).</div>`;
-    $('#exQty').addEventListener('input', () => { state.retExchangePick.qty = Math.max(1, Number($('#exQty').value||1)); });
-    $('#exPrice').addEventListener('input', () => { state.retExchangePick.price = Math.max(0, Number($('#exPrice').value||0)); });
-    $('#exClear').addEventListener('click', () => { state.retExchangePick = null; renderExPicked(); });
+      <div class="tag-note mt-8">${diffMsg}</div>
+      <div class="row mt-8"><input class="inp" id="exScan2" placeholder="Scan ya search karke ek aur item add karo"></div>
+    `;
+    pbox.querySelectorAll('input[data-exqty]').forEach(inp => inp.addEventListener('input', () => {
+      const i = Number(inp.dataset.exqty);
+      state.retExchangePicks[i].qty = Math.max(1, Number(inp.value||1));
+      renderExPicked();
+    }));
+    pbox.querySelectorAll('input[data-exprice]').forEach(inp => inp.addEventListener('input', () => {
+      const i = Number(inp.dataset.exprice);
+      state.retExchangePicks[i].price = Math.max(0, Number(inp.value||0));
+      renderExPicked();
+    }));
+    pbox.querySelectorAll('button[data-exremove]').forEach(btn => btn.addEventListener('click', () => {
+      state.retExchangePicks.splice(Number(btn.dataset.exremove), 1);
+      renderExPicked();
+    }));
+    const exScan2 = $('#exScan2');
+    if(exScan2) exScan2.addEventListener('keydown', e => {
+      if(e.key !== 'Enter') return;
+      e.preventDefault();
+      const code = exScan2.value.trim(); if(!code) return;
+      const hit = findByCode(code);
+      if(hit && hit.variant) pickExchangeItem(hit.product, hit.variant);
+      else exchangeNameSearch(code);
+    });
   }
   function pickExchangeItem(product, variant){
-    state.retExchangePick = { product, variant, qty: 1, price: Number(variant.SalePrice||product.SalePrice||0) };
+    // Same variant scanned twice — just bump its qty instead of adding a duplicate row.
+    const existing = state.retExchangePicks.find(p => p.variant.VariantID === variant.VariantID);
+    if(existing){ existing.qty += 1; }
+    else{ state.retExchangePicks.push({ product, variant, qty: 1, price: Number(variant.SalePrice||product.SalePrice||0) }); }
     $('#exSearchResults').innerHTML = '';
     $('#exScan').value = '';
     renderExPicked();
@@ -4427,8 +4507,8 @@ function showBillForReturn(b, highlightVariantID){
       if(q>0) lines.push({ vid: x.dataset.vid, qty: q });
     });
     if(!lines.length){ toast('Please enter a return quantity', 'warn'); return; }
-    if(mode === 'exchange' && !state.retExchangePick){
-      toast('Scan or search the new item to exchange for', 'warn'); return;
+    if(mode === 'exchange' && !state.retExchangePicks.length){
+      toast('Scan or search the new item(s) to exchange for', 'warn'); return;
     }
     let totalRefund = 0;
     const returnedLines = [];
@@ -4446,19 +4526,32 @@ function showBillForReturn(b, highlightVariantID){
 
     if(mode === 'exchange'){
       // The returned value becomes a discount on a brand-new small bill for
-      // the replacement item — this is what "updates on the bill too" means:
-      // it's a real, linked bill (not just a note), so it shows up in Bills,
-      // Customer History, Reports, and stock the same way any sale does.
-      const {product, variant, qty, price} = state.retExchangePick;
-      const newItemTotal = price * qty;
+      // the replacement item(s) — this is what "updates on the bill too"
+      // means: it's a real, linked bill (not just a note), so it shows up
+      // in Bills, Customer History, Reports, and stock the same way any
+      // sale does. Multiple items can be picked; if their combined total
+      // is more than the refund, the extra is collected as a top-up; if
+      // less, the balance is refunded back.
+      const picks = state.retExchangePicks;
+      const newItemTotal = Math.round(picks.reduce((s,p)=>s+p.qty*p.price, 0) * 100) / 100;
       const discount = Math.min(newItemTotal, totalRefund);
       const owed = Math.max(0, Math.round((newItemTotal - discount) * 100) / 100);
       const credit = Math.max(0, Math.round((totalRefund - newItemTotal) * 100) / 100);
       // Same post-discount profit rule as a normal sale — the returned
-      // value counts as a discount on the new item, so profit is worked
-      // out on what's actually owed, not the full listed price.
+      // value counts as a discount on the new item(s), so profit is worked
+      // out on what's actually owed, not the full listed price. Discount
+      // is spread across items proportional to each item's own line total.
       const exDiscRatio = newItemTotal > 0 ? Math.max(0, (newItemTotal - discount) / newItemTotal) : 1;
       const exBillID = 'BILL_' + Date.now() + '_' + rnd();
+      const exItems = picks.map(({product, variant, qty, price}) => {
+        const lineTotal = qty * price;
+        return {
+          ProductID: product.ProductID, VariantID: variant.VariantID, UID: variant.UID||product.UID,
+          Name: product.Name, Color: variant.Color, Size: variant.Size,
+          Quantity: qty, Price: price, CostPrice: variant.CostPrice||product.CostPrice||0,
+          LineTotal: lineTotal, LineProfit: (price*exDiscRatio-(variant.CostPrice||product.CostPrice||0))*qty - 10
+        };
+      });
       const exPayload = {
         BillID: exBillID,
         CustomerID: b.CustomerID || '',
@@ -4468,12 +4561,7 @@ function showBillForReturn(b, highlightVariantID){
         PaymentMode: 'Cash',
         PaymentRef: 'EXCHANGE for '+b.BillNumber,
         StaffID: state.user.staffID, StaffName: state.user.name,
-        items: [{
-          ProductID: product.ProductID, VariantID: variant.VariantID, UID: variant.UID||product.UID,
-          Name: product.Name, Color: variant.Color, Size: variant.Size,
-          Quantity: qty, Price: price, CostPrice: variant.CostPrice||product.CostPrice||0,
-          LineTotal: newItemTotal, LineProfit: (price*exDiscRatio-(variant.CostPrice||product.CostPrice||0))*qty - 10
-        }],
+        items: exItems,
         CashAmount: owed, OnlineAmount: 0, DueAmount: 0
       };
       const exRes = await apiPost('addBill', exPayload);
@@ -6786,3 +6874,4 @@ function requirePin(reason){
 
 
 </body></html>
+S
