@@ -4305,6 +4305,38 @@ function doReturnSearch(){
   // 3) try barcode / UID — same logic the scanner uses, picks most recent sale
   scanForReturn(q);
 }
+// Manual note-entry modal — used wherever cash actually changes hands
+// (return refund, exchange top-up/credit) so staff records exactly which
+// notes were taken/given, instead of an auto-suggested breakdown.
+// Resolves to a {denom: count} object on confirm, or null on cancel.
+function collectDenomsModal(title, amount, hintText){
+  return new Promise(resolve => {
+    const denomState = {};
+    let resolved = false;
+    openModal(title, `
+      <div class="tag-info mb-12">${hintText}</div>
+      <div class="stat mb-8"><div class="lab">Amount</div><div class="val">${fmt(amount)}</div></div>
+      <div class="denom-grid" id="rdModalDenom"></div>
+      <div class="stat mt-8"><div class="lab">Notes Total</div><div class="val" id="rdModalTotal">₹0</div></div>
+    `, [
+      { label:'Cancel', kind:'ghost', on: () => { closeModal(); if(!resolved){ resolved=true; resolve(null); } } },
+      { label:'Confirm', kind:'ok', on: () => {
+          const total = DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0);
+          if(Math.round(total*100) !== Math.round(amount*100)){
+            toast('Notes ka total ('+fmt(total)+') amount ('+fmt(amount)+') se match nahi kar raha', 'bad');
+            return;
+          }
+          closeModal();
+          if(!resolved){ resolved=true; resolve({ ...denomState }); }
+        }}
+    ]);
+    renderDenomGrid($('#rdModalDenom'), denomState, () => {
+      const total = DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0);
+      $('#rdModalTotal').textContent = fmt(total);
+    });
+  });
+}
+
 function showBillForReturn(b, highlightVariantID){
   const items = (state.data.billItems||[]).filter(it => it.BillID === b.BillID);
   const days = daysSince(b.CreatedDate);
@@ -4321,7 +4353,7 @@ function showBillForReturn(b, highlightVariantID){
       <td>${it.Color||''} ${it.Size||''}</td>
       <td>${it.Quantity}</td>
       <td class="dim">${mrp ? 'MRP: '+fmt(mrp) : '—'}<br>Sold: ${fmt(it.Price)}</td>
-      <td><label class="dim" style="font-size:11px;">Refund Rate (₹)</label><input class="inp" data-rate="${it.VariantID}" type="number" min="0" value="${Math.round(effPrice)}" style="max-width:90px;"></td>
+      <td><label class="dim" style="font-size:11px;">Refund Rate (₹)</label><input class="inp" data-rate="${it.VariantID}" data-maxrate="${Number(it.Price||0)}" type="number" min="0" max="${Number(it.Price||0)}" value="${Math.round(effPrice)}" style="max-width:90px;"></td>
       <td><input class="inp" data-vid="${it.VariantID}" type="number" min="0" max="${it.Quantity}" value="0" style="max-width:70px;"></td>
       <td class="dim">Refund: <span data-refund="${it.VariantID}">₹0</span></td>
     </tr>`;
@@ -4389,6 +4421,18 @@ function showBillForReturn(b, highlightVariantID){
   }
   box.querySelectorAll('input[data-vid], input[data-rate]').forEach(inp => {
     inp.addEventListener('input', recalcReturnTotal);
+  });
+  // Refund Rate can never exceed what the item was actually sold for —
+  // e.g. an item billed at ₹150 can't have a ₹180 refund rate typed in.
+  box.querySelectorAll('input[data-rate]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const cap = Number(inp.dataset.maxrate||0);
+      if(Number(inp.value||0) > cap){
+        inp.value = cap;
+        toast('Refund rate ' + fmt(cap) + ' (sold price) se zyada nahi ho sakta', 'warn');
+        recalcReturnTotal();
+      }
+    });
   });
   // Exchange mode — reveal the "pick a new item" box, hide it otherwise
   $('#retMode').addEventListener('change', () => {
@@ -4510,6 +4554,39 @@ function showBillForReturn(b, highlightVariantID){
     if(mode === 'exchange' && !state.retExchangePicks.length){
       toast('Scan or search the new item(s) to exchange for', 'warn'); return;
     }
+
+    // Work out the refund total client-side first (same rate×qty math the
+    // on-screen total already uses) so we know upfront whether any cash
+    // actually needs to change hands, before touching the backend at all.
+    let previewRefund = 0;
+    for(const l of lines){
+      const it = items2.find(i => i.VariantID === l.vid);
+      const rateInp = box.querySelector('input[data-rate="'+l.vid+'"]');
+      const rate = Number((rateInp && rateInp.value) || it.Price || 0);
+      previewRefund += rate * l.qty;
+    }
+    previewRefund = Math.round(previewRefund * 100) / 100;
+
+    // Collect manual note-entry UPFRONT for whichever cash movement this
+    // will need — if the staff cancels here, nothing has been touched yet.
+    let cashDenoms = null, exOwedDenoms = null, exCreditDenoms = null, previewOwed = 0, previewCredit = 0;
+    if(mode === 'cash' && previewRefund > 0){
+      cashDenoms = await collectDenomsModal('Refund — Notes Diye', previewRefund, 'Customer ko wapas konse note diye — sab select karo.');
+      if(!cashDenoms){ toast('Return cancel ho gaya', 'warn'); return; }
+    } else if(mode === 'exchange'){
+      const newItemTotal = Math.round(state.retExchangePicks.reduce((s,p)=>s+p.qty*p.price, 0) * 100) / 100;
+      const discount = Math.min(newItemTotal, previewRefund);
+      previewOwed = Math.max(0, Math.round((newItemTotal - discount) * 100) / 100);
+      previewCredit = Math.max(0, Math.round((previewRefund - newItemTotal) * 100) / 100);
+      if(previewOwed > 0){
+        exOwedDenoms = await collectDenomsModal('Exchange Top-up — Notes Liye', previewOwed, 'Customer se extra kitne aur konse note liye — sab select karo.');
+        if(!exOwedDenoms){ toast('Exchange cancel ho gaya', 'warn'); return; }
+      } else if(previewCredit > 0){
+        exCreditDenoms = await collectDenomsModal('Exchange Balance — Notes Diye', previewCredit, 'Customer ko balance mein konse note diye — sab select karo.');
+        if(!exCreditDenoms){ toast('Exchange cancel ho gaya', 'warn'); return; }
+      }
+    }
+
     let totalRefund = 0;
     const returnedLines = [];
     for(const l of lines){
@@ -4567,25 +4644,23 @@ function showBillForReturn(b, highlightVariantID){
       const exRes = await apiPost('addBill', exPayload);
       if(!exRes.success){ toast('Exchange item save failed: '+(exRes.error||''), 'bad'); }
       else{
-        if(owed > 0){
+        if(owed > 0 && exOwedDenoms){
           apiPost('addCashTxn', {
             Date: dayKey(nowISO()), Type:'IN', Amount: owed,
             Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
             StaffID: state.user.staffID, StaffName: state.user.name,
-            Description: 'Exchange top-up collected — for '+b.BillNumber
+            Description: 'Exchange top-up collected — for '+b.BillNumber+' — Notes: '+denomText(exOwedDenoms)
           });
-          const brk = breakChange(owed).notes;
-          apiPost('updateDrawerDenoms', { delta: brk, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
+          apiPost('updateDrawerDenoms', { delta: exOwedDenoms, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
         }
-        if(credit > 0){
+        if(credit > 0 && exCreditDenoms){
           apiPost('addCashTxn', {
             Date: dayKey(nowISO()), Type:'OUT', Amount: credit,
             Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
             StaffID: state.user.staffID, StaffName: state.user.name,
-            Description: 'Exchange balance refunded — for '+b.BillNumber
+            Description: 'Exchange balance refunded — for '+b.BillNumber+' — Notes: '+denomText(exCreditDenoms)
           });
-          const brk = breakChange(credit).notes;
-          const delta = {}; DENOMS.forEach(d => delta[d] = -(brk[d]||0));
+          const delta = {}; DENOMS.forEach(d => delta[d] = -(exCreditDenoms[d]||0));
           apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
         }
         toast(`Exchanged — ${owed>0 ? 'collected '+fmt(owed) : credit>0 ? 'refunded '+fmt(credit) : 'even swap'}`, 'ok');
@@ -4604,11 +4679,10 @@ function showBillForReturn(b, highlightVariantID){
         Date: dayKey(nowISO()),
         Type: 'OUT', Reference: 'RETURN-'+b.BillNumber, Amount: totalRefund,
         StaffID: state.user.staffID, StaffName: state.user.name,
-        Description: 'Refund for '+b.BillNumber
+        Description: 'Refund for '+b.BillNumber + (cashDenoms ? ' — Notes: '+denomText(cashDenoms) : '')
       });
-      if(totalRefund > 0){
-        const brk = breakChange(totalRefund).notes;
-        const delta = {}; DENOMS.forEach(d => delta[d] = -(brk[d]||0));
+      if(totalRefund > 0 && cashDenoms){
+        const delta = {}; DENOMS.forEach(d => delta[d] = -(cashDenoms[d]||0));
         apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RETURN-'+b.BillNumber });
       }
     }
@@ -6874,4 +6948,3 @@ function requirePin(reason){
 
 
 </body></html>
-S
