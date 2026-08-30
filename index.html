@@ -4305,6 +4305,81 @@ function doReturnSearch(){
   // 3) try barcode / UID — same logic the scanner uses, picks most recent sale
   scanForReturn(q);
 }
+// Reusable "collect cash from customer" modal — same pattern as POS
+// billing: staff enters the ACTUAL notes received (which can be more than
+// what's due, e.g. customer hands a ₹500 for a ₹380 bill), a suggested
+// change breakdown appears automatically (editable), and short amounts
+// are blocked. Resolves to { receivedDenoms, changeDenoms, received,
+// change } on confirm, or null on cancel. `due` is the exact amount that
+// needs to reach the drawer net of any change given back.
+function collectPaymentWithChangeModal(title, due, hintText){
+  return new Promise(resolve => {
+    const recvState = {}, changeState = {};
+    let resolved = false, lastChangeAmt = null;
+    openModal(title, `
+      <div class="tag-info mb-12">${hintText}</div>
+      <div class="stat mb-8"><div class="lab">Amount Due</div><div class="val">${fmt(due)}</div></div>
+      <label class="dim">Notes Received from Customer:</label>
+      <div class="denom-grid" id="pwcRecvDenom"></div>
+      <div class="stat mt-8"><div class="lab">Received</div><div class="val" id="pwcRecvTotal">₹0</div></div>
+      <div id="pwcMsg" class="tag-note mt-8" style="display:none;"></div>
+      <div id="pwcChangeWrap" style="display:none;" class="mt-8">
+        <label class="dim">Change to Give Back:</label>
+        <div class="denom-grid" id="pwcChangeDenom"></div>
+        <div class="stat mt-8"><div class="lab">Change</div><div class="val" id="pwcChangeTotal">₹0</div></div>
+      </div>
+    `, [
+      { label:'Cancel', kind:'ghost', on: () => { closeModal(); if(!resolved){ resolved=true; resolve(null); } } },
+      { label:'Confirm', kind:'ok', on: () => {
+          const received = DENOMS.reduce((s,d)=>s+(recvState[d]||0)*d,0);
+          const changeGiven = DENOMS.reduce((s,d)=>s+(changeState[d]||0)*d,0);
+          const net = Math.round((received - changeGiven) * 100) / 100;
+          if(received < due - 0.5){ toast('Received amount due se kam hai', 'bad'); return; }
+          if(Math.round(net*100) !== Math.round(due*100)){
+            toast('Received minus change ('+fmt(net)+') due amount ('+fmt(due)+') se match nahi kar raha', 'bad');
+            return;
+          }
+          closeModal();
+          if(!resolved){ resolved=true; resolve({ receivedDenoms:{...recvState}, changeDenoms:{...changeState}, received, change: changeGiven }); }
+        }}
+    ]);
+    function recalc(){
+      const received = DENOMS.reduce((s,d)=>s+(recvState[d]||0)*d,0);
+      $('#pwcRecvTotal').textContent = fmt(received);
+      const msg = $('#pwcMsg'), changeWrap = $('#pwcChangeWrap');
+      if(!received){ msg.style.display='none'; changeWrap.style.display='none'; return; }
+      if(received < due){
+        msg.style.display='block'; msg.className='tag-info mt-8';
+        msg.innerHTML = '⚠ Short by ' + fmt(due-received);
+        changeWrap.style.display='none';
+        return;
+      }
+      const change = Math.round((received - due) * 100) / 100;
+      if(change > 0){
+        msg.style.display='block'; msg.className='tag-note mt-8';
+        msg.innerHTML = 'Change due: <b>' + fmt(change) + '</b> — notes neeche adjust kar sakte ho.';
+        changeWrap.style.display='block';
+        if(lastChangeAmt !== change){
+          lastChangeAmt = change;
+          const suggestion = breakChange(change).notes;
+          DENOMS.forEach(d => { changeState[d] = suggestion[d]||0; });
+          renderDenomGrid($('#pwcChangeDenom'), changeState, () => {
+            $('#pwcChangeTotal').textContent = fmt(DENOMS.reduce((s,d)=>s+(changeState[d]||0)*d,0));
+          });
+          $('#pwcChangeTotal').textContent = fmt(change);
+        }
+      }else{
+        msg.style.display='block'; msg.className='tag-note mt-8';
+        msg.innerHTML = 'Exact amount received — no change due.';
+        changeWrap.style.display='none';
+        DENOMS.forEach(d => { changeState[d] = 0; });
+        lastChangeAmt = 0;
+      }
+    }
+    renderDenomGrid($('#pwcRecvDenom'), recvState, recalc);
+  });
+}
+
 // Manual note-entry modal — used wherever cash actually changes hands
 // (return refund, exchange top-up/credit) so staff records exactly which
 // notes were taken/given, instead of an auto-suggested breakdown.
@@ -4569,7 +4644,7 @@ function showBillForReturn(b, highlightVariantID){
 
     // Collect manual note-entry UPFRONT for whichever cash movement this
     // will need — if the staff cancels here, nothing has been touched yet.
-    let cashDenoms = null, exOwedDenoms = null, exCreditDenoms = null, previewOwed = 0, previewCredit = 0;
+    let cashDenoms = null, exOwedResult = null, exCreditDenoms = null, previewOwed = 0, previewCredit = 0;
     if(mode === 'cash' && previewRefund > 0){
       cashDenoms = await collectDenomsModal('Refund — Notes Diye', previewRefund, 'Customer ko wapas konse note diye — sab select karo.');
       if(!cashDenoms){ toast('Return cancel ho gaya', 'warn'); return; }
@@ -4579,8 +4654,8 @@ function showBillForReturn(b, highlightVariantID){
       previewOwed = Math.max(0, Math.round((newItemTotal - discount) * 100) / 100);
       previewCredit = Math.max(0, Math.round((previewRefund - newItemTotal) * 100) / 100);
       if(previewOwed > 0){
-        exOwedDenoms = await collectDenomsModal('Exchange Top-up — Notes Liye', previewOwed, 'Customer se extra kitne aur konse note liye — sab select karo.');
-        if(!exOwedDenoms){ toast('Exchange cancel ho gaya', 'warn'); return; }
+        exOwedResult = await collectPaymentWithChangeModal('Exchange Top-up — Paisa Liya', previewOwed, 'Customer se extra paisa liya — jo note mile wo yaha daalo, zyada diya to change apne aap suggest hoga.');
+        if(!exOwedResult){ toast('Exchange cancel ho gaya', 'warn'); return; }
       } else if(previewCredit > 0){
         exCreditDenoms = await collectDenomsModal('Exchange Balance — Notes Diye', previewCredit, 'Customer ko balance mein konse note diye — sab select karo.');
         if(!exCreditDenoms){ toast('Exchange cancel ho gaya', 'warn'); return; }
@@ -4644,14 +4719,24 @@ function showBillForReturn(b, highlightVariantID){
       const exRes = await apiPost('addBill', exPayload);
       if(!exRes.success){ toast('Exchange item save failed: '+(exRes.error||''), 'bad'); }
       else{
-        if(owed > 0 && exOwedDenoms){
+        if(owed > 0 && exOwedResult){
           apiPost('addCashTxn', {
-            Date: dayKey(nowISO()), Type:'IN', Amount: owed,
+            Date: dayKey(nowISO()), Type:'IN', Amount: exOwedResult.received,
             Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
             StaffID: state.user.staffID, StaffName: state.user.name,
-            Description: 'Exchange top-up collected — for '+b.BillNumber+' — Notes: '+denomText(exOwedDenoms)
+            Description: 'Exchange top-up — received from customer — for '+b.BillNumber+' — Notes: '+denomText(exOwedResult.receivedDenoms)
           });
-          apiPost('updateDrawerDenoms', { delta: exOwedDenoms, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
+          apiPost('updateDrawerDenoms', { delta: exOwedResult.receivedDenoms, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID)+'-IN' });
+          if(exOwedResult.change > 0){
+            apiPost('addCashTxn', {
+              Date: dayKey(nowISO()), Type:'OUT', Amount: exOwedResult.change,
+              Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
+              StaffID: state.user.staffID, StaffName: state.user.name,
+              Description: 'Exchange top-up — change given back — for '+b.BillNumber+' — Notes: '+denomText(exOwedResult.changeDenoms)
+            });
+            const changeDelta = {}; DENOMS.forEach(d => changeDelta[d] = -(exOwedResult.changeDenoms[d]||0));
+            apiPost('updateDrawerDenoms', { delta: changeDelta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID)+'-CHANGE' });
+          }
         }
         if(credit > 0 && exCreditDenoms){
           apiPost('addCashTxn', {
@@ -5231,7 +5316,6 @@ function openCollectEmiPayment(emi){
   const insts = emiInstallmentsFor(emi.EMIID);
   const next = insts.find(i => i.Status!=='Paid');
   const due = next ? (Number(next.Amount) - Number(next.PaidAmount||0)) : 0;
-  const denomState = {};
   openModal('EMI Kist Collect Karo • '+(emi.CustomerName||emi.CustomerMobile), `
     <div class="tag-info mb-12">Kist #${next?next.InstallmentNumber:'—'} | Due: <b>${fmt(due)}</b><br>
       <span class="dim">Agar isse zyada amount doge, bacha hua paisa apne aap agli kist(o) mein cut hota rahega.</span></div>
@@ -5246,23 +5330,33 @@ function openCollectEmiPayment(emi){
       </div>
     </div>
     <div id="emiPayOnlineWrap" class="field mb-12" style="display:none"><label>Online Amount</label><input class="inp" id="emiPayOnlineAmt" type="number" min="0"></div>
-    <div id="emiPayDenomWrap"><label class="dim">Cash denominations:</label><div class="denom-grid" id="emiPayDenom"></div></div>
+    <div id="emiPayCashNote" class="dim" style="display:none;">Cash portion ke notes agle step mein liye jayenge (received + change support ke saath).</div>
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Collect', kind:'ok', on: async () => {
       const amt = Number($('#emiPayAmt').value||0);
       if(amt<=0){ toast('Amount daalo', 'bad'); return; }
       const mode = $('#emiPayMode').value;
-      const cashAmt = mode==='Online' ? 0 : (mode==='Mixed' ? DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0) : amt);
       const onlineAmt = mode==='Cash' ? 0 : (mode==='Mixed' ? Number($('#emiPayOnlineAmt').value||0) : (mode==='Online'?amt:0));
+      const cashDue = mode==='Online' ? 0 : Math.round((amt - onlineAmt) * 100) / 100;
+
+      let payResult = null;
+      if(cashDue > 0){
+        closeModal();
+        payResult = await collectPaymentWithChangeModal('EMI Kist — Paisa Liya', cashDue, 'Customer se jo note mile wo daalo — zyada diya to change apne aap suggest hoga.');
+        if(!payResult){ toast('Collection cancel ho gayi', 'warn'); return; }
+      } else {
+        closeModal();
+      }
+      const cashAmt = payResult ? Math.round((payResult.received - payResult.change) * 100) / 100 : 0;
+
       const payload = {
         EMIID: emi.EMIID, Amount: amt, PaymentMode: mode,
         CashAmount: cashAmt, OnlineAmount: onlineAmt,
         StaffID: state.user.staffID, StaffName: state.user.name
       };
       if(next) payload.InstallmentID = next.InstallmentID;
-      if(cashAmt>0) payload.denoms = denomState;
-      closeModal();
+      if(payResult) payload.denoms = payResult.receivedDenoms;
       toast('Saving…');
       const r = await apiPostBG('payEmiInstallment', payload);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
@@ -5294,26 +5388,35 @@ function openCollectEmiPayment(emi){
         localEmi.Status = localEmi.TotalRemaining<=0 ? 'Completed' : 'Active';
       }
       render(currentScreen());
-      if(cashAmt>0){
-        const delta = {}; DENOMS.forEach(d => { if(denomState[d]) delta[d] = Math.abs(denomState[d]); });
-        apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EMI-'+emi.EMIID });
+      if(cashAmt>0 && payResult){
+        apiPostBG('updateDrawerDenoms', { delta: payResult.receivedDenoms, staffID: state.user.staffID, staffName: state.user.name, reference: 'EMI-'+emi.EMIID+'-IN' });
         apiPostBG('addCashTxn', {
           Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
-          Type: 'IN', Amount: cashAmt, Reference: 'EMI-'+emi.EMIID,
+          Type: 'IN', Amount: payResult.received, Reference: 'EMI-'+emi.EMIID,
           StaffID: state.user.staffID, StaffName: state.user.name,
-          Description: 'EMI kist collected from '+(emi.CustomerName||emi.CustomerMobile)
+          Description: 'EMI kist — received from '+(emi.CustomerName||emi.CustomerMobile)+' — Notes: '+denomText(payResult.receivedDenoms)
         });
+        if(payResult.change > 0){
+          const changeDelta = {}; DENOMS.forEach(d => changeDelta[d] = -(payResult.changeDenoms[d]||0));
+          apiPostBG('updateDrawerDenoms', { delta: changeDelta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EMI-'+emi.EMIID+'-CHANGE' });
+          apiPostBG('addCashTxn', {
+            Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+            Type: 'OUT', Amount: payResult.change, Reference: 'EMI-'+emi.EMIID,
+            StaffID: state.user.staffID, StaffName: state.user.name,
+            Description: 'EMI kist — change given back to '+(emi.CustomerName||emi.CustomerMobile)+' — Notes: '+denomText(payResult.changeDenoms)
+          });
+        }
       }
       toast('Kist collect ho gayi: '+fmt(amt), 'ok');
       pullAll(true);
     }}
   ]);
-  renderDenomGrid($('#emiPayDenom'), denomState, () => {});
   $('#emiPayMode').addEventListener('change', () => {
     const mode = $('#emiPayMode').value;
-    $('#emiPayDenomWrap').style.display = mode==='Online' ? 'none' : '';
     $('#emiPayOnlineWrap').style.display = mode==='Cash' ? 'none' : '';
+    $('#emiPayCashNote').style.display = mode==='Online' ? 'none' : 'block';
   });
+  $('#emiPayCashNote').style.display = 'block';
 }
 
 /* ============ RENT ============ */
