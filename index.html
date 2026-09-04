@@ -645,7 +645,7 @@ tr:hover td{background:#faf9f4;}
           <button class="btn ghost sm" id="btnCustScan">📷 Scan Bill</button>
         </div>
         <div class="tbl-wrap"><table id="custTbl">
-          <thead><tr><th>Name</th><th>Mobile</th><th>City</th><th>Spend</th><th>Points</th><th>Due</th><th>Coins</th><th>Last Buy</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Mobile</th><th>City</th><th>Last Buy</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1583,7 +1583,6 @@ window.addEventListener('DOMContentLoaded', () => {
   wirePOS();
   wireProducts();
   wireInventory();
-  wireCustomers();
   wireSuppliers();
   wireStaff();
   wireBillsSearch();
@@ -1591,6 +1590,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireReturns();
   wirePreorders();
   wireWallet();
+  wireCustomers();
   wireCash();
   wireLent();
   wireEmi();
@@ -1960,7 +1960,16 @@ function wirePOS(){
   $('#posDisc').addEventListener('input', refreshCart);
   $('#posSplitCash').addEventListener('input', refreshCart);
   $('#posSplitOnline').addEventListener('input', refreshCart);
-  $('#btnComplete').addEventListener('click', completeSale);
+  $('#btnComplete').addEventListener('click', () => {
+    const btn = $('#btnComplete');
+    if(btn.disabled) return; // already mid-submit — ignore extra clicks entirely
+    btn.disabled = true;
+    completeSale().finally(() => {
+      // Short cooldown even after the cart resets, so a fast repeat tap
+      // on the same physical click can't fire a second bill.
+      setTimeout(() => { btn.disabled = false; }, 800);
+    });
+  });
   $('#btnPrintLast').addEventListener('click', () => state.lastBill ? printBill(state.lastBill) : toast('No recent bill', 'warn'));
   $('#btnWhatsappLast').addEventListener('click', (e) => {
     const href = waHref(state.lastBill);
@@ -3725,67 +3734,6 @@ function openSetStockDialog(variantID, label, currentStock){
 }
 
 /* ============ CUSTOMERS ============ */
-function wireCustomers(){
-  $('#btnAddCust').addEventListener('click', ()=> openCustomerForm(null));
-  $('#custSearch').addEventListener('input', renderCustomers);
-  $('#btnCustScan').addEventListener('click', ()=> openCamScanner(code=>{
-    const bill = findBillByCode(code);
-    if(bill){ openBillDetailsModal(bill); return; }
-    toast('This barcode did not match any bill', 'bad');
-  }));
-}
-function renderCustomers(){
-  const term = ($('#custSearch').value||'').toLowerCase();
-  const list = (state.data.customers||[]).filter(c =>
-    !term || (c.Name||'').toLowerCase().includes(term) || String(c.Mobile||'').includes(term)
-  );
-  const tb = $('#custTbl tbody'); tb.innerHTML='';
-  list.forEach(c => {
-    // Total Spend / Loyalty Points / Last Purchase are calculated LIVE
-    // from the actual Bills data every time this screen renders — so
-    // customers with old, pre-existing bill history and brand-new
-    // customers both stay correct automatically, instead of trusting a
-    // stored field on the Customer row that can drift out of sync.
-    const custBills = (state.data.bills||[]).filter(b =>
-      (c.CustomerID && String(b.CustomerID)===String(c.CustomerID)) ||
-      (c.Mobile && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,''))
-    );
-    const totalSpend = custBills.reduce((s,b)=>s+Number(b.Total||0), 0);
-    const loyaltyPoints = Math.floor(totalSpend/100);
-    const lastPurchase = custBills.reduce((latest,b)=> (!latest || String(b.CreatedDate||'')>String(latest)) ? (b.CreatedDate||'') : latest, '');
-    const coinBal = (state.data.wallet||[])
-      .filter(w => String(w.CustomerID)===String(c.CustomerID) && w.Status==='Active')
-      .reduce((s,w)=>s+Number(w.RemainingAmount||0), 0);
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${c.Name||''}</td>
-      <td>${c.Mobile||''}</td>
-      <td>${c.City||'—'}</td>
-      <td>${fmt(totalSpend)}</td>
-      <td>${loyaltyPoints}</td>
-      <td>${fmt(c.DueBalance)}</td>
-      <td>${fmt(coinBal)}</td>
-      <td>${(lastPurchase || c.LastPurchaseDate || '').substr(0,10) || '—'}</td>
-      <td>
-        <button class="btn ghost sm" data-a="hist" data-id="${c.CustomerID}">👁 History</button>
-        <button class="btn ghost sm" data-a="edit" data-id="${c.CustomerID}">✎</button>
-        ${Number(c.DueBalance||0) > 0 ? `<button class="btn ok sm" data-a="due" data-id="${c.CustomerID}">💰 Collect Due</button>` : ''}
-      </td>`;
-    tb.appendChild(tr);
-  });
-  tb.onclick = async e => {
-    const b = e.target.closest('button'); if(!b) return;
-    const c = state.data.customers.find(x => x.CustomerID === b.dataset.id);
-    if(!c) return;
-    if(b.dataset.a === 'edit') openCustomerForm(c);
-    if(b.dataset.a === 'due') openCollectDueForm(c);
-    if(b.dataset.a === 'hist'){
-      $('#posCustMob').value = c.Mobile;
-      viewCustomerHistory();
-    }
-  };
-  if(!list.length) tb.innerHTML = '<tr><td colspan="9" class="empty">No customers</td></tr>';
-}
 // Settle some or all of a customer's Udhaar (Due) balance — reduces
 // DueBalance and logs the collected amount into Cash Drawer or Online
 // Payments depending on how it was collected, exactly like a normal sale.
@@ -3832,6 +3780,78 @@ function openCollectDueForm(c){
       pullAll();
     }}
   ]);
+}
+
+/* ============ CUSTOMERS ============ */
+function wireCustomers(){
+  $('#btnAddCust').addEventListener('click', ()=> openCustomerForm(null));
+  $('#custSearch').addEventListener('input', renderCustomers);
+  $('#btnCustScan').addEventListener('click', ()=> openCamScanner(code=>{
+    const bill = findBillByCode(code);
+    if(bill){ openBillDetailsModal(bill); return; }
+    toast('This barcode did not match any bill', 'bad');
+  }));
+}
+function renderCustomers(){
+  const term = ($('#custSearch').value||'').toLowerCase();
+  // Group by normalized mobile so if the sheet ever has duplicate Customer
+  // rows for the same person (old data, a mismatched save, etc.) they
+  // still show as ONE row here — with all of that person's bills counted
+  // together, not scattered across separate rows.
+  const groups = {};
+  (state.data.customers||[]).forEach(c => {
+    const key = String(c.Mobile||'').replace(/\D/g,'') || ('noph_'+c.CustomerID);
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  });
+  const merged = Object.values(groups).map(arr => {
+    // Prefer the row with a Name filled in, and the most recently updated
+    // one as the "primary" record that Edit/History/Collect Due act on.
+    const primary = arr.slice().sort((a,b) => {
+      if(!!b.Name !== !!a.Name) return (b.Name?1:0) - (a.Name?1:0);
+      return String(b.UpdatedDate||'').localeCompare(String(a.UpdatedDate||''));
+    })[0];
+    const dueSum = arr.reduce((s,c)=>s+Number(c.DueBalance||0), 0);
+    const allIDs = arr.map(c=>c.CustomerID);
+    return { primary, dueSum, allIDs };
+  });
+  const list = merged.filter(({primary}) =>
+    !term || (primary.Name||'').toLowerCase().includes(term) || String(primary.Mobile||'').includes(term)
+  );
+  const tb = $('#custTbl tbody'); tb.innerHTML='';
+  list.forEach(({primary:c, dueSum, allIDs}) => {
+    const lastPurchase = (state.data.bills||[]).filter(b =>
+      allIDs.includes(String(b.CustomerID)) ||
+      (c.Mobile && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,''))
+    ).reduce((latest,b)=> (!latest || String(b.CreatedDate||'')>String(latest)) ? (b.CreatedDate||'') : latest, '');
+    // Money figures (spend, points, due, coin balance) are intentionally
+    // NOT shown in this list — only after clicking History/View, so the
+    // list itself stays private/glanceable.
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${c.Name||''}</td>
+      <td>${c.Mobile||''}</td>
+      <td>${c.City||'—'}</td>
+      <td>${(lastPurchase || c.LastPurchaseDate || '').substr(0,10) || '—'}</td>
+      <td>
+        <button class="btn ghost sm" data-a="hist" data-id="${c.CustomerID}">👁 View</button>
+        <button class="btn ghost sm" data-a="edit" data-id="${c.CustomerID}">✎</button>
+        ${dueSum > 0 ? `<button class="btn ok sm" data-a="due" data-id="${c.CustomerID}">💰 Collect Due</button>` : ''}
+      </td>`;
+    tb.appendChild(tr);
+  });
+  tb.onclick = async e => {
+    const b = e.target.closest('button'); if(!b) return;
+    const c = state.data.customers.find(x => x.CustomerID === b.dataset.id);
+    if(!c) return;
+    if(b.dataset.a === 'edit') openCustomerForm(c);
+    if(b.dataset.a === 'due') openCollectDueForm(c);
+    if(b.dataset.a === 'hist'){
+      $('#posCustMob').value = c.Mobile;
+      viewCustomerHistory();
+    }
+  };
+  if(!list.length) tb.innerHTML = '<tr><td colspan="5" class="empty">No customers</td></tr>';
 }
 function openCustomerForm(c){
   const isEdit = !!c;
