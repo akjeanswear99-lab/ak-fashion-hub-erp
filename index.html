@@ -5496,7 +5496,11 @@ function openEditEmiInstallment(inst){
 }
 
 function wireRent(){
-  $('#btnAddRent').addEventListener('click', () => openAddRentForm());
+  $('#btnAddRent').addEventListener('click', () => {
+    const btn = $('#btnAddRent');
+    if(btn.disabled) return;
+    openAddRentForm();
+  });
 }
 function renderRent(){
   let rows = (state.data.rent||[]).slice();
@@ -5532,6 +5536,9 @@ function openAddRentForm(){
     { label:'Bill Banao', kind:'ok', on: async () => {
       const amt = Number($('#rentAmt').value||0);
       if(amt<=0){ toast('Amount daalo', 'bad'); return; }
+      const addBtn = $('#btnAddRent');
+      if(addBtn && addBtn.disabled) return;
+      if(addBtn) addBtn.disabled = true;
       closeModal();
       toast('Saving…');
       const body = {
@@ -5539,6 +5546,7 @@ function openAddRentForm(){
         Notes: $('#rentNotes').value.trim(), StaffID: state.user.staffID, StaffName: state.user.name
       };
       const r = await apiPostBG('addRent', body);
+      if(addBtn) setTimeout(()=>{ addBtn.disabled = false; }, 800);
       if(!r.success){ toast(r.error||'Save failed', 'bad'); return; }
       const savedRent = (r.data && (r.data.rent || r.data)) || {};
       const localRent = Object.assign({ RentID: savedRent.RentID || ('TEMP-'+Date.now()), Status:'Pending', CashAmount:0, OnlineAmount:0 }, body, savedRent);
@@ -5552,7 +5560,6 @@ function openAddRentForm(){
 }
 function openPayRentForm(r){
   const pending = Number(r.Amount||0) - Number(r.CashAmount||0) - Number(r.OnlineAmount||0);
-  const denomState = {};
   openModal('Rent Pay Karo • '+(r.Period||''), `
     <div class="tag-info mb-12">Pending: <b>${fmt(pending)}</b></div>
     <div class="grid-2 mb-12">
@@ -5566,53 +5573,72 @@ function openPayRentForm(r){
       </div>
     </div>
     <div id="rentPayOnlineWrap" class="field mb-12" style="display:none"><label>Online Amount</label><input class="inp" id="rentPayOnlineAmt" type="number" min="0"></div>
-    <div id="rentPayDenomWrap"><label class="dim">Notes diye (drawer se minus honge):</label><div class="denom-grid" id="rentPayDenom"></div></div>
+    <div id="rentPayNote" class="dim">Cash portion ke notes agle step mein liye jayenge.</div>
   `, [
     { label:'Cancel', kind:'ghost', on: closeModal },
     { label:'Pay Karo', kind:'ok', on: async () => {
       const amt = Number($('#rentPayAmt').value||0);
       if(amt<=0){ toast('Amount daalo', 'bad'); return; }
       const mode = $('#rentPayMode').value;
-      const cashAmt = mode==='Online' ? 0 : (mode==='Mixed' ? DENOMS.reduce((s,d)=>s+(denomState[d]||0)*d,0) : amt);
       const onlineAmt = mode==='Cash' ? 0 : (mode==='Mixed' ? Number($('#rentPayOnlineAmt').value||0) : (mode==='Online'?amt:0));
+      const cashDue = mode==='Online' ? 0 : Math.round((amt - onlineAmt) * 100) / 100;
+      if(cashDue < 0){ toast('Online amount total se zyada nahi ho sakta', 'bad'); return; }
+
+      // Cash portion — staff must select the EXACT notes given (no
+      // guessing/blind trust), so the drawer count always stays correct.
+      let cashDenoms = null;
+      if(cashDue > 0){
+        closeModal();
+        cashDenoms = await collectDenomsModal('Rent — Notes Diye', cashDue, 'Rent ke liye galle se konse note diye — sab select karo. Notes ka total exact amount se match hona zaruri hai.');
+        if(!cashDenoms){ toast('Rent payment cancel ho gayi', 'warn'); return; }
+      } else {
+        closeModal();
+      }
+
       const payload = {
         RentID: r.RentID, Amount: amt, PaymentMode: mode,
-        CashAmount: cashAmt, OnlineAmount: onlineAmt,
+        CashAmount: cashDue, OnlineAmount: onlineAmt,
         StaffID: state.user.staffID, StaffName: state.user.name
       };
-      if(cashAmt>0) payload.denoms = denomState;
-      closeModal();
+      if(cashDenoms) payload.denoms = cashDenoms;
       toast('Saving…');
       const res = await apiPostBG('payRent', payload);
       if(!res.success){ toast(res.error||'Save failed', 'bad'); return; }
       // Optimistic local update
       const localRent = state.data.rent.find(x => String(x.RentID)===String(r.RentID));
       if(localRent){
-        localRent.CashAmount = Number(localRent.CashAmount||0) + cashAmt;
+        localRent.CashAmount = Number(localRent.CashAmount||0) + cashDue;
         localRent.OnlineAmount = Number(localRent.OnlineAmount||0) + onlineAmt;
         localRent.Status = (localRent.CashAmount + localRent.OnlineAmount) >= Number(localRent.Amount) ? 'Paid' : 'Partial';
         localRent.PaymentMode = mode;
       }
       render(currentScreen());
-      if(cashAmt>0){
-        const delta = {}; DENOMS.forEach(d => { if(denomState[d]) delta[d] = -Math.abs(denomState[d]); });
+      if(cashDue > 0 && cashDenoms){
+        const delta = {}; DENOMS.forEach(d => { if(cashDenoms[d]) delta[d] = -Math.abs(cashDenoms[d]); });
         apiPostBG('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RENT-'+r.RentID });
         apiPostBG('addCashTxn', {
           Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
-          Type: 'OUT', Amount: cashAmt, Reference: 'RENT-'+r.RentID,
+          Type: 'OUT', Amount: cashDue, Reference: 'RENT-'+r.RentID,
           StaffID: state.user.staffID, StaffName: state.user.name,
-          Description: 'Rent paid for '+(r.Period||'')
+          Description: 'Rent paid for '+(r.Period||'')+' — Notes: '+denomText(cashDenoms)
+        });
+      }
+      if(onlineAmt > 0){
+        apiPostBG('addCashTxn', {
+          Date: dayKey(nowISO()), Time: new Date().toTimeString().substr(0,8),
+          Type: 'ONLINE-OUT', Amount: onlineAmt, Reference: 'RENT-'+r.RentID,
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Rent paid (Online) for '+(r.Period||'')
         });
       }
       toast('Rent pay ho gaya: '+fmt(amt), 'ok');
       pullAll(true);
     }}
   ]);
-  renderDenomGrid($('#rentPayDenom'), denomState, () => {});
   $('#rentPayMode').addEventListener('change', () => {
     const mode = $('#rentPayMode').value;
-    $('#rentPayDenomWrap').style.display = mode==='Online' ? 'none' : '';
     $('#rentPayOnlineWrap').style.display = mode==='Cash' ? 'none' : '';
+    $('#rentPayNote').style.display = mode==='Online' ? 'none' : 'block';
   });
 }
 
