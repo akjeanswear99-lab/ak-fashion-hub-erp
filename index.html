@@ -271,6 +271,7 @@ tr:hover td{background:#faf9f4;}
     <div class="who">
       <span class="badge role-admin" id="topRole">admin</span>
       <span id="topUser" class="dim">ABHISHEK KUMAR</span>
+      <button class="btn ghost sm" id="btnMoneyToggle" title="Show/hide money amounts">🙈 Amounts Hidden</button>
       <button class="btn ghost sm" id="btnRefresh">↻ Sync</button>
       <button class="btn sm bad" id="btnLogout">Logout</button>
     </div>
@@ -1369,6 +1370,19 @@ const DENOMS = [500, 200, 100, 50, 20, 10];
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const fmt = n => '₹' + Math.round(Number(n||0)).toLocaleString('en-IN');
+// Display label only — the internal PaymentMode value stays 'Udhaar'
+// everywhere in the code/logic; customers and printed material just see
+// the friendlier "Due" instead.
+const payModeLabel = m => m === 'Udhaar' ? 'Due' : (m || '');
+
+// Global money-privacy toggle — amounts stay masked (••••) by default
+// across Dashboard/Cash Drawer/Reports until the eye button is clicked.
+// Persisted in localStorage so the choice survives a page reload.
+let moneyHidden = (localStorage.getItem('akfh_moneyHidden') ?? '1') === '1';
+// Wrap any already-formatted money string (e.g. fmt(x)) — masks everything
+// after the ₹ sign with dots of roughly the same width, so the layout
+// doesn't jump when toggled.
+const mfmt = n => moneyHidden ? '₹••••' : fmt(n);
 // Profit, recomputed for reporting so it always reflects the amount
 // actually received AFTER discount — not the full listed price. Works for
 // every bill (old or new) since it re-derives from the bill's own
@@ -1705,6 +1719,7 @@ function enterShell(){
   $('#topUser').textContent = state.user.name;
   $('#topRole').textContent = state.user.role || 'staff';
   $('#topRole').className = 'badge ' + (isAdminUser()?'role-admin':'');
+  $('#btnMoneyToggle').textContent = moneyHidden ? '🙈 Amounts Hidden' : '👁 Amounts Shown';
   applyRolePerms();
   goto('dash');
 }
@@ -1756,6 +1771,12 @@ function wireHeader(){
     ]);
   });
   $('#btnRefresh').addEventListener('click', pullAll);
+  $('#btnMoneyToggle').addEventListener('click', () => {
+    moneyHidden = !moneyHidden;
+    localStorage.setItem('akfh_moneyHidden', moneyHidden ? '1' : '0');
+    $('#btnMoneyToggle').textContent = moneyHidden ? '🙈 Amounts Hidden' : '👁 Amounts Shown';
+    render(currentScreen());
+  });
   $('#btnSideToggle').addEventListener('click', () => {
     document.querySelector('.side').classList.toggle('slide');
   });
@@ -1868,11 +1889,11 @@ function renderDash(){
         return s; // ignore ONLINE-*/INFO/ATTENDANCE entries — they don't move physical cash
       }, 0);
 
-  $('#s-todaySales').textContent = fmt(sales);
+  $('#s-todaySales').textContent = mfmt(sales);
   $('#s-todayBills').textContent = todaysBills.length + ' bills';
   $('#s-invUnits').textContent = invUnits.toLocaleString('en-IN');
-  $('#s-invValue').textContent = fmt(invValue) + ' value';
-  $('#s-drawer').textContent = fmt(draw);
+  $('#s-invValue').textContent = mfmt(invValue) + ' value';
+  $('#s-drawer').textContent = mfmt(draw);
   $('#s-drawerHint').textContent = (state.data.cashTransactions||[]).length + ' entries logged';
 
   // Month & all-time
@@ -1887,9 +1908,9 @@ function renderDash(){
   const allSales = Math.max(0, bills.reduce((s,b)=>s+Number(b.Total||0), 0) - allReturns);
   const totalCust = (state.data.customers||[]).length;
   const newCust = (state.data.customers||[]).filter(c => (c.CreatedDate||'').startsWith(monthStart)).length;
-  $('#s-monthSales').textContent = fmt(monthSales);
+  $('#s-monthSales').textContent = mfmt(monthSales);
   $('#s-monthBills').textContent = monthBills.length + ' bills';
-  $('#s-allSales').textContent = fmt(allSales);
+  $('#s-allSales').textContent = mfmt(allSales);
   $('#s-allBills').textContent = bills.length + ' bills';
   $('#s-totalCust').textContent = totalCust;
   $('#s-newCust').textContent = newCust + ' new this month';
@@ -1927,7 +1948,7 @@ function renderDash(){
       ? `<a class="btn ghost sm" href="${href}" target="_blank" rel="noopener" title="Send WhatsApp">📱</a>`
       : `<button class="btn ghost sm" disabled title="No valid mobile on this bill">📱</button>`;
     tr.innerHTML = `<td>${b.BillNumber||''}</td><td>${b.CustomerName||b.CustomerMobile||'—'}</td>
-      <td>${fmt(b.Total)}</td><td>${b.PaymentMode||'Cash'}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>
+      <td>${fmt(b.Total)}</td><td>${payModeLabel(b.PaymentMode||'Cash')}</td><td>${(b.CreatedDate||'').substr(11,5)}</td>
       <td><button class="btn ghost sm" data-a="print" data-id="${b.BillID}" title="Print">🖨</button> ${waEl}</td>`;
     tb.appendChild(tr);
   });
@@ -2176,7 +2197,7 @@ function openBillDetailsModal(b){
   const rows = (full.items||[]).map(it => `<tr><td>${it.Name}</td><td>${it.Color||''} ${it.Size||''}</td><td>${it.Quantity}</td><td>${fmt(it.Price)}</td><td>${fmt(it.LineTotal)}</td></tr>`).join('');
   openModal('Bill • '+(b.BillNumber||''), `
     <div class="grid-2 mb-12">
-      <div><b>Bill #:</b> ${b.BillNumber||''}<br><b>Date:</b> ${(b.CreatedDate||'').substr(0,16).replace('T',' ')}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
+      <div><b>Bill #:</b> ${b.BillNumber||''}<br><b>Date:</b> ${(b.CreatedDate||'').substr(0,16).replace('T',' ')}<br><b>Mode:</b> ${payModeLabel(b.PaymentMode)}</div>
       <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Total:</b> ${fmt(b.Total)}</div>
     </div>
     <div class="tbl-wrap"><table>
@@ -2804,7 +2825,7 @@ function printBill(b){
   // Split / Udhaar bills show exactly how the amount was actually paid —
   // how much Cash, how much Online, and how much is still Due (Udhaar).
   const splitLine = (b.PaymentMode==='Mixed' || b.PaymentMode==='Udhaar')
-    ? `<div class="infoline">Cash: ${fmt(b.CashAmount||0)} &nbsp;•&nbsp; Online: ${fmt(b.OnlineAmount||0)}${Number(b.DueAmount||0)>0 ? ' &nbsp;•&nbsp; Udhaar: '+fmt(b.DueAmount) : ''}</div>`
+    ? `<div class="infoline">Cash: ${fmt(b.CashAmount||0)} &nbsp;•&nbsp; Online: ${fmt(b.OnlineAmount||0)}${Number(b.DueAmount||0)>0 ? ' &nbsp;•&nbsp; Due: '+fmt(b.DueAmount) : ''}</div>`
     : '';
   const giftLine = b.GiftItems ? `<div class="infoline">🎁 Gift: ${b.GiftItems}</div>` : '';
   const notesLine = b.NotesIn ? `<div class="infoline">Notes: ${b.NotesIn}</div>` : '';
@@ -2844,7 +2865,7 @@ function printBill(b){
         <div class="row"><span>Discount</span><span>−${fmt(b.Discount)}</span></div>
         ${b.WalletUsed ? '<div class="row"><span>Coin '+b.WalletID+'</span><span>−'+fmt(b.WalletUsed)+'</span></div>' : ''}
         <div class="grand"><span>TOTAL</span><span>${fmt(b.Total)}</span></div>
-        <div class="infoline">Payment Mode: ${b.PaymentMode}</div>
+        <div class="infoline">Payment Mode: ${payModeLabel(b.PaymentMode)}</div>
         ${splitLine}
         ${cashLine}
         ${notesLine}
@@ -2877,7 +2898,7 @@ function printBill(b){
 // pre-filled and ready to Send — wa.me/<countrycode><number> always opens
 // that exact contact's chat window with the text box pre-populated.
 function buildBillWaMessage(b){
-  return `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${(b.CreatedDate||'').substr(0,10) || new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${b.PaymentMode}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
+  return `Dear ${b.CustomerName||'Customer'},\n\nThank you for shopping with ${state.cfg.shopName}!\n\nInvoice Number: ${b.BillNumber}\nDate: ${(b.CreatedDate||'').substr(0,10) || new Date().toLocaleDateString('en-IN')}\nAmount Paid: ${fmt(b.Total)}\nPayment Mode: ${payModeLabel(b.PaymentMode)}\n\nWe truly appreciate your visit and look forward to serving you again soon.\n\nWarm regards,\n${state.cfg.shopName}`;
 }
 // Returns the actual wa.me URL for a bill, or '' if there's no valid
 // 10-digit customer mobile to send it to.
@@ -2894,6 +2915,32 @@ function waHref(b){
   const mob = (b.CustomerMobile||'').replace(/\D/g,'');
   if(!mob || mob.length !== 10) return '';
   return 'https://wa.me/91'+mob+'?text='+encodeURIComponent(buildBillWaMessage(b));
+}
+
+// Professional Due/Udhaar reminder — lists every bill that still has a
+// balance (Bill #, date, total, paid so far, due), then the overall
+// total due, ready to send on WhatsApp with one tap.
+function buildDueReminderMessage(c){
+  const dueBills = (state.data.bills||[]).filter(b =>
+    (String(b.CustomerID)===String(c.CustomerID) ||
+     (c.Mobile && String(b.CustomerMobile||'').replace(/\D/g,'')===String(c.Mobile||'').replace(/\D/g,'')))
+    && Number(b.DueAmount||0) > 0.5
+  ).sort((a,b)=> new Date(a.CreatedDate||0) - new Date(b.CreatedDate||0));
+
+  const lines = dueBills.map(b => {
+    const paidSoFar = Math.max(0, Number(b.Total||0) - Number(b.DueAmount||0));
+    return `• Bill #${b.BillNumber} (${(b.CreatedDate||'').substr(0,10)}) — Total: ${fmt(b.Total)}, Paid: ${fmt(paidSoFar)}, Due: ${fmt(b.DueAmount)}`;
+  }).join('\n');
+
+  return `Dear ${c.Name||'Customer'},\n\nThis is a gentle reminder from ${state.cfg.shopName} regarding your pending payment.\n\n${lines || 'You have an outstanding balance on your account.'}\n\nTotal Due: ${fmt(c.DueBalance)}\n\nKindly clear the due at your earliest convenience. Please feel free to reach out if you have any questions.\n\nThank you,\n${state.cfg.shopName}${state.cfg.shopMobile ? '\n'+state.cfg.shopMobile : ''}`;
+}
+// Same real-anchor approach as waHref() (see note above it) — a genuine
+// <a href> click can never be popup-blocked, unlike window.open().
+function dueReminderWaHref(c){
+  if(!c) return '';
+  const mob = (c.Mobile||'').replace(/\D/g,'');
+  if(!mob || mob.length !== 10) return '';
+  return 'https://wa.me/91'+mob+'?text='+encodeURIComponent(buildDueReminderMessage(c));
 }
 // Refreshes the "WhatsApp" button on the billing screen to point at
 // whatever the current state.lastBill is — called right after a sale is
@@ -2961,7 +3008,7 @@ function renderBills(){
       <td>${b.CustomerName||'—'}</td>
       <td>${b.CustomerMobile||'—'}</td>
       <td>${fmt(b.Total)}</td>
-      <td>${b.PaymentMode||''}</td>
+      <td>${payModeLabel(b.PaymentMode)}</td>
       <td>${retCls ? '<span class="pill '+retCls+'">'+retLabel+'</span>' : retLabel}</td>
       <td>${fmt(stats.coinBal)}</td>
       <td>${stats.loyaltyPoints}</td>
@@ -3097,7 +3144,7 @@ async function viewCustomerHistory(){
       <td>${b.BillNumber||''}</td>
       <td>${its}</td>
       <td class="text-r">${fmt(b.Total)}</td>
-      <td>${b.PaymentMode||''}</td>
+      <td>${payModeLabel(b.PaymentMode)}</td>
       <td><button class="btn ghost sm" data-bp="${b.BillID}" title="Print">🖨</button> ${waEl}</td>
     </tr>`;
   }).join('');
@@ -4535,7 +4582,7 @@ function showBillForReturn(b, highlightVariantID){
       </div>
       <div class="grid-2 mb-12">
         <div><b>Bill:</b> ${b.BillNumber}<br><b>Bill ID:</b> <span class="mono">${b.BillID}</span><br><b>Date:</b> ${(b.CreatedDate||'').substr(0,10)}<br><b>Total:</b> ${fmt(b.Total)}</div>
-        <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${b.PaymentMode||''}</div>
+        <div><b>Customer:</b> ${b.CustomerName||'—'}<br><b>Mobile:</b> ${b.CustomerMobile||'—'}<br><b>Mode:</b> ${payModeLabel(b.PaymentMode)}</div>
       </div>
       ${billDiscount > 0 ? '<div class="tag-info mb-12">This bill had a ₹'+fmt(billDiscount)+' discount applied — the Refund Rate below defaults to the discount-adjusted price, but you can change it (e.g. to MRP, or whatever it was actually sold for).</div>' : ''}
       <div class="row mb-12">
@@ -6009,12 +6056,12 @@ function renderReports(){
   const profit30 = items30.reduce((s,it) => s + itemProfitPostDiscount(it, billsById30[it.BillID]), 0);
   const expenses30 = (state.data.expenses||[]).filter(e => new Date(e.Date||e.CreatedDate) >= thirtyAgo)
     .reduce((s,e)=>s+Number(e.Amount||0), 0);
-  $('#repSummSales').textContent = fmt(netSales30);
-  $('#repSummProfit').textContent = fmt(profit30);
-  $('#repSummExp').textContent = fmt(expenses30);
-  $('#repSummNet').textContent = fmt(profit30 - expenses30);
+  $('#repSummSales').textContent = mfmt(netSales30);
+  $('#repSummProfit').textContent = mfmt(profit30);
+  $('#repSummExp').textContent = mfmt(expenses30);
+  $('#repSummNet').textContent = mfmt(profit30 - expenses30);
   $('#repSummBills').textContent = bills30.length;
-  $('#repSummReturns').textContent = fmt(returnsTotal30);
+  $('#repSummReturns').textContent = mfmt(returnsTotal30);
 
   // Payment mode breakdown — how much actually came in as Cash vs Online
   // vs still-pending Udhaar, using the same CashAmount/OnlineAmount/
@@ -6036,7 +6083,10 @@ function renderReports(){
     .sort((a,b)=>Number(b.DueBalance||0)-Number(a.DueBalance||0));
   $('#repDue tbody').innerHTML = dueCust.map(c =>
     `<tr><td>${c.Name||'—'}</td><td>${c.Mobile||''}</td><td>${fmt(c.DueBalance)}</td><td>${(c.LastPurchaseDate||'').substr(0,10)}</td>
-     <td><button class="btn ok sm" data-a="due" data-id="${c.CustomerID}">💰 Collect</button></td></tr>`
+     <td>
+       <button class="btn ok sm" data-a="due" data-id="${c.CustomerID}">💰 Collect</button>
+       ${dueReminderWaHref(c) ? `<a class="btn ghost sm" href="${dueReminderWaHref(c)}" target="_blank" rel="noopener">📱 Remind</a>` : ''}
+     </td></tr>`
   ).join('') || '<tr><td colspan="5" class="empty">No outstanding dues 🎉</td></tr>';
   const repDueBody = $('#repDue tbody');
   if(repDueBody) repDueBody.onclick = e => {
@@ -6399,9 +6449,9 @@ function renderCash(){
     ? DENOMS.reduce((s,d)=> s + Number(dd['Denom'+d]||0) * d, 0)
     : (DENOMS.reduce((s,d)=>s + (state.denomOpen[d]||0)*d, 0) + in_ - out_);
 
-  $('#drawIn').textContent = fmt(in_);
-  $('#drawOut').textContent = fmt(out_);
-  $('#drawNow').textContent = fmt(liveTotal);
+  $('#drawIn').textContent = mfmt(in_);
+  $('#drawOut').textContent = mfmt(out_);
+  $('#drawNow').textContent = mfmt(liveTotal);
 
   // Note-wise live table — sourced straight from the backend so it survives refresh.
   const dtb = $('#denomLiveTbl tbody'); dtb.innerHTML = '';
