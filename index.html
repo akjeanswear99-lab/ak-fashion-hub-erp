@@ -4400,6 +4400,79 @@ function collectPaymentWithChangeModal(title, due, hintText){
   });
 }
 
+// Mirror of collectPaymentWithChangeModal but for the OPPOSITE direction —
+// the shop is GIVING cash out (e.g. a refund) and may hand over a bigger
+// note than owed, getting smaller change back from the customer. Net
+// (given - changeBack) must equal `due`. Resolves to {givenDenoms,
+// changeBackDenoms, given, changeBack} or null on cancel.
+function givePaymentWithChangeModal(title, due, hintText){
+  return new Promise(resolve => {
+    const giveState = {}, changeState = {};
+    let resolved = false, lastChangeAmt = null;
+    openModal(title, `
+      <div class="tag-info mb-12">${hintText}</div>
+      <div class="stat mb-8"><div class="lab">Refund Due</div><div class="val">${fmt(due)}</div></div>
+      <label class="dim">Notes Diye Customer Ko:</label>
+      <div class="denom-grid" id="gwcGiveDenom"></div>
+      <div class="stat mt-8"><div class="lab">Diya</div><div class="val" id="gwcGiveTotal">₹0</div></div>
+      <div id="gwcMsg" class="tag-note mt-8" style="display:none;"></div>
+      <div id="gwcChangeWrap" style="display:none;" class="mt-8">
+        <label class="dim">Customer Se Wapas Mila (chutta):</label>
+        <div class="denom-grid" id="gwcChangeDenom"></div>
+        <div class="stat mt-8"><div class="lab">Wapas Mila</div><div class="val" id="gwcChangeTotal">₹0</div></div>
+      </div>
+    `, [
+      { label:'Cancel', kind:'ghost', on: () => { closeModal(); if(!resolved){ resolved=true; resolve(null); } } },
+      { label:'Confirm', kind:'ok', on: () => {
+          const given = DENOMS.reduce((s,d)=>s+(giveState[d]||0)*d,0);
+          const changeBack = DENOMS.reduce((s,d)=>s+(changeState[d]||0)*d,0);
+          const net = Math.round((given - changeBack) * 100) / 100;
+          if(given < due - 0.5){ toast('Diya gaya amount refund due se kam hai', 'bad'); return; }
+          if(Math.round(net*100) !== Math.round(due*100)){
+            toast('Diya minus wapas mila ('+fmt(net)+') refund due ('+fmt(due)+') se match nahi kar raha', 'bad');
+            return;
+          }
+          closeModal();
+          if(!resolved){ resolved=true; resolve({ givenDenoms:{...giveState}, changeBackDenoms:{...changeState}, given, changeBack }); }
+        }}
+    ]);
+    function recalc(){
+      const given = DENOMS.reduce((s,d)=>s+(giveState[d]||0)*d,0);
+      $('#gwcGiveTotal').textContent = fmt(given);
+      const msg = $('#gwcMsg'), changeWrap = $('#gwcChangeWrap');
+      if(!given){ msg.style.display='none'; changeWrap.style.display='none'; return; }
+      if(given < due){
+        msg.style.display='block'; msg.className='tag-info mt-8';
+        msg.innerHTML = '⚠ Short by ' + fmt(due-given);
+        changeWrap.style.display='none';
+        return;
+      }
+      const extra = Math.round((given - due) * 100) / 100;
+      if(extra > 0){
+        msg.style.display='block'; msg.className='tag-note mt-8';
+        msg.innerHTML = 'Customer se <b>' + fmt(extra) + '</b> wapas lena hoga (chutta) — notes neeche adjust kar sakte ho.';
+        changeWrap.style.display='block';
+        if(lastChangeAmt !== extra){
+          lastChangeAmt = extra;
+          const suggestion = breakChange(extra).notes;
+          DENOMS.forEach(d => { changeState[d] = suggestion[d]||0; });
+          renderDenomGrid($('#gwcChangeDenom'), changeState, () => {
+            $('#gwcChangeTotal').textContent = fmt(DENOMS.reduce((s,d)=>s+(changeState[d]||0)*d,0));
+          });
+          $('#gwcChangeTotal').textContent = fmt(extra);
+        }
+      }else{
+        msg.style.display='block'; msg.className='tag-note mt-8';
+        msg.innerHTML = 'Exact amount diya — kuch wapas nahi lena.';
+        changeWrap.style.display='none';
+        DENOMS.forEach(d => { changeState[d] = 0; });
+        lastChangeAmt = 0;
+      }
+    }
+    renderDenomGrid($('#gwcGiveDenom'), giveState, recalc);
+  });
+}
+
 // Manual note-entry modal — used wherever cash actually changes hands
 // (return refund, exchange top-up/credit) so staff records exactly which
 // notes were taken/given, instead of an auto-suggested breakdown.
@@ -4664,10 +4737,10 @@ function showBillForReturn(b, highlightVariantID){
 
     // Collect manual note-entry UPFRONT for whichever cash movement this
     // will need — if the staff cancels here, nothing has been touched yet.
-    let cashDenoms = null, exOwedResult = null, exCreditDenoms = null, previewOwed = 0, previewCredit = 0;
+    let cashRefundResult = null, exOwedResult = null, exCreditResult = null, previewOwed = 0, previewCredit = 0;
     if(mode === 'cash' && previewRefund > 0){
-      cashDenoms = await collectDenomsModal('Refund — Notes Diye', previewRefund, 'Customer ko wapas konse note diye — sab select karo.');
-      if(!cashDenoms){ toast('Return cancel ho gaya', 'warn'); return; }
+      cashRefundResult = await givePaymentWithChangeModal('Refund — Paisa Diya', previewRefund, 'Customer ko jo note diye wo daalo — bada note diya to chutta wapas lena bhi track hoga.');
+      if(!cashRefundResult){ toast('Return cancel ho gaya', 'warn'); return; }
     } else if(mode === 'exchange'){
       const newItemTotal = Math.round(state.retExchangePicks.reduce((s,p)=>s+p.qty*p.price, 0) * 100) / 100;
       const discount = Math.min(newItemTotal, previewRefund);
@@ -4677,8 +4750,8 @@ function showBillForReturn(b, highlightVariantID){
         exOwedResult = await collectPaymentWithChangeModal('Exchange Top-up — Paisa Liya', previewOwed, 'Customer se extra paisa liya — jo note mile wo yaha daalo, zyada diya to change apne aap suggest hoga.');
         if(!exOwedResult){ toast('Exchange cancel ho gaya', 'warn'); return; }
       } else if(previewCredit > 0){
-        exCreditDenoms = await collectDenomsModal('Exchange Balance — Notes Diye', previewCredit, 'Customer ko balance mein konse note diye — sab select karo.');
-        if(!exCreditDenoms){ toast('Exchange cancel ho gaya', 'warn'); return; }
+        exCreditResult = await givePaymentWithChangeModal('Exchange Balance — Paisa Diya', previewCredit, 'Customer ko jo note diye wo daalo — bada note diya to chutta wapas lena bhi track hoga.');
+        if(!exCreditResult){ toast('Exchange cancel ho gaya', 'warn'); return; }
       }
     }
 
@@ -4758,15 +4831,24 @@ function showBillForReturn(b, highlightVariantID){
             apiPost('updateDrawerDenoms', { delta: changeDelta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID)+'-CHANGE' });
           }
         }
-        if(credit > 0 && exCreditDenoms){
+        if(credit > 0 && exCreditResult){
           apiPost('addCashTxn', {
-            Date: dayKey(nowISO()), Type:'OUT', Amount: credit,
+            Date: dayKey(nowISO()), Type:'OUT', Amount: exCreditResult.given,
             Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
             StaffID: state.user.staffID, StaffName: state.user.name,
-            Description: 'Exchange balance refunded — for '+b.BillNumber+' — Notes: '+denomText(exCreditDenoms)
+            Description: 'Exchange balance — given to customer — for '+b.BillNumber+' — Notes: '+denomText(exCreditResult.givenDenoms)
           });
-          const delta = {}; DENOMS.forEach(d => delta[d] = -(exCreditDenoms[d]||0));
-          apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID) });
+          const giveDelta = {}; DENOMS.forEach(d => giveDelta[d] = -(exCreditResult.givenDenoms[d]||0));
+          apiPost('updateDrawerDenoms', { delta: giveDelta, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID)+'-OUT' });
+          if(exCreditResult.changeBack > 0){
+            apiPost('addCashTxn', {
+              Date: dayKey(nowISO()), Type:'IN', Amount: exCreditResult.changeBack,
+              Reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID),
+              StaffID: state.user.staffID, StaffName: state.user.name,
+              Description: 'Exchange balance — chutta received back — for '+b.BillNumber+' — Notes: '+denomText(exCreditResult.changeBackDenoms)
+            });
+            apiPost('updateDrawerDenoms', { delta: exCreditResult.changeBackDenoms, staffID: state.user.staffID, staffName: state.user.name, reference: 'EXCHANGE-'+(exRes.data.billNumber||exBillID)+'-CHUTTA' });
+          }
         }
         toast(`Exchanged — ${owed>0 ? 'collected '+fmt(owed) : credit>0 ? 'refunded '+fmt(credit) : 'even swap'}`, 'ok');
         printBill({ ...exPayload, BillNumber: exRes.data.billNumber, items: exPayload.items });
@@ -4780,15 +4862,24 @@ function showBillForReturn(b, highlightVariantID){
       });
     }else{
       toast('Cash refund: '+fmt(totalRefund), 'ok');
-      apiPost('addCashTxn', {
-        Date: dayKey(nowISO()),
-        Type: 'OUT', Reference: 'RETURN-'+b.BillNumber, Amount: totalRefund,
-        StaffID: state.user.staffID, StaffName: state.user.name,
-        Description: 'Refund for '+b.BillNumber + (cashDenoms ? ' — Notes: '+denomText(cashDenoms) : '')
-      });
-      if(totalRefund > 0 && cashDenoms){
-        const delta = {}; DENOMS.forEach(d => delta[d] = -(cashDenoms[d]||0));
-        apiPost('updateDrawerDenoms', { delta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RETURN-'+b.BillNumber });
+      if(totalRefund > 0 && cashRefundResult){
+        apiPost('addCashTxn', {
+          Date: dayKey(nowISO()),
+          Type: 'OUT', Reference: 'RETURN-'+b.BillNumber, Amount: cashRefundResult.given,
+          StaffID: state.user.staffID, StaffName: state.user.name,
+          Description: 'Refund given to customer for '+b.BillNumber+' — Notes: '+denomText(cashRefundResult.givenDenoms)
+        });
+        const giveDelta = {}; DENOMS.forEach(d => giveDelta[d] = -(cashRefundResult.givenDenoms[d]||0));
+        apiPost('updateDrawerDenoms', { delta: giveDelta, staffID: state.user.staffID, staffName: state.user.name, reference: 'RETURN-'+b.BillNumber+'-OUT' });
+        if(cashRefundResult.changeBack > 0){
+          apiPost('addCashTxn', {
+            Date: dayKey(nowISO()),
+            Type: 'IN', Reference: 'RETURN-'+b.BillNumber, Amount: cashRefundResult.changeBack,
+            StaffID: state.user.staffID, StaffName: state.user.name,
+            Description: 'Refund — chutta received back for '+b.BillNumber+' — Notes: '+denomText(cashRefundResult.changeBackDenoms)
+          });
+          apiPost('updateDrawerDenoms', { delta: cashRefundResult.changeBackDenoms, staffID: state.user.staffID, staffName: state.user.name, reference: 'RETURN-'+b.BillNumber+'-CHUTTA' });
+        }
       }
     }
     printReturnReceipt(b, returnedLines, totalRefund, mode);
