@@ -1,6 +1,3 @@
-
-
-
 <!DOCTYPE html>
 <!-- saved from url=(0038)https://ak-fashion-hub-erp.vercel.app/ -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -127,6 +124,12 @@ tr:hover td{background:#faf9f4;}
 .toast.bad{background:var(--bad);}
 .toast.warn{background:var(--warn);}
 @keyframes tsIn{from{transform:translateX(20px);opacity:0;}to{transform:none;opacity:1;}}
+
+/* recording badge + screen — camera/mic recording while the app is open */
+.rec-badge{display:none;align-items:center;gap:6px;background:var(--bad);color:#fff;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.4px;animation:recPulse 1.6s infinite;}
+@keyframes recPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+.rec-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
+.rec-day-head{font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px;}
 
 /* modal */
 .veil{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:5000;padding:20px;}
@@ -261,6 +264,7 @@ tr:hover td{background:#faf9f4;}
       <a data-scr="attendance">🕐 Attendance</a>
 
       <div class="group">System</div>
+      <a data-scr="recordings">🎥 Recordings</a>
       <a data-scr="settings">⚙️ Settings</a>
     </nav>
   </aside>
@@ -269,6 +273,7 @@ tr:hover td{background:#faf9f4;}
     <button class="btn ghost sm" id="btnSideToggle" style="display:none;margin-right:8px;">☰</button>
     <h2 id="topTitle">Sales — last 14 days</h2>
     <div class="who">
+      <span id="recBadge" class="rec-badge" title="Camera &amp; mic recording is active" style="display:none;">🔴 REC</span>
       <span class="badge role-admin" id="topRole">admin</span>
       <span id="topUser" class="dim">ABHISHEK KUMAR</span>
       <button class="btn ghost sm" id="btnMoneyToggle" title="Show/hide money amounts">🙈 Amounts Hidden</button>
@@ -1293,6 +1298,30 @@ tr:hover td{background:#faf9f4;}
       </div>
     </div>
 
+    <!-- ===== RECORDINGS (camera + mic, admin-only) ===== -->
+    <div class="screen" id="scr-recordings">
+      <div class="pane">
+        <h3>Camera &amp; Mic Recording <small>Saved on this device only</small></h3>
+        <div class="rec-controls">
+          <span id="recStatus"></span>
+          <button class="btn sm" id="btnToggleRec">🛑 Stop Recording</button>
+          <button class="btn ghost sm" id="btnRecRefresh">↻ Refresh List</button>
+        </div>
+        <div class="hint">
+          Recording starts automatically whenever the app is open and a staff member is logged in — a red
+          <b>🔴 REC</b> badge stays visible in the top bar the whole time, for every staff member and customer to see.
+          Only an Admin account (with PIN) can stop it or delete a recording. Files are stored in this browser's
+          local storage on this device — they do <b>not</b> go to the Google Sheet and will be lost if browser
+          data/cache for this site is cleared, or if this screen is opened on a different device/browser.
+        </div>
+        <div id="recStorageInfo" class="stat mt-8"></div>
+      </div>
+      <div class="pane">
+        <h3>Recordings</h3>
+        <div id="recList"><div class="empty">Loading…</div></div>
+      </div>
+    </div>
+
   </section>
 </div>
 
@@ -1353,7 +1382,15 @@ const state = {
   posLastChangeAmt: null,     // last change amount a suggestion was generated for (avoids re-typing loss)
   giftItems: [],              // 🎁 gift items added to the current bill (array of strings)
   chart: null,
-  pendingSubmit: false        // duplicate-click guard
+  pendingSubmit: false,       // duplicate-click guard
+  rec: {                      // camera+mic recording controller (see RECORDING section below)
+    stream: null,
+    mediaRecorder: null,
+    active: false,
+    segmentTimer: null,
+    starting: false
+  },
+  _recCache: []                // last list of recordings fetched, for prev/next playback
 };
 
 function emptyStore(){
@@ -1612,6 +1649,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireSavings();
   wireAttendance();
   wireSettings();
+  wireRecordings();
   wireRepRange();
   buildDenomInputs();
   applyBrandLogo();
@@ -1722,6 +1760,7 @@ function enterShell(){
   $('#btnMoneyToggle').textContent = moneyHidden ? '🙈 Amounts Hidden' : '👁 Amounts Shown';
   applyRolePerms();
   goto('dash');
+  startRecording();
 }
 function applyRolePerms(){
   const isAdmin = isAdminUser();
@@ -1731,7 +1770,7 @@ function applyRolePerms(){
   // real admin never loses access to Cash Drawer / Settings / etc.
   document.body.classList.toggle('role-staff', !isAdmin);
 }
-const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, emi:1, rent:1, savings:1, expenses:1, settings:1, suppliers:1 };
+const RESTRICTED_SCREENS = { staff:1, reports:1, cash:1, lent:1, emi:1, rent:1, savings:1, expenses:1, settings:1, suppliers:1, recordings:1 };
 function accessDeniedHTML(){
   return '<div class="pane"><div class="empty">🔒 This section is restricted to Admin access only.<br>'
        + 'If you are an administrator and still see this message, please verify that the Role column for your account '
@@ -1765,6 +1804,7 @@ function wireHeader(){
       { label:'Cancel', kind:'ghost', on: closeModal },
       { label:'Logout', kind:'bad', on: () => {
         closeModal();
+        stopRecording();
         localStorage.removeItem(SESS_KEY);
         state.user = null; showLogin();
       }}
@@ -1850,6 +1890,7 @@ function render(scr){
     case 'expenses':  renderExpenses(); break;
     case 'reports':   renderReports(); break;
     case 'settings':  renderSettings(); break;
+    case 'recordings':renderRecordings(); break;
   }
 }
 
@@ -7232,6 +7273,340 @@ function requirePin(reason){
     ]);
     setTimeout(() => { const el = document.querySelector('#pinIn'); if(el) el.focus(); }, 50);
   });
+}
+
+/* ============================================================
+   RECORDINGS — camera + mic recording while the app is open.
+   Transparent by design: a 🔴 REC badge stays visible in the top
+   bar the whole time (everyone can see it's on). Recordings are
+   saved to this browser's IndexedDB (this device only — they do
+   NOT go to the Google Sheet backend). Only an Admin account,
+   verified with their PIN, can stop recording or delete a clip —
+   the whole screen is gated behind RESTRICTED_SCREENS already.
+   ============================================================ */
+const REC_DB_NAME = 'akfh_recordings_db';
+const REC_DB_VERSION = 1;
+const REC_STORE = 'segments';
+const REC_SEGMENT_MS = 5 * 60 * 1000; // new file every 5 minutes, so one long session isn't one giant blob
+let _recDbPromise = null;
+
+function recDB(){
+  if(_recDbPromise) return _recDbPromise;
+  _recDbPromise = new Promise((resolve, reject) => {
+    if(!window.indexedDB){ reject(new Error('IndexedDB not supported in this browser')); return; }
+    const req = indexedDB.open(REC_DB_NAME, REC_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(REC_STORE)){
+        const store = db.createObjectStore(REC_STORE, { keyPath:'id' });
+        store.createIndex('byDate', 'dateKey');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return _recDbPromise;
+}
+async function recSave(meta, blob){
+  const db = await recDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(REC_STORE, 'readwrite');
+    tx.objectStore(REC_STORE).put(Object.assign({}, meta, { blob }));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function recGet(id){
+  const db = await recDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(REC_STORE, 'readonly');
+    const req = tx.objectStore(REC_STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function recListMeta(){
+  // Returns metadata only (no blob) so the list renders fast even with many/large clips.
+  const db = await recDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(REC_STORE, 'readonly');
+    const req = tx.objectStore(REC_STORE).openCursor();
+    const out = [];
+    req.onsuccess = e => {
+      const cur = e.target.result;
+      if(cur){
+        const { blob, ...meta } = cur.value;
+        out.push(meta);
+        cur.continue();
+      } else resolve(out);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+async function recDelete(id){
+  const db = await recDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(REC_STORE, 'readwrite');
+    tx.objectStore(REC_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ------- recorder controller ------- */
+async function startRecording(){
+  if(state.rec.active || state.rec.starting) return;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined'){
+    toast('This browser does not support camera/mic recording', 'warn');
+    return;
+  }
+  state.rec.starting = true;
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+    state.rec.stream = stream;
+    state.rec.active = true;
+    recBeginSegment();
+    toast('🔴 Recording started', 'ok');
+  }catch(err){
+    toast('Camera/Mic recording could not start: ' + (err && err.message ? err.message : err), 'warn');
+  }finally{
+    state.rec.starting = false;
+    updateRecBadge();
+  }
+}
+function recBeginSegment(){
+  if(!state.rec.stream || !state.rec.active) return;
+  let mime = 'video/webm';
+  if(window.MediaRecorder && MediaRecorder.isTypeSupported){
+    if(MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) mime = 'video/webm;codecs=vp8,opus';
+  }
+  let mr;
+  try{ mr = new MediaRecorder(state.rec.stream, { mimeType: mime }); }
+  catch(e){ try{ mr = new MediaRecorder(state.rec.stream); }catch(e2){ toast('Recorder could not start a new segment', 'bad'); return; } }
+  const chunks = [];
+  const startTime = nowISO();
+  mr.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = async () => {
+    if(chunks.length){
+      const blob = new Blob(chunks, { type: mime });
+      const endTime = nowISO();
+      const meta = {
+        id: 'rec_' + Date.now() + '_' + rnd(),
+        startTime, endTime,
+        dateKey: dayKey(startTime),
+        staffName: state.user ? state.user.name : 'Unknown',
+        staffID: state.user ? state.user.staffID : null,
+        mimeType: mime,
+        size: blob.size,
+        cloudSynced: false,   // becomes true once uploaded to Drive/Sheet (see recUploadToCloud)
+        driveUrl: null
+      };
+      try{ await recSave(meta, blob); }
+      catch(e){ console.error('Could not save recording segment', e); }
+      if(currentScreen() === 'recordings') recRenderList();
+      recUploadToCloud(meta, blob); // fire-and-forget — keeps recording rolling, doesn't block on upload
+    }
+    if(state.rec.active && state.rec.stream) recBeginSegment(); // keep rolling to the next segment
+  };
+  mr.start();
+  state.rec.mediaRecorder = mr;
+  if(state.rec.segmentTimer) clearTimeout(state.rec.segmentTimer);
+  state.rec.segmentTimer = setTimeout(() => { if(mr.state !== 'inactive') mr.stop(); }, REC_SEGMENT_MS);
+}
+function stopRecording(){
+  state.rec.active = false;
+  if(state.rec.segmentTimer){ clearTimeout(state.rec.segmentTimer); state.rec.segmentTimer = null; }
+  if(state.rec.mediaRecorder && state.rec.mediaRecorder.state !== 'inactive'){
+    try{ state.rec.mediaRecorder.stop(); }catch(e){}
+  }
+  if(state.rec.stream){ state.rec.stream.getTracks().forEach(t => t.stop()); state.rec.stream = null; }
+  updateRecBadge();
+}
+function updateRecBadge(){
+  const el = $('#recBadge');
+  if(el) el.style.display = state.rec.active ? 'inline-flex' : 'none';
+}
+// Best-effort: flush the in-progress segment so it isn't lost on close/reload.
+window.addEventListener('beforeunload', () => {
+  if(state.rec.mediaRecorder && state.rec.mediaRecorder.state !== 'inactive'){
+    try{ state.rec.mediaRecorder.requestData(); }catch(e){}
+  }
+});
+
+/* ------- Recordings screen ------- */
+function wireRecordings(){
+  const toggleBtn = $('#btnToggleRec');
+  if(toggleBtn) toggleBtn.addEventListener('click', async () => {
+    const ok = await requirePin(state.rec.active
+      ? 'Admin PIN required to STOP camera/mic recording:'
+      : 'Admin PIN required to START camera/mic recording:');
+    if(!ok) return;
+    if(state.rec.active) stopRecording(); else await startRecording();
+    renderRecordings();
+  });
+  const refreshBtn = $('#btnRecRefresh');
+  if(refreshBtn) refreshBtn.addEventListener('click', recRenderList);
+}
+function renderRecordings(){
+  const statusEl = $('#recStatus');
+  if(statusEl){
+    statusEl.innerHTML = state.rec.active
+      ? '<span class="badge" style="background:var(--bad);color:#fff;border-color:var(--bad);">🔴 Recording Active</span>'
+      : '<span class="badge">⏸ Recording Stopped</span>';
+  }
+  const toggleBtn = $('#btnToggleRec');
+  if(toggleBtn) toggleBtn.textContent = state.rec.active ? '🛑 Stop Recording' : '▶ Start Recording';
+  recRenderList();
+  recRenderStorageInfo();
+}
+async function recRenderStorageInfo(){
+  const el = $('#recStorageInfo');
+  if(!el) return;
+  try{
+    const items = await recListMeta();
+    const totalBytes = items.reduce((s, it) => s + (it.size || 0), 0);
+    let quotaLine = '';
+    if(navigator.storage && navigator.storage.estimate){
+      try{
+        const est = await navigator.storage.estimate();
+        if(est && est.quota){
+          quotaLine = ' — approx ' + (est.usage/1024/1024).toFixed(0) + ' MB of ' + (est.quota/1024/1024/1024).toFixed(1) + ' GB browser storage used';
+        }
+      }catch(e){}
+    }
+    el.innerHTML = '<div class="lab">Recordings Stored</div><div class="val">' + items.length + '</div>'
+      + '<div class="sub">' + (totalBytes/1024/1024).toFixed(1) + ' MB total' + quotaLine + '</div>';
+  }catch(e){
+    el.innerHTML = '<div class="empty">Could not read recording storage (' + (e && e.message || e) + ')</div>';
+  }
+}
+async function recRenderList(){
+  const listEl = $('#recList');
+  if(!listEl) return;
+  listEl.innerHTML = '<div class="empty">Loading…</div>';
+  let items;
+  try{ items = await recListMeta(); }
+  catch(e){ listEl.innerHTML = '<div class="empty">Could not load recordings (' + (e && e.message || e) + ')</div>'; return; }
+  items.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
+  state._recCache = items;
+  if(!items.length){ listEl.innerHTML = '<div class="empty">No recordings yet.</div>'; return; }
+  const groups = {};
+  items.forEach(it => { (groups[it.dateKey] = groups[it.dateKey] || []).push(it); });
+  const dateKeys = Object.keys(groups).sort().reverse();
+  let html = '';
+  dateKeys.forEach(dk => {
+    html += '<div class="rec-day-head">' + dk + '</div><div class="tbl-wrap"><table><thead><tr>'
+      + '<th>Time</th><th>Staff</th><th>Duration</th><th>Size</th><th>Sheet/Drive</th><th></th></tr></thead><tbody>';
+    groups[dk].forEach(it => {
+      const durSec = Math.max(0, Math.round((new Date(it.endTime) - new Date(it.startTime)) / 1000));
+      const syncHTML = it.cloudSynced
+        ? '<span class="badge" style="background:var(--ok);color:#fff;border-color:var(--ok);">☁ Synced</span>'
+        : '<span class="badge" style="background:var(--warn);color:#fff;border-color:var(--warn);">⏳ Pending</span> '
+          + '<button class="btn ghost sm" onclick="recRetryUpload(\'' + it.id + '\')">↻ Upload</button>';
+      html += '<tr><td>' + (it.startTime || '').substr(11, 8) + '</td>'
+        + '<td>' + (it.staffName || '-') + '</td>'
+        + '<td>' + durSec + 's</td>'
+        + '<td>' + ((it.size||0)/1024/1024).toFixed(1) + ' MB</td>'
+        + '<td>' + syncHTML + '</td>'
+        + '<td><button class="btn ghost sm" onclick="playRecording(\'' + it.id + '\')">▶ Play</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  const pendingCount = items.filter(it => !it.cloudSynced).length;
+  if(pendingCount){
+    html += '<div class="row mt-8"><button class="btn sm" id="btnRecUploadAll">☁ Upload All Pending (' + pendingCount + ')</button></div>';
+  }
+  listEl.innerHTML = html;
+  const uploadAllBtn = $('#btnRecUploadAll');
+  if(uploadAllBtn) uploadAllBtn.addEventListener('click', recUploadAllPending);
+}
+async function recUploadAllPending(){
+  const items = (state._recCache || []).filter(it => !it.cloudSynced);
+  for(const it of items){ await recRetryUpload(it.id, true); }
+  recRenderList();
+  toast('Upload attempt finished for ' + items.length + ' pending recording(s)', 'ok');
+}
+async function recRetryUpload(id, silent){
+  const full = await recGet(id).catch(()=>null);
+  if(!full){ if(!silent) toast('Recording not found', 'bad'); return; }
+  const { blob, ...meta } = full;
+  await recUploadToCloud(meta, blob);
+  if(!silent) recRenderList();
+}
+// Converts a Blob to a plain base64 string (no "data:...;base64," prefix) for the Apps Script POST body.
+function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result || '';
+      const idx = result.indexOf(',');
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+// Uploads one recording segment to the Apps Script backend, which should save the
+// video to Google Drive and log a row (with the Drive link) in a Sheet tab — see
+// the 'uploadRecording' action your Code.gs needs to implement. Keeps the local
+// IndexedDB copy either way, so Prev/Next playback never depends on the network.
+async function recUploadToCloud(meta, blob){
+  try{
+    const base64 = await blobToBase64(blob);
+    const r = await apiPostBG('uploadRecording', {
+      id: meta.id, startTime: meta.startTime, endTime: meta.endTime, dateKey: meta.dateKey,
+      staffID: meta.staffID, staffName: meta.staffName, mimeType: meta.mimeType, size: meta.size,
+      base64
+    }, 1);
+    if(r && r.success){
+      meta.cloudSynced = true;
+      meta.driveUrl = (r.data && r.data.driveUrl) || null;
+      await recSave(meta, blob);
+    }else{
+      meta.cloudSynced = false;
+      await recSave(meta, blob);
+    }
+  }catch(e){
+    console.error('Recording cloud upload failed', e);
+    meta.cloudSynced = false;
+    try{ await recSave(meta, blob); }catch(e2){}
+  }
+  if(currentScreen() === 'recordings'){ recRenderList(); recRenderStorageInfo(); }
+}
+async function playRecording(id){
+  const items = state._recCache || [];
+  const idx = items.findIndex(x => x.id === id);
+  if(idx < 0){ toast('Recording not found in current list', 'bad'); return; }
+  await recShowAtIndex(idx);
+}
+async function recShowAtIndex(idx){
+  const items = state._recCache || [];
+  if(idx < 0){ toast('This is the newest recording', 'warn'); return; }
+  if(idx >= items.length){ toast('This is the oldest recording', 'warn'); return; }
+  const meta = items[idx];
+  let full;
+  try{ full = await recGet(meta.id); }
+  catch(e){ toast('Could not open recording', 'bad'); return; }
+  if(!full || !full.blob){ toast('Recording file missing', 'bad'); return; }
+  const url = URL.createObjectURL(full.blob);
+  const durSec = Math.max(0, Math.round((new Date(meta.endTime) - new Date(meta.startTime)) / 1000));
+  openModal('Recording — ' + meta.dateKey + ' ' + (meta.startTime||'').substr(11,8), `
+    <video src="${url}" controls autoplay style="width:100%;border-radius:8px;background:#000;max-height:60vh;"></video>
+    <div class="hint mt-8">Staff: ${meta.staffName||'-'} &nbsp;|&nbsp; Duration: ${durSec}s &nbsp;|&nbsp; Size: ${((meta.size||0)/1024/1024).toFixed(1)} MB</div>
+  `, [
+    { label:'⏮ Prev (older)', kind:'ghost', on: async () => { closeModal(); await recShowAtIndex(idx+1); } },
+    { label:'Next (newer) ⏭', kind:'ghost', on: async () => { closeModal(); await recShowAtIndex(idx-1); } },
+    { label:'Delete', kind:'bad', on: async () => {
+        const ok = await requirePin('Admin PIN required to delete this recording:');
+        if(!ok) return;
+        await recDelete(meta.id);
+        closeModal();
+        toast('Recording deleted', 'ok');
+        recRenderList();
+        recRenderStorageInfo();
+      } },
+    { label:'Close', kind:'ok', on: closeModal }
+  ]);
 }
 </script>
 <script defer="" src="./SRGDRH_files/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;7f7b0fd8732c4326aae4b9d58d5c514a&quot;,&quot;server_timing&quot;:{&quot;name&quot;:{&quot;cfCacheStatus&quot;:true,&quot;cfEdge&quot;:true,&quot;cfExtPri&quot;:true,&quot;cfL4&quot;:true,&quot;cfOrigin&quot;:true,&quot;cfSpeedBrain&quot;:true},&quot;location_startswith&quot;:null}}" crossorigin="anonymous"></script>
