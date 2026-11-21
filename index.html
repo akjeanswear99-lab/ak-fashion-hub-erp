@@ -1310,7 +1310,7 @@ tr:hover td{background:#faf9f4;}
         <div class="hint">
           Recording starts automatically whenever the app is open and a staff member is logged in — a red
           <b>🔴 REC</b> badge stays visible in the top bar the whole time, for every staff member and customer to see.
-          Only an Admin account (with PIN) can stop it or delete a recording. Files are stored in this browser's
+          Recording starts freely, with no PIN. Only an Admin account (with PIN) can stop it or delete a recording — low resolution/bitrate on purpose, to save space. Files are stored in this browser's
           local storage on this device — they do <b>not</b> go to the Google Sheet and will be lost if browser
           data/cache for this site is cleared, or if this screen is opened on a different device/browser.
         </div>
@@ -7287,7 +7287,13 @@ function requirePin(reason){
 const REC_DB_NAME = 'akfh_recordings_db';
 const REC_DB_VERSION = 1;
 const REC_STORE = 'segments';
-const REC_SEGMENT_MS = 5 * 60 * 1000; // new file every 5 minutes, so one long session isn't one giant blob
+const REC_SEGMENT_MS = 2 * 60 * 1000; // new file every 2 minutes — keeps each upload to the Apps Script backend small/fast
+// Deliberately low-res/low-bitrate: this runs for hours in the background, so
+// file size matters far more than picture quality. ~320x240 @ 12fps and a
+// small bitrate keeps a 2-minute clip to roughly 2-4 MB instead of 20-40 MB.
+const REC_VIDEO_CONSTRAINTS = { facingMode: 'user', width: { ideal: 320, max: 480 }, height: { ideal: 240, max: 360 }, frameRate: { ideal: 12, max: 15 } };
+const REC_VIDEO_BITRATE = 150000;  // ~150 kbps video
+const REC_AUDIO_BITRATE = 24000;   // ~24 kbps audio (voice-quality, not music)
 let _recDbPromise = null;
 
 function recDB(){
@@ -7362,7 +7368,11 @@ async function startRecording(){
   }
   state.rec.starting = true;
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+    // Low resolution/frame-rate on purpose — this is a long-running background
+    // recording, not a video call, so keeping files small matters far more
+    // than sharpness. REC_VIDEO_CONSTRAINTS below is the one place to raise
+    // this later if a sharper picture is ever needed.
+    const stream = await navigator.mediaDevices.getUserMedia({ video: REC_VIDEO_CONSTRAINTS, audio: true });
     state.rec.stream = stream;
     state.rec.active = true;
     recBeginSegment();
@@ -7381,8 +7391,15 @@ function recBeginSegment(){
     if(MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) mime = 'video/webm;codecs=vp8,opus';
   }
   let mr;
-  try{ mr = new MediaRecorder(state.rec.stream, { mimeType: mime }); }
-  catch(e){ try{ mr = new MediaRecorder(state.rec.stream); }catch(e2){ toast('Recorder could not start a new segment', 'bad'); return; } }
+  const recOpts = { mimeType: mime, videoBitsPerSecond: REC_VIDEO_BITRATE, audioBitsPerSecond: REC_AUDIO_BITRATE };
+  try{ mr = new MediaRecorder(state.rec.stream, recOpts); }
+  catch(e){
+    try{ mr = new MediaRecorder(state.rec.stream, { mimeType: mime }); }
+    catch(e2){
+      try{ mr = new MediaRecorder(state.rec.stream); }
+      catch(e3){ toast('Recorder could not start a new segment', 'bad'); return; }
+    }
+  }
   const chunks = [];
   const startTime = nowISO();
   mr.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
@@ -7437,11 +7454,16 @@ window.addEventListener('beforeunload', () => {
 function wireRecordings(){
   const toggleBtn = $('#btnToggleRec');
   if(toggleBtn) toggleBtn.addEventListener('click', async () => {
-    const ok = await requirePin(state.rec.active
-      ? 'Admin PIN required to STOP camera/mic recording:'
-      : 'Admin PIN required to START camera/mic recording:');
-    if(!ok) return;
-    if(state.rec.active) stopRecording(); else await startRecording();
+    // Starting needs no PIN — recording should begin freely/automatically.
+    // Stopping is the sensitive action (it's how someone would hide
+    // something), so that alone stays PIN-gated to Admin.
+    if(state.rec.active){
+      const ok = await requirePin('Admin PIN required to STOP camera/mic recording:');
+      if(!ok) return;
+      stopRecording();
+    }else{
+      await startRecording();
+    }
     renderRecordings();
   });
   const refreshBtn = $('#btnRecRefresh');
@@ -7480,18 +7502,43 @@ async function recRenderStorageInfo(){
     el.innerHTML = '<div class="empty">Could not read recording storage (' + (e && e.message || e) + ')</div>';
   }
 }
+// Fetches the cloud-side recording list (uploaded from ANY device) so this
+// screen can show clips even when they were never recorded on this device.
+async function recFetchCloudList(){
+  try{
+    const r = await apiGet('listRecordingsCloud');
+    if(r && r.success && r.data && Array.isArray(r.data.recordings)) return r.data.recordings;
+  }catch(e){ console.error('Could not fetch cloud recordings list', e); }
+  return [];
+}
 async function recRenderList(){
   const listEl = $('#recList');
   if(!listEl) return;
   listEl.innerHTML = '<div class="empty">Loading…</div>';
-  let items;
-  try{ items = await recListMeta(); }
-  catch(e){ listEl.innerHTML = '<div class="empty">Could not load recordings (' + (e && e.message || e) + ')</div>'; return; }
-  items.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
-  state._recCache = items;
-  if(!items.length){ listEl.innerHTML = '<div class="empty">No recordings yet.</div>'; return; }
+  let localItems, cloudRows;
+  try{
+    [localItems, cloudRows] = await Promise.all([recListMeta(), recFetchCloudList()]);
+  }catch(e){ listEl.innerHTML = '<div class="empty">Could not load recordings (' + (e && e.message || e) + ')</div>'; return; }
+
+  // Merge: local items keep their id (so Prev/Next/Play/Delete work instantly);
+  // a cloud row with no matching local id means it was recorded on another
+  // device/session — show it as a "cloudOnly" entry with a Drive link instead.
+  const localIds = new Set(localItems.map(it => it.id));
+  const merged = localItems.slice();
+  cloudRows.forEach(row => {
+    if(!localIds.has(row.RecordingID)){
+      merged.push({
+        id: row.RecordingID, startTime: row.StartTime, endTime: row.EndTime,
+        dateKey: row.DateKey, staffName: row.StaffName, size: Number(row.SizeBytes) || 0,
+        cloudSynced: true, driveUrl: row.DriveURL, cloudOnly: true
+      });
+    }
+  });
+  merged.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
+  state._recCache = merged;
+  if(!merged.length){ listEl.innerHTML = '<div class="empty">No recordings yet.</div>'; return; }
   const groups = {};
-  items.forEach(it => { (groups[it.dateKey] = groups[it.dateKey] || []).push(it); });
+  merged.forEach(it => { (groups[it.dateKey] = groups[it.dateKey] || []).push(it); });
   const dateKeys = Object.keys(groups).sort().reverse();
   let html = '';
   dateKeys.forEach(dk => {
@@ -7499,20 +7546,27 @@ async function recRenderList(){
       + '<th>Time</th><th>Staff</th><th>Duration</th><th>Size</th><th>Sheet/Drive</th><th></th></tr></thead><tbody>';
     groups[dk].forEach(it => {
       const durSec = Math.max(0, Math.round((new Date(it.endTime) - new Date(it.startTime)) / 1000));
-      const syncHTML = it.cloudSynced
-        ? '<span class="badge" style="background:var(--ok);color:#fff;border-color:var(--ok);">☁ Synced</span>'
-        : '<span class="badge" style="background:var(--warn);color:#fff;border-color:var(--warn);">⏳ Pending</span> '
-          + '<button class="btn ghost sm" onclick="recRetryUpload(\'' + it.id + '\')">↻ Upload</button>';
+      let syncHTML, actionHTML;
+      if(it.cloudOnly){
+        syncHTML = '<span class="badge" style="background:var(--ok);color:#fff;border-color:var(--ok);">☁ Synced</span>';
+        actionHTML = '<a class="btn ghost sm" href="' + it.driveUrl + '" target="_blank" rel="noopener">Open in Drive ↗</a>';
+      }else{
+        syncHTML = it.cloudSynced
+          ? '<span class="badge" style="background:var(--ok);color:#fff;border-color:var(--ok);">☁ Synced</span>'
+          : '<span class="badge" style="background:var(--warn);color:#fff;border-color:var(--warn);">⏳ Pending</span> '
+            + '<button class="btn ghost sm" onclick="recRetryUpload(\'' + it.id + '\')">↻ Upload</button>';
+        actionHTML = '<button class="btn ghost sm" onclick="playRecording(\'' + it.id + '\')">▶ Play</button>';
+      }
       html += '<tr><td>' + (it.startTime || '').substr(11, 8) + '</td>'
         + '<td>' + (it.staffName || '-') + '</td>'
         + '<td>' + durSec + 's</td>'
         + '<td>' + ((it.size||0)/1024/1024).toFixed(1) + ' MB</td>'
         + '<td>' + syncHTML + '</td>'
-        + '<td><button class="btn ghost sm" onclick="playRecording(\'' + it.id + '\')">▶ Play</button></td></tr>';
+        + '<td>' + actionHTML + '</td></tr>';
     });
     html += '</tbody></table></div>';
   });
-  const pendingCount = items.filter(it => !it.cloudSynced).length;
+  const pendingCount = merged.filter(it => !it.cloudOnly && !it.cloudSynced).length;
   if(pendingCount){
     html += '<div class="row mt-8"><button class="btn sm" id="btnRecUploadAll">☁ Upload All Pending (' + pendingCount + ')</button></div>';
   }
@@ -7584,18 +7638,36 @@ async function recShowAtIndex(idx){
   if(idx < 0){ toast('This is the newest recording', 'warn'); return; }
   if(idx >= items.length){ toast('This is the oldest recording', 'warn'); return; }
   const meta = items[idx];
+  const durSec = Math.max(0, Math.round((new Date(meta.endTime) - new Date(meta.startTime)) / 1000));
+  const navActions = [
+    { label:'⏮ Prev (older)', kind:'ghost', on: async () => { closeModal(); await recShowAtIndex(idx+1); } },
+    { label:'Next (newer) ⏭', kind:'ghost', on: async () => { closeModal(); await recShowAtIndex(idx-1); } }
+  ];
+
+  // Cloud-only entry (recorded on a different device/session) — no local blob
+  // to play here, so point at the Drive copy instead of trying to fetch it.
+  if(meta.cloudOnly){
+    openModal('Recording — ' + meta.dateKey + ' ' + (meta.startTime||'').substr(11,8), `
+      <div class="hint">This recording was made on a different device/session, so it can only be opened from Google Drive, not played inline here.</div>
+      <div class="hint mt-8">Staff: ${meta.staffName||'-'} &nbsp;|&nbsp; Duration: ${durSec}s &nbsp;|&nbsp; Size: ${((meta.size||0)/1024/1024).toFixed(1)} MB</div>
+    `, [
+      ...navActions,
+      { label:'Open in Drive ↗', kind:'ok', on: () => { window.open(meta.driveUrl, '_blank', 'noopener'); } },
+      { label:'Close', kind:'ghost', on: closeModal }
+    ]);
+    return;
+  }
+
   let full;
   try{ full = await recGet(meta.id); }
   catch(e){ toast('Could not open recording', 'bad'); return; }
   if(!full || !full.blob){ toast('Recording file missing', 'bad'); return; }
   const url = URL.createObjectURL(full.blob);
-  const durSec = Math.max(0, Math.round((new Date(meta.endTime) - new Date(meta.startTime)) / 1000));
   openModal('Recording — ' + meta.dateKey + ' ' + (meta.startTime||'').substr(11,8), `
     <video src="${url}" controls autoplay style="width:100%;border-radius:8px;background:#000;max-height:60vh;"></video>
-    <div class="hint mt-8">Staff: ${meta.staffName||'-'} &nbsp;|&nbsp; Duration: ${durSec}s &nbsp;|&nbsp; Size: ${((meta.size||0)/1024/1024).toFixed(1)} MB</div>
+    <div class="hint mt-8">Staff: ${meta.staffName||'-'} &nbsp;|&nbsp; Duration: ${durSec}s &nbsp;|&nbsp; Size: ${((meta.size||0)/1024/1024).toFixed(1)} MB${meta.driveUrl ? ' &nbsp;|&nbsp; <a href="'+meta.driveUrl+'" target="_blank" rel="noopener">Open in Drive ↗</a>' : ''}</div>
   `, [
-    { label:'⏮ Prev (older)', kind:'ghost', on: async () => { closeModal(); await recShowAtIndex(idx+1); } },
-    { label:'Next (newer) ⏭', kind:'ghost', on: async () => { closeModal(); await recShowAtIndex(idx-1); } },
+    ...navActions,
     { label:'Delete', kind:'bad', on: async () => {
         const ok = await requirePin('Admin PIN required to delete this recording:');
         if(!ok) return;
